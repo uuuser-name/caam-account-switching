@@ -1,0 +1,861 @@
+// Package cmd implements the CLI commands for caam.
+package cmd
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile"
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/health"
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/identity"
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/testutil"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+)
+
+// Test helpers
+
+// captureOutput captures stdout and stderr from a command execution.
+func captureOutput(t *testing.T, cmd *cobra.Command, args []string) (stdout, stderr string, err error) {
+	t.Helper()
+
+	var outBuf, errBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
+	cmd.SetArgs(args)
+
+	err = cmd.Execute()
+	return outBuf.String(), errBuf.String(), err
+}
+
+// createTestCmd creates a fresh root command for testing.
+func createTestCmd() *cobra.Command {
+	return rootCmd
+}
+
+// TestRootCommand tests the root command exists and has correct metadata.
+func TestRootCommand(t *testing.T) {
+	cmd := createTestCmd()
+
+	if cmd.Use != "caam" {
+		t.Errorf("Expected Use 'caam', got %q", cmd.Use)
+	}
+
+	if cmd.Short == "" {
+		t.Error("Expected non-empty Short description")
+	}
+
+	if cmd.Long == "" {
+		t.Error("Expected non-empty Long description")
+	}
+
+	// Check that RunE is set (launches TUI when no args)
+	if cmd.RunE == nil {
+		t.Error("Expected RunE to be set")
+	}
+
+	// Check PersistentPreRunE is set (initializes globals)
+	if cmd.PersistentPreRunE == nil {
+		t.Error("Expected PersistentPreRunE to be set")
+	}
+}
+
+// TestSubcommandRegistration tests that all expected subcommands are registered.
+func TestSubcommandRegistration(t *testing.T) {
+	cmd := createTestCmd()
+
+	expectedCommands := []string{
+		"version",
+		"backup",
+		"activate",
+		"project",
+		"refresh",
+		"export",
+		"import",
+		"resume",
+		"reload",
+		"status",
+		"ls",
+		"delete",
+		"paths",
+		"clear",
+		"profile",
+		"login",
+		"exec",
+		"doctor",
+		"sessions",
+		"env",
+		"init",
+		"open",
+	}
+
+	commands := cmd.Commands()
+	cmdMap := make(map[string]bool)
+	for _, c := range commands {
+		cmdMap[c.Use] = true
+		// Also map by first word of Use (e.g., "backup <tool> <profile>" -> "backup")
+		parts := strings.Fields(c.Use)
+		if len(parts) > 0 {
+			cmdMap[parts[0]] = true
+		}
+	}
+
+	for _, expected := range expectedCommands {
+		if !cmdMap[expected] {
+			t.Errorf("Expected subcommand %q to be registered", expected)
+		}
+	}
+}
+
+func TestRewriteToolInvocationArgs(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "claude shortcut",
+			input:    []string{"claude", "hello", "world"},
+			expected: []string{"run", "claude", "--precheck", "--", "hello", "world"},
+		},
+		{
+			name:     "codex shortcut",
+			input:    []string{"codex", "--version"},
+			expected: []string{"run", "codex", "--precheck", "--", "--version"},
+		},
+		{
+			name:     "openclaw shortcut maps to codex",
+			input:    []string{"openclaw", "hello"},
+			expected: []string{"run", "codex", "--precheck", "--", "hello"},
+		},
+		{
+			name:     "existing root command preserved",
+			input:    []string{"status", "claude"},
+			expected: []string{"status", "claude"},
+		},
+		{
+			name:     "flags preserved",
+			input:    []string{"--help"},
+			expected: []string{"--help"},
+		},
+		{
+			name:     "unknown argument unchanged",
+			input:    []string{"foo"},
+			expected: []string{"foo"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rewriteToolInvocationArgs(tc.input)
+			if !reflect.DeepEqual(got, tc.expected) {
+				t.Fatalf("rewriteToolInvocationArgs(%q) = %#v, want %#v", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestRewriteToolInvocationArgsForExecutable(t *testing.T) {
+	cases := []struct {
+		name       string
+		executable string
+		input      []string
+		expected   []string
+	}{
+		{
+			name:       "claude executable rewrites no args",
+			executable: "/usr/local/bin/claude",
+			input:      []string{},
+			expected:   []string{"run", "claude", "--precheck", "--"},
+		},
+		{
+			name:       "codex executable forwards provider args",
+			executable: "/opt/local/bin/codex",
+			input:      []string{"--version"},
+			expected:   []string{"run", "codex", "--precheck", "--", "--version"},
+		},
+		{
+			name:       "openclaw executable maps to codex provider",
+			executable: "/opt/local/bin/openclaw",
+			input:      []string{"--version"},
+			expected:   []string{"run", "codex", "--precheck", "--", "--version"},
+		},
+		{
+			name:       "caam executable preserves tool shorthand",
+			executable: "/usr/local/bin/caam",
+			input:      []string{"codex", "status"},
+			expected:   []string{"run", "codex", "--precheck", "--", "status"},
+		},
+		{
+			name:       "caam executable preserves root command",
+			executable: "/usr/local/bin/caam",
+			input:      []string{"status"},
+			expected:   []string{"status"},
+		},
+		{
+			name:       "caam executable preserves flags",
+			executable: "/usr/local/bin/caam",
+			input:      []string{"--help"},
+			expected:   []string{"--help"},
+		},
+		{
+			name:       "executable with unknown tool name unchanged",
+			executable: "/tmp/caam-codex.exe",
+			input:      []string{"ask", "hello"},
+			expected:   []string{"ask", "hello"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := rewriteToolInvocationArgsForExecutable(tc.executable, tc.input)
+			if !reflect.DeepEqual(got, tc.expected) {
+				t.Fatalf("rewriteToolInvocationArgsForExecutable(%q, %#v) = %#v, want %#v", tc.executable, tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestIsKnownRootSubcommand(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{name: "run", input: "run", expected: true},
+		{name: "status", input: "status", expected: true},
+		{name: "init", input: "init", expected: true},
+		{name: "unknown", input: "nonexistent", expected: false},
+		{name: "case insensitive", input: "RuN", expected: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isKnownRootSubcommand(tc.input)
+			if got != tc.expected {
+				t.Fatalf("isKnownRootSubcommand(%q) = %v, want %v", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestNormalizeToolName(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "claude", want: "claude"},
+		{in: "openclaw", want: "codex"},
+		{in: "open-claw", want: "codex"},
+		{in: "open_claw", want: "codex"},
+		{in: "codex", want: "codex"},
+	}
+
+	for _, tc := range tests {
+		if got := normalizeToolName(tc.in); got != tc.want {
+			t.Fatalf("normalizeToolName(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestIsProfileNameEmailAligned(t *testing.T) {
+	cases := []struct {
+		name    string
+		profile string
+		email   string
+		idNil   bool
+		aligned bool
+	}{
+		{name: "exact profile equals email", profile: "leothehumanbeing", email: "leothehumanbeing@gmail.com", aligned: true},
+		{name: "exact local part", profile: "leothehumanbeing", email: "LEOTHEHUMANBEING@GMAIL.COM", aligned: true},
+		{name: "dot alias", profile: "leothehumanbeing.contact", email: "leothehumanbeing@gmail.com", aligned: true},
+		{name: "dash alias", profile: "leothehumanbeing-work", email: "leothehumanbeing@gmail.com", aligned: true},
+		{name: "underscore alias", profile: "leothehumanbeing_test", email: "leothehumanbeing@gmail.com", aligned: true},
+		{name: "plus alias", profile: "leothehumanbeing+backup", email: "leothehumanbeing@gmail.com", aligned: true},
+		{name: "mismatch", profile: "work", email: "leothehumanbeing@gmail.com", aligned: false},
+		{name: "missing email considered aligned", profile: "anything", email: "", aligned: true},
+		{name: "nil identity is aligned", profile: "anything", email: "ignored", idNil: true, aligned: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var id *identity.Identity
+			if !tc.idNil {
+				id = &identity.Identity{Email: tc.email}
+			}
+			got := isProfileNameEmailAligned(tc.profile, id)
+			if got != tc.aligned {
+				t.Fatalf("isProfileNameEmailAligned(%q, %q) = %v, want %v", tc.profile, tc.email, got, tc.aligned)
+			}
+		})
+	}
+}
+
+func TestHasReadableAuthFiles(t *testing.T) {
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	originalVault := vault
+	originalTools := make(map[string]func() authfile.AuthFileSet)
+	for k, v := range tools {
+		originalTools[k] = v
+	}
+	defer func() {
+		vault = originalVault
+		tools = originalTools
+	}()
+
+	vaultDir := filepath.Join(h.TempDir, "vault")
+	vault = authfile.NewVault(vaultDir)
+
+	t.Run("requires_required_auth_file", func(t *testing.T) {
+		tools["codex"] = func() authfile.AuthFileSet {
+			return authfile.AuthFileSet{
+				Tool: "codex",
+				Files: []authfile.AuthFileSpec{
+					{Path: filepath.Join("/tmp", "codex", "required.json"), Required: true},
+					{Path: filepath.Join("/tmp", "codex", "optional.json"), Required: false},
+				},
+			}
+		}
+
+		profilePath := filepath.Join(vaultDir, "codex", "work")
+		require.NoError(t, os.MkdirAll(profilePath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(profilePath, "optional.json"), []byte("x"), 0o600))
+		require.False(t, hasReadableAuthFiles("codex", "work"))
+
+		require.NoError(t, os.WriteFile(filepath.Join(profilePath, "required.json"), []byte("x"), 0o600))
+		require.True(t, hasReadableAuthFiles("codex", "work"))
+	})
+
+	t.Run("optional_only_uses_optional", func(t *testing.T) {
+		tools["gemini"] = func() authfile.AuthFileSet {
+			return authfile.AuthFileSet{
+				Tool:              "gemini",
+				AllowOptionalOnly: true,
+				Files: []authfile.AuthFileSpec{
+					{Path: filepath.Join("/tmp", "gemini", "required.json"), Required: true},
+					{Path: filepath.Join("/tmp", "gemini", "optional.json"), Required: false},
+				},
+			}
+		}
+
+		profilePath := filepath.Join(vaultDir, "gemini", "work")
+		require.NoError(t, os.MkdirAll(profilePath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(profilePath, "optional.json"), []byte("x"), 0o600))
+		require.True(t, hasReadableAuthFiles("gemini", "work"))
+	})
+
+	t.Run("unknown_tool_not_readable", func(t *testing.T) {
+		require.False(t, hasReadableAuthFiles("mystery", "work"))
+	})
+
+	t.Run("directory_path_not_treated_as_readable", func(t *testing.T) {
+		tools["codex"] = func() authfile.AuthFileSet {
+			return authfile.AuthFileSet{
+				Tool: "codex",
+				Files: []authfile.AuthFileSpec{
+					{Path: filepath.Join("/tmp", "codex", "auth.json"), Required: true},
+				},
+			}
+		}
+
+		profilePath := filepath.Join(vaultDir, "codex", "directory_auth")
+		require.NoError(t, os.MkdirAll(profilePath, 0o755))
+		require.NoError(t, os.Mkdir(filepath.Join(profilePath, "auth.json"), 0o755))
+		require.False(t, hasReadableAuthFiles("codex", "directory_auth"))
+	})
+}
+
+func TestRunLs_SkipsUnknownToolEntries(t *testing.T) {
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	originalVault := vault
+	originalTools := make(map[string]func() authfile.AuthFileSet)
+	for k, v := range tools {
+		originalTools[k] = v
+	}
+	defer func() {
+		vault = originalVault
+		tools = originalTools
+	}()
+
+	vaultDir := filepath.Join(h.TempDir, "vault")
+	vault = authfile.NewVault(vaultDir)
+
+	tools["codex"] = func() authfile.AuthFileSet {
+		return authfile.AuthFileSet{
+			Tool: "codex",
+			Files: []authfile.AuthFileSpec{
+				{Path: filepath.Join("/tmp", "codex", "auth.json"), Required: true},
+			},
+		}
+	}
+	tools["claude"] = func() authfile.AuthFileSet {
+		return authfile.AuthFileSet{
+			Tool: "claude",
+			Files: []authfile.AuthFileSpec{
+				{Path: filepath.Join("/tmp", "claude", ".credentials.json"), Required: true},
+			},
+		}
+	}
+	tools["gemini"] = func() authfile.AuthFileSet {
+		return authfile.AuthFileSet{Tool: "gemini"}
+	}
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "work"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "work", "auth.json"), []byte("{}"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "mystery", "ghost"), 0o755))
+
+	require.NoError(t, lsCmd.Flags().Set("json", "true"))
+	require.NoError(t, lsCmd.Flags().Set("all", "false"))
+	require.NoError(t, lsCmd.Flags().Set("tag", ""))
+
+	buf := &bytes.Buffer{}
+	lsCmd.SetOut(buf)
+
+	err := runLs(lsCmd, []string{})
+	require.NoError(t, err)
+
+	var output lsOutput
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &output))
+	require.Len(t, output.Profiles, 1)
+	require.Equal(t, 1, output.Count)
+	require.Equal(t, "work", output.Profiles[0].Name)
+	require.Equal(t, "codex", output.Profiles[0].Tool)
+}
+
+// TestVersionCommand tests the version command output.
+func TestVersionCommand(t *testing.T) {
+	if versionCmd.Use != "version" {
+		t.Errorf("Expected Use 'version', got %q", versionCmd.Use)
+	}
+
+	if versionCmd.Short == "" {
+		t.Error("Expected non-empty Short description")
+	}
+
+	// Run is set (not RunE)
+	if versionCmd.Run == nil {
+		t.Error("Expected Run to be set")
+	}
+}
+
+// TestBackupCommandFlags tests the backup command has correct arg requirements.
+func TestBackupCommandFlags(t *testing.T) {
+	if backupCmd.Use != "backup <tool> <profile-name>" {
+		t.Errorf("Unexpected Use: %q", backupCmd.Use)
+	}
+
+	// Check Args expects exactly 2 args
+	if backupCmd.Args == nil {
+		t.Error("Expected Args validator to be set")
+	}
+
+	// Test that Args function rejects wrong number of arguments
+	err := backupCmd.Args(backupCmd, []string{})
+	if err == nil {
+		t.Error("Expected error for 0 args")
+	}
+
+	err = backupCmd.Args(backupCmd, []string{"codex"})
+	if err == nil {
+		t.Error("Expected error for 1 arg")
+	}
+
+	err = backupCmd.Args(backupCmd, []string{"codex", "profile", "extra"})
+	if err == nil {
+		t.Error("Expected error for 3 args")
+	}
+
+	err = backupCmd.Args(backupCmd, []string{"codex", "profile"})
+	if err != nil {
+		t.Errorf("Expected no error for 2 args, got %v", err)
+	}
+}
+
+// TestActivateCommandFlags tests the activate command flags and aliases.
+func TestActivateCommandFlags(t *testing.T) {
+	if activateCmd.Use != "activate <tool> [profile-name]" {
+		t.Errorf("Unexpected Use: %q", activateCmd.Use)
+	}
+
+	// Check aliases
+	expectedAliases := []string{"switch", "use"}
+	for _, alias := range expectedAliases {
+		found := false
+		for _, a := range activateCmd.Aliases {
+			if a == alias {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected alias %q not found", alias)
+		}
+	}
+
+	// Check --backup-current flag exists
+	flag := activateCmd.Flags().Lookup("backup-current")
+	if flag == nil {
+		t.Error("Expected --backup-current flag")
+	} else if flag.DefValue != "false" {
+		t.Errorf("Expected default false, got %q", flag.DefValue)
+	}
+}
+
+// TestStatusCommandArgs tests the status command accepts optional tool argument.
+func TestStatusCommandArgs(t *testing.T) {
+	if statusCmd.Use != "status [tool]" {
+		t.Errorf("Unexpected Use: %q", statusCmd.Use)
+	}
+
+	// Should accept 0 or 1 args
+	err := statusCmd.Args(statusCmd, []string{})
+	if err != nil {
+		t.Errorf("Expected no error for 0 args, got %v", err)
+	}
+
+	err = statusCmd.Args(statusCmd, []string{"claude"})
+	if err != nil {
+		t.Errorf("Expected no error for 1 arg, got %v", err)
+	}
+
+	err = statusCmd.Args(statusCmd, []string{"claude", "extra"})
+	if err == nil {
+		t.Error("Expected error for 2 args")
+	}
+}
+
+// TestLsCommandAliases tests the ls command has the list alias.
+func TestLsCommandAliases(t *testing.T) {
+	if lsCmd.Use != "ls [tool]" {
+		t.Errorf("Unexpected Use: %q", lsCmd.Use)
+	}
+
+	found := false
+	for _, alias := range lsCmd.Aliases {
+		if alias == "list" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 'list' alias")
+	}
+}
+
+// TestDeleteCommandFlags tests the delete command flags.
+func TestDeleteCommandFlags(t *testing.T) {
+	if deleteCmd.Use != "delete <tool> <profile-name>" {
+		t.Errorf("Unexpected Use: %q", deleteCmd.Use)
+	}
+
+	// Check aliases
+	found := false
+	for _, alias := range deleteCmd.Aliases {
+		if alias == "rm" || alias == "remove" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 'rm' or 'remove' alias")
+	}
+
+	// Check --force flag exists
+	flag := deleteCmd.Flags().Lookup("force")
+	if flag == nil {
+		t.Error("Expected --force flag")
+	}
+}
+
+// TestClearCommandFlags tests the clear command flags.
+func TestClearCommandFlags(t *testing.T) {
+	if clearCmd.Use != "clear <tool>" {
+		t.Errorf("Unexpected Use: %q", clearCmd.Use)
+	}
+
+	// Check --force flag exists
+	flag := clearCmd.Flags().Lookup("force")
+	if flag == nil {
+		t.Error("Expected --force flag")
+	}
+}
+
+// TestPathsCommandArgs tests the paths command args.
+func TestPathsCommandArgs(t *testing.T) {
+	if pathsCmd.Use != "paths [tool]" {
+		t.Errorf("Unexpected Use: %q", pathsCmd.Use)
+	}
+
+	// Should accept 0 or 1 args
+	err := pathsCmd.Args(pathsCmd, []string{})
+	if err != nil {
+		t.Errorf("Expected no error for 0 args, got %v", err)
+	}
+}
+
+// TestProfileCommand tests the profile parent command and subcommands.
+func TestProfileCommand(t *testing.T) {
+	if profileCmd.Use != "profile" {
+		t.Errorf("Unexpected Use: %q", profileCmd.Use)
+	}
+
+	// Check subcommands are registered
+	commands := profileCmd.Commands()
+	cmdMap := make(map[string]bool)
+	for _, c := range commands {
+		parts := strings.Fields(c.Use)
+		if len(parts) > 0 {
+			cmdMap[parts[0]] = true
+		}
+	}
+
+	expectedSubcommands := []string{"add", "ls", "delete", "status", "unlock"}
+	for _, expected := range expectedSubcommands {
+		if !cmdMap[expected] {
+			t.Errorf("Expected profile subcommand %q", expected)
+		}
+	}
+}
+
+// TestProfileAddFlags tests the profile add command flags.
+func TestProfileAddFlags(t *testing.T) {
+	expectedFlags := []string{"auth-mode", "browser", "browser-profile", "browser-name"}
+
+	for _, name := range expectedFlags {
+		flag := profileAddCmd.Flags().Lookup(name)
+		if flag == nil {
+			t.Errorf("Expected --%s flag", name)
+		}
+	}
+}
+
+// TestProfileDeleteFlags tests the profile delete command flags.
+func TestProfileDeleteFlags(t *testing.T) {
+	flag := profileDeleteCmd.Flags().Lookup("force")
+	if flag == nil {
+		t.Error("Expected --force flag")
+	}
+}
+
+// TestProfileUnlockFlags tests the profile unlock command flags.
+func TestProfileUnlockFlags(t *testing.T) {
+	flag := profileUnlockCmd.Flags().Lookup("force")
+	if flag == nil {
+		t.Error("Expected --force flag")
+	}
+
+	// Check shorthand
+	if flag.Shorthand != "f" {
+		t.Errorf("Expected shorthand 'f', got %q", flag.Shorthand)
+	}
+}
+
+// TestLoginCommandArgs tests the login command requires 2 args.
+func TestLoginCommandArgs(t *testing.T) {
+	if loginCmd.Use != "login <tool> <profile>" {
+		t.Errorf("Unexpected Use: %q", loginCmd.Use)
+	}
+
+	flag := loginCmd.Flags().Lookup("device-code")
+	if flag == nil {
+		t.Error("Expected --device-code flag")
+	}
+
+	err := loginCmd.Args(loginCmd, []string{"codex", "work"})
+	if err != nil {
+		t.Errorf("Expected no error for 2 args, got %v", err)
+	}
+
+	err = loginCmd.Args(loginCmd, []string{"codex"})
+	if err == nil {
+		t.Error("Expected error for 1 arg")
+	}
+}
+
+// TestExecCommandFlags tests the exec command flags.
+func TestExecCommandFlags(t *testing.T) {
+	flag := execCmd.Flags().Lookup("no-lock")
+	if flag == nil {
+		t.Error("Expected --no-lock flag")
+	}
+}
+
+// TestToolsMap verifies the tools map contains expected providers.
+func TestToolsMap(t *testing.T) {
+	expectedTools := []string{"codex", "claude", "gemini"}
+
+	for _, tool := range expectedTools {
+		if _, ok := tools[tool]; !ok {
+			t.Errorf("Expected tool %q in tools map", tool)
+		}
+	}
+
+	// Verify each tool returns auth files
+	for tool, getFileSet := range tools {
+		fileSet := getFileSet()
+		if fileSet.Tool == "" {
+			t.Errorf("Expected Tool for tool %q", tool)
+		}
+		if len(fileSet.Files) == 0 {
+			t.Errorf("Expected Files for tool %q", tool)
+		}
+	}
+}
+
+// TestCommandDescriptions verifies all commands have descriptions.
+func TestCommandDescriptions(t *testing.T) {
+	cmd := createTestCmd()
+
+	// Walk all commands and check descriptions
+	var checkCmd func(*cobra.Command)
+	checkCmd = func(c *cobra.Command) {
+		if c.Short == "" {
+			t.Errorf("Command %q missing Short description", c.Use)
+		}
+		for _, sub := range c.Commands() {
+			checkCmd(sub)
+		}
+	}
+
+	for _, sub := range cmd.Commands() {
+		checkCmd(sub)
+	}
+}
+
+// TestWithTempDir runs a test with a temporary directory for data.
+func TestWithTempDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Set XDG_DATA_HOME to temp dir
+	oldXDG := os.Getenv("XDG_DATA_HOME")
+	os.Setenv("XDG_DATA_HOME", tmpDir)
+	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+
+	// Create necessary subdirectories
+	vaultDir := filepath.Join(tmpDir, "caam", "vault")
+	profilesDir := filepath.Join(tmpDir, "caam", "profiles")
+
+	if err := os.MkdirAll(vaultDir, 0700); err != nil {
+		t.Fatalf("Failed to create vault dir: %v", err)
+	}
+	if err := os.MkdirAll(profilesDir, 0700); err != nil {
+		t.Fatalf("Failed to create profiles dir: %v", err)
+	}
+
+	// Test that directories exist
+	if _, err := os.Stat(vaultDir); err != nil {
+		t.Errorf("Vault dir not created: %v", err)
+	}
+	if _, err := os.Stat(profilesDir); err != nil {
+		t.Errorf("Profiles dir not created: %v", err)
+	}
+}
+
+// TestValidToolNames verifies tool name validation works.
+func TestValidToolNames(t *testing.T) {
+	validTools := []string{"codex", "claude", "gemini", "CODEX", "Claude", "GEMINI"}
+
+	for _, tool := range validTools {
+		normalized := strings.ToLower(tool)
+		if _, ok := tools[normalized]; !ok {
+			t.Errorf("Expected normalized tool %q to be valid", normalized)
+		}
+	}
+
+	invalidTools := []string{"invalid", "foo", "bar", ""}
+	for _, tool := range invalidTools {
+		if _, ok := tools[tool]; ok {
+			t.Errorf("Expected tool %q to be invalid", tool)
+		}
+	}
+}
+
+// TestFormatAllCooldownWarning tests the cooldown warning formatting.
+func TestFormatAllCooldownWarning(t *testing.T) {
+	tests := []struct {
+		name        string
+		tool        string
+		remaining   time.Duration
+		nextProfile string
+		noColor     bool
+		want        string
+	}{
+		{
+			name:        "under 1 minute no color",
+			tool:        "codex",
+			remaining:   30 * time.Second,
+			nextProfile: "work",
+			noColor:     true,
+			want:        "codex: ⚠️  ALL profiles in cooldown (next available: work in <1m)",
+		},
+		{
+			name:        "minutes only no color",
+			tool:        "claude",
+			remaining:   15 * time.Minute,
+			nextProfile: "personal",
+			noColor:     true,
+			want:        "claude: ⚠️  ALL profiles in cooldown (next available: personal in 15m)",
+		},
+		{
+			name:        "hours and minutes no color",
+			tool:        "gemini",
+			remaining:   2*time.Hour + 30*time.Minute,
+			nextProfile: "test",
+			noColor:     true,
+			want:        "gemini: ⚠️  ALL profiles in cooldown (next available: test in 2h 30m)",
+		},
+		{
+			name:        "with color",
+			tool:        "codex",
+			remaining:   1 * time.Hour,
+			nextProfile: "work",
+			noColor:     false,
+			want:        "\033[33mcodex: ⚠️  ALL profiles in cooldown (next available: work in 1h 0m)\033[0m",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := health.FormatOptions{NoColor: tc.noColor}
+			got := formatAllCooldownWarning(tc.tool, tc.remaining, tc.nextProfile, opts)
+			if got != tc.want {
+				t.Errorf("formatAllCooldownWarning() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCommandUsageStrings verifies usage strings are properly formatted.
+func TestCommandUsageStrings(t *testing.T) {
+	commands := []struct {
+		cmd      *cobra.Command
+		expected string
+	}{
+		{backupCmd, "backup <tool> <profile-name>"},
+		{activateCmd, "activate <tool> [profile-name]"},
+		{statusCmd, "status [tool]"},
+		{lsCmd, "ls [tool]"},
+		{deleteCmd, "delete <tool> <profile-name>"},
+		{pathsCmd, "paths [tool]"},
+		{clearCmd, "clear <tool>"},
+		{loginCmd, "login <tool> <profile>"},
+		{reloadCmd, "reload"},
+		{refreshCmd, "refresh [tool] [profile]"},
+	}
+
+	for _, tc := range commands {
+		if tc.cmd.Use != tc.expected {
+			t.Errorf("Command Use mismatch: expected %q, got %q", tc.expected, tc.cmd.Use)
+		}
+	}
+}
