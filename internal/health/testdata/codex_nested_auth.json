@@ -1,0 +1,7 @@
+{
+  "auth_mode": "oauth",
+  "tokens": {
+    "access_token": "codex_access_token_nested",
+    "refresh_token": "codex_refresh_token_nested"
+  }
+}

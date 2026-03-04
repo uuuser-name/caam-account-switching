@@ -1,0 +1,152 @@
+package identity
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
+
+var errInvalidJWT = errors.New("invalid jwt")
+
+// ExtractFromJWT parses a JWT token and extracts identity claims without
+// validating the signature.
+func ExtractFromJWT(token string) (*Identity, error) {
+	claims, err := parseJWTClaims(token)
+	if err != nil {
+		return nil, err
+	}
+
+	identity := &Identity{
+		Email:        extractEmailClaim(claims),
+		Organization: pickString(claims, "organization", "org", "org_name"),
+		PlanType:     pickString(claims, "plan_type", "subscription_type", "planType", "subscriptionType", "plan"),
+		AccountID:    pickString(claims, "account_id", "accountId", "user_id", "userId", "uid"),
+	}
+
+	if exp, ok := extractExpiry(claims); ok {
+		identity.ExpiresAt = exp
+	}
+
+	return identity, nil
+}
+
+func parseJWTClaims(token string) (map[string]interface{}, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("%w: expected 3 parts", errInvalidJWT)
+	}
+
+	payload := parts[1]
+	if payload == "" {
+		return nil, fmt.Errorf("%w: empty payload", errInvalidJWT)
+	}
+
+	decoded, err := decodeSegment(payload)
+	if err != nil {
+		return nil, fmt.Errorf("decode jwt payload: %w", err)
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(decoded))
+	dec.UseNumber()
+
+	var claims map[string]interface{}
+	if err := dec.Decode(&claims); err != nil {
+		return nil, fmt.Errorf("parse jwt claims: %w", err)
+	}
+
+	return claims, nil
+}
+
+func decodeSegment(segment string) ([]byte, error) {
+	if decoded, err := base64.RawURLEncoding.DecodeString(segment); err == nil {
+		return decoded, nil
+	}
+
+	padded := addBase64Padding(segment)
+	if decoded, err := base64.URLEncoding.DecodeString(padded); err == nil {
+		return decoded, nil
+	}
+
+	return base64.StdEncoding.DecodeString(padded)
+}
+
+func addBase64Padding(s string) string {
+	switch len(s) % 4 {
+	case 2:
+		return s + "=="
+	case 3:
+		return s + "="
+	default:
+		return s
+	}
+}
+
+func extractEmailClaim(claims map[string]interface{}) string {
+	emailFields := []string{"email", "preferred_username", "upn", "sub"}
+	for _, field := range emailFields {
+		if value := valueAsString(claims[field]); value != "" {
+			if field == "sub" && !strings.Contains(value, "@") {
+				continue
+			}
+			return value
+		}
+	}
+	return ""
+}
+
+func extractExpiry(claims map[string]interface{}) (time.Time, bool) {
+	raw, ok := claims["exp"]
+	if !ok {
+		return time.Time{}, false
+	}
+
+	switch value := raw.(type) {
+	case json.Number:
+		secs, err := value.Int64()
+		if err != nil {
+			return time.Time{}, false
+		}
+		return time.Unix(secs, 0).UTC(), true
+	case float64:
+		return time.Unix(int64(value), 0).UTC(), true
+	case float32:
+		return time.Unix(int64(value), 0).UTC(), true
+	case int64:
+		return time.Unix(value, 0).UTC(), true
+	case int:
+		return time.Unix(int64(value), 0).UTC(), true
+	case string:
+		secs, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return time.Unix(secs, 0).UTC(), true
+	default:
+		return time.Time{}, false
+	}
+}
+
+func pickString(claims map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if value := valueAsString(claims[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func valueAsString(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case json.Number:
+		return v.String()
+	default:
+		return ""
+	}
+}

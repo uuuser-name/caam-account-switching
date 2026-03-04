@@ -1,0 +1,571 @@
+package timeline
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+// =============================================================================
+// Test Events for Testing
+// =============================================================================
+
+func makeEvent(runID, scenarioID, stepID, timestamp string) *LogEvent {
+	return &LogEvent{
+		RunID:      runID,
+		ScenarioID: scenarioID,
+		StepID:     stepID,
+		Timestamp:  timestamp,
+		Actor:      "ci",
+		Component:  "test",
+		Decision:   "pass",
+		DurationMs: 100,
+		Error:      ErrorEnvelope{Present: false},
+	}
+}
+
+func makeEventWithComponent(runID, scenarioID, stepID, timestamp, component string) *LogEvent {
+	e := makeEvent(runID, scenarioID, stepID, timestamp)
+	e.Component = component
+	return e
+}
+
+func makeEventWithError(runID, scenarioID, stepID, timestamp string) *LogEvent {
+	e := makeEvent(runID, scenarioID, stepID, timestamp)
+	e.Error = ErrorEnvelope{
+		Present: true,
+		Code:    "ERR_TEST",
+		Message: "test error",
+	}
+	return e
+}
+
+// =============================================================================
+// Merger Creation Tests
+// =============================================================================
+
+func TestNewMerger(t *testing.T) {
+	m := NewMerger()
+	if m == nil {
+		t.Fatal("NewMerger returned nil")
+	}
+	if !m.DeduplicateByTimestamp {
+		t.Error("DeduplicateByTimestamp should be true by default")
+	}
+	if !m.SortByStepID {
+		t.Error("SortByStepID should be true by default")
+	}
+}
+
+// =============================================================================
+// JSONL Parsing Tests
+// =============================================================================
+
+func TestParseJSONLReader(t *testing.T) {
+	m := NewMerger()
+	jsonl := `{"run_id":"run-1","scenario_id":"scenario-a","step_id":"step-1","timestamp":"2024-01-01T10:00:00Z","actor":"ci","component":"test","input_redacted":{},"output":{},"decision":"pass","duration_ms":100,"error":{"present":false,"code":"","message":"","details":{}}}
+{"run_id":"run-1","scenario_id":"scenario-a","step_id":"step-2","timestamp":"2024-01-01T10:00:01Z","actor":"ci","component":"test","input_redacted":{},"output":{},"decision":"pass","duration_ms":200,"error":{"present":false,"code":"","message":"","details":{}}}`
+
+	events, parseErrors, err := m.parseJSONLReader(strings.NewReader(jsonl), "test.jsonl")
+	if err != nil {
+		t.Fatalf("parseJSONLReader failed: %v", err)
+	}
+	if parseErrors != 0 {
+		t.Errorf("Expected 0 parse errors, got %d", parseErrors)
+	}
+	if len(events) != 2 {
+		t.Errorf("Expected 2 events, got %d", len(events))
+	}
+}
+
+func TestParseJSONLReaderWithInvalidEvents(t *testing.T) {
+	m := NewMerger()
+	// Missing required fields and invalid timestamp
+	jsonl := `{"run_id":"run-1","scenario_id":"scenario-a"}
+{"run_id":"run-1","scenario_id":"scenario-a","step_id":"step-1","timestamp":"invalid","actor":"ci","component":"test","input_redacted":{},"output":{},"decision":"pass","duration_ms":100,"error":{"present":false}}
+{"run_id":"run-1","scenario_id":"scenario-a","step_id":"step-2","timestamp":"2024-01-01T10:00:00Z","actor":"ci","component":"test","input_redacted":{},"output":{},"decision":"pass","duration_ms":100,"error":{"present":false}}`
+
+	events, parseErrors, err := m.parseJSONLReader(strings.NewReader(jsonl), "test.jsonl")
+	if err != nil {
+		t.Fatalf("parseJSONLReader failed: %v", err)
+	}
+	if parseErrors != 2 {
+		t.Errorf("Expected 2 parse errors (missing step_id and invalid timestamp), got %d", parseErrors)
+	}
+	if len(events) != 1 {
+		t.Errorf("Expected 1 valid event, got %d", len(events))
+	}
+}
+
+// =============================================================================
+// Merge Events Tests
+// =============================================================================
+
+func TestMergeEventsBasic(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+		makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T10:00:02Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	if len(result.Timelines) != 2 {
+		t.Errorf("Expected 2 timelines (scenario-a, scenario-b), got %d", len(result.Timelines))
+	}
+
+	if result.RunID != "run-1" {
+		t.Errorf("Expected RunID 'run-1', got %s", result.RunID)
+	}
+}
+
+func TestMergeEventsChronologicalOrder(t *testing.T) {
+	m := NewMerger()
+	// Events intentionally out of order
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-3", "2024-01-01T10:00:02Z"),
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	timeline := result.Timelines["scenario-a"]
+	if len(timeline.Events) != 3 {
+		t.Fatalf("Expected 3 events, got %d", len(timeline.Events))
+	}
+
+	// Verify chronological order
+	expectedOrder := []string{"step-1", "step-2", "step-3"}
+	for i, event := range timeline.Events {
+		if event.StepID != expectedOrder[i] {
+			t.Errorf("Event %d: expected step_id %s, got %s", i, expectedOrder[i], event.StepID)
+		}
+	}
+}
+
+func TestMergeEventsMultipleRuns(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-2", "scenario-a", "step-1", "2024-01-01T11:00:00Z"),
+		makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T10:00:01Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	// Should have 2 scenarios
+	if len(result.Timelines) != 2 {
+		t.Errorf("Expected 2 timelines, got %d", len(result.Timelines))
+	}
+
+	// scenario-a should have events from both runs
+	scenarioA := result.Timelines["scenario-a"]
+	if len(scenarioA.Events) != 2 {
+		t.Errorf("Expected scenario-a to have 2 events (from 2 runs), got %d", len(scenarioA.Events))
+	}
+}
+
+// =============================================================================
+// Determinism Tests (Critical for Acceptance Criteria)
+// =============================================================================
+
+func TestMergeDeterminism(t *testing.T) {
+	// Create events with the same timestamps but added in different orders
+	// The output should be identical regardless of input order
+	events1 := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-3", "2024-01-01T10:00:02Z"),
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+		makeEvent("run-1", "scenario-b", "step-2", "2024-01-01T10:00:01Z"),
+		makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T10:00:00Z"),
+	}
+
+	events2 := []*LogEvent{
+		makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-b", "step-2", "2024-01-01T10:00:01Z"),
+		makeEvent("run-1", "scenario-a", "step-3", "2024-01-01T10:00:02Z"),
+	}
+
+	m := NewMerger()
+	result1, err := m.MergeEvents(events1, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents 1 failed: %v", err)
+	}
+
+	result2, err := m.MergeEvents(events2, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents 2 failed: %v", err)
+	}
+
+	// Serialize both results to JSONL and compare
+	var buf1, buf2 bytes.Buffer
+	if err := result1.WriteMergedJSONL(&buf1); err != nil {
+		t.Fatalf("WriteMergedJSONL 1 failed: %v", err)
+	}
+	if err := result2.WriteMergedJSONL(&buf2); err != nil {
+		t.Fatalf("WriteMergedJSONL 2 failed: %v", err)
+	}
+
+	if buf1.String() != buf2.String() {
+		t.Errorf("Determinism violation: same events in different order produced different outputs")
+		t.Errorf("Output 1:\n%s", buf1.String())
+		t.Errorf("Output 2:\n%s", buf2.String())
+	}
+}
+
+func TestMergeDeterminismWithSameTimestamp(t *testing.T) {
+	// Events with identical timestamps should be sorted by step_id
+	events := []*LogEvent{
+		makeEventWithComponent("run-1", "scenario-a", "step-3", "2024-01-01T10:00:00Z", "component-c"),
+		makeEventWithComponent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z", "component-a"),
+		makeEventWithComponent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:00Z", "component-b"),
+	}
+
+	m := NewMerger()
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	timeline := result.Timelines["scenario-a"]
+	if len(timeline.Events) != 3 {
+		t.Fatalf("Expected 3 events, got %d", len(timeline.Events))
+	}
+
+	// Events should be sorted by step_id when timestamps are equal
+	expectedOrder := []string{"step-1", "step-2", "step-3"}
+	for i, event := range timeline.Events {
+		if event.StepID != expectedOrder[i] {
+			t.Errorf("Event %d: expected step_id %s, got %s (same timestamp should sort by step_id)", i, expectedOrder[i], event.StepID)
+		}
+	}
+}
+
+func TestMergeDeterminismMultipleRuns(t *testing.T) {
+	// Run the same merge operation multiple times, verify identical output
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+		makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-2", "scenario-a", "step-1", "2024-01-01T11:00:00Z"),
+	}
+
+	m := NewMerger()
+
+	var outputs []string
+	for i := 0; i < 5; i++ {
+		result, err := m.MergeEvents(events, MergeStats{})
+		if err != nil {
+			t.Fatalf("MergeEvents run %d failed: %v", i, err)
+		}
+
+		var buf bytes.Buffer
+		if err := result.WriteMergedJSONL(&buf); err != nil {
+			t.Fatalf("WriteMergedJSONL run %d failed: %v", i, err)
+		}
+		outputs = append(outputs, buf.String())
+	}
+
+	// All outputs should be identical
+	for i := 1; i < len(outputs); i++ {
+		if outputs[i] != outputs[0] {
+			t.Errorf("Run %d produced different output than run 0 (non-deterministic)", i)
+		}
+	}
+}
+
+// =============================================================================
+// Deduplication Tests
+// =============================================================================
+
+func TestDeduplication(t *testing.T) {
+	m := NewMerger()
+	m.DeduplicateByTimestamp = true
+
+	// Duplicate events with same timestamp and step_id
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"), // duplicate
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	timeline := result.Timelines["scenario-a"]
+	if len(timeline.Events) != 2 {
+		t.Errorf("Expected 2 events after deduplication, got %d", len(timeline.Events))
+	}
+
+	if result.Stats.DuplicatesRemoved != 1 {
+		t.Errorf("Expected 1 duplicate removed, got %d", result.Stats.DuplicatesRemoved)
+	}
+}
+
+func TestNoDeduplicationWhenDisabled(t *testing.T) {
+	m := NewMerger()
+	m.DeduplicateByTimestamp = false
+
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"), // would be duplicate
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	timeline := result.Timelines["scenario-a"]
+	if len(timeline.Events) != 2 {
+		t.Errorf("Expected 2 events when deduplication disabled, got %d", len(timeline.Events))
+	}
+}
+
+// =============================================================================
+// Metadata Tests
+// =============================================================================
+
+func TestTimelineMetadata(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:05Z"),
+		makeEventWithError("run-1", "scenario-a", "step-3", "2024-01-01T10:00:10Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	timeline := result.Timelines["scenario-a"]
+	meta := timeline.Metadata
+
+	if meta.TotalEvents != 3 {
+		t.Errorf("Expected TotalEvents=3, got %d", meta.TotalEvents)
+	}
+
+	if meta.StartTime != "2024-01-01T10:00:00Z" {
+		t.Errorf("Expected StartTime='2024-01-01T10:00:00Z', got %s", meta.StartTime)
+	}
+
+	if meta.EndTime != "2024-01-01T10:00:10Z" {
+		t.Errorf("Expected EndTime='2024-01-01T10:00:10Z', got %s", meta.EndTime)
+	}
+
+	if meta.ErrorCount != 1 {
+		t.Errorf("Expected ErrorCount=1, got %d", meta.ErrorCount)
+	}
+
+	// TotalDurationMs should be 100 + 100 + 100 = 300
+	if meta.TotalDurationMs != 300 {
+		t.Errorf("Expected TotalDurationMs=300, got %d", meta.TotalDurationMs)
+	}
+}
+
+// =============================================================================
+// File I/O Tests
+// =============================================================================
+
+func TestMergeJSONLFiles(t *testing.T) {
+	// Create temp files
+	tmpDir := t.TempDir()
+	file1 := filepath.Join(tmpDir, "events1.jsonl")
+	file2 := filepath.Join(tmpDir, "events2.jsonl")
+
+	// Write test data
+	event1 := makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z")
+	event2 := makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T11:00:00Z")
+
+	data1, _ := json.Marshal(event1)
+	data2, _ := json.Marshal(event2)
+
+	if err := os.WriteFile(file1, append(data1, '\n'), 0644); err != nil {
+		t.Fatalf("Write file1: %v", err)
+	}
+	if err := os.WriteFile(file2, append(data2, '\n'), 0644); err != nil {
+		t.Fatalf("Write file2: %v", err)
+	}
+
+	m := NewMerger()
+	result, err := m.MergeJSONLFiles([]string{file1, file2})
+	if err != nil {
+		t.Fatalf("MergeJSONLFiles failed: %v", err)
+	}
+
+	if len(result.Timelines) != 2 {
+		t.Errorf("Expected 2 timelines, got %d", len(result.Timelines))
+	}
+
+	if result.Stats.SourceFiles != 2 {
+		t.Errorf("Expected SourceFiles=2, got %d", result.Stats.SourceFiles)
+	}
+}
+
+func TestWriteMergedJSONLFile(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "merged.jsonl")
+
+	if err := result.WriteMergedJSONLFile(outputPath); err != nil {
+		t.Fatalf("WriteMergedJSONLFile failed: %v", err)
+	}
+
+	// Verify file exists and can be read back
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("Read output file: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Errorf("Expected 2 lines in output, got %d", len(lines))
+	}
+}
+
+// =============================================================================
+// Edge Cases
+// =============================================================================
+
+func TestMergeEmptyEvents(t *testing.T) {
+	m := NewMerger()
+	result, err := m.MergeEvents([]*LogEvent{}, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	if len(result.Timelines) != 0 {
+		t.Errorf("Expected 0 timelines for empty input, got %d", len(result.Timelines))
+	}
+}
+
+func TestMergeSingleEvent(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	if len(result.Timelines) != 1 {
+		t.Errorf("Expected 1 timeline, got %d", len(result.Timelines))
+	}
+
+	timeline := result.Timelines["scenario-a"]
+	if len(timeline.Events) != 1 {
+		t.Errorf("Expected 1 event, got %d", len(timeline.Events))
+	}
+}
+
+func TestMergeEventsWithMissingRequiredFields(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		{StepID: "step-1", Timestamp: time.Now().UTC().Format(time.RFC3339)}, // missing run_id, scenario_id
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	// Event with missing fields should be skipped (counted as parse error)
+	if result.Stats.ParseErrors != 1 {
+		t.Errorf("Expected 1 parse error, got %d", result.Stats.ParseErrors)
+	}
+}
+
+// =============================================================================
+// Statistics Tests
+// =============================================================================
+
+func TestMergeStats(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-a", "step-2", "2024-01-01T10:00:01Z"),
+		makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T10:00:02Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{SourceFiles: 2})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	if result.Stats.TotalEvents != 3 {
+		t.Errorf("Expected TotalEvents=3, got %d", result.Stats.TotalEvents)
+	}
+
+	if result.Stats.SourceFiles != 2 {
+		t.Errorf("Expected SourceFiles=2, got %d", result.Stats.SourceFiles)
+	}
+}
+
+// =============================================================================
+// WriteJSONL Tests
+// =============================================================================
+
+func TestWriteJSONL(t *testing.T) {
+	m := NewMerger()
+	events := []*LogEvent{
+		makeEvent("run-1", "scenario-a", "step-1", "2024-01-01T10:00:00Z"),
+		makeEvent("run-1", "scenario-b", "step-1", "2024-01-01T10:00:01Z"),
+	}
+
+	result, err := m.MergeEvents(events, MergeStats{})
+	if err != nil {
+		t.Fatalf("MergeEvents failed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := result.WriteJSONL(&buf); err != nil {
+		t.Fatalf("WriteJSONL failed: %v", err)
+	}
+
+	// Should have 2 lines (one per timeline)
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Errorf("Expected 2 lines, got %d", len(lines))
+	}
+
+	// Each line should be valid JSON
+	for i, line := range lines {
+		var timeline Timeline
+		if err := json.Unmarshal([]byte(line), &timeline); err != nil {
+			t.Errorf("Line %d is not valid JSON: %v", i, err)
+		}
+	}
+}
