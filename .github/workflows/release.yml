@@ -1,0 +1,138 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 'stable'
+
+      - name: Install release gate dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq ripgrep
+
+      - name: Run release quality audit
+        run: ./scripts/test_audit.sh
+
+      - name: Run release e2e quality gate
+        run: ./scripts/ci_e2e_quality_gate.sh
+
+      - name: Build release quality trend diff
+        env:
+          FAIL_ON_QUALITY_REGRESSION: "1"
+        run: ./scripts/build_quality_trend_diff.sh
+
+      - name: Enforce release readiness attestation
+        run: ./scripts/release_readiness_attestation.sh
+
+      - name: Upload release gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-artifacts
+          path: |
+            artifacts/test-audit/
+            artifacts/cli-matrix/scenario_traceability.json
+          retention-days: 14
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4.0.0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Token with write access to homebrew-tap and scoop-bucket repos
+          # Set this as a repository secret with repo scope
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Verify release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
+          release_json=$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" "$api")
+          parsed=$(RELEASE_JSON="$release_json" python - <<-PY
+          	import json
+          	import os
+          	import sys
+
+          	data = json.loads(os.environ.get("RELEASE_JSON", "{}"))
+          	assets = data.get("assets", [])
+
+          	def find(name: str) -> str:
+          	    for asset in assets:
+          	        if asset.get("name") == name:
+          	            return asset.get("browser_download_url") or ""
+          	    return ""
+
+          	checksums_url = find("SHA256SUMS")
+          	signature_url = find("SHA256SUMS.sig")
+
+          	sample = None
+          	for asset in assets:
+          	    name = asset.get("name") or ""
+          	    if name in {"SHA256SUMS", "SHA256SUMS.sig"}:
+          	        continue
+          	    if name.endswith(".tar.gz") or name.endswith(".zip"):
+          	        sample = asset
+          	        break
+
+          	if not checksums_url or not signature_url:
+          	    sys.stderr.write("Missing SHA256SUMS or SHA256SUMS.sig assets\n")
+          	    sys.exit(1)
+          	if not sample:
+          	    sys.stderr.write("Missing archive asset to verify\n")
+          	    sys.exit(1)
+
+          	print(checksums_url)
+          	print(signature_url)
+          	print(sample.get("name") or "")
+          	print(sample.get("browser_download_url") or "")
+          	PY
+          )
+
+          checksums_url=$(printf '%s' "$parsed" | sed -n '1p')
+          signature_url=$(printf '%s' "$parsed" | sed -n '2p')
+          sample_name=$(printf '%s' "$parsed" | sed -n '3p')
+          sample_url=$(printf '%s' "$parsed" | sed -n '4p')
+
+          tmpdir="$(mktemp -d)"
+          curl -fsSL "$checksums_url" -o "$tmpdir/SHA256SUMS"
+          curl -fsSL "$signature_url" -o "$tmpdir/SHA256SUMS.sig"
+          curl -fsSL "$sample_url" -o "$tmpdir/$sample_name"
+
+          cosign verify-blob \
+            --bundle "$tmpdir/SHA256SUMS.sig" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${tag}" \
+            "$tmpdir/SHA256SUMS"
+
+          expected=$(grep -F " $sample_name" "$tmpdir/SHA256SUMS" | awk '{print $1}' | head -1)
+          actual=$(sha256sum "$tmpdir/$sample_name" | awk '{print $1}')
+          if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+            echo "Checksum mismatch for $sample_name" >&2
+            exit 1
+          fi
+
+          echo "Release assets verified: SHA256SUMS + signature + archive checksum"

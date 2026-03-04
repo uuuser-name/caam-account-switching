@@ -1,0 +1,251 @@
+{
+  "metadata": {
+    "generated_at": "2026-01-21T08:10:00Z",
+    "generated_by": "caam-nqjf inventory task",
+    "purpose": "Inventory of Claude-specific auth/session assumptions for audit and remediation"
+  },
+  "summary": {
+    "total_features": 10,
+    "correct": 4,
+    "fixable": 2,
+    "remove_or_disable": 4
+  },
+  "features": [
+    {
+      "id": "CLAUDE-001",
+      "file": "internal/identity/claude.go",
+      "function": "ExtractFromClaudeCredentials",
+      "lines": "12-41",
+      "description": "Extracts identity (accountId, email, subscriptionType, expiresAt) from .credentials.json",
+      "assumptions": [
+        "claudeAiOauth object contains accountId field",
+        "claudeAiOauth object contains email field",
+        "claudeAiOauth object contains subscriptionType field",
+        "claudeAiOauth object contains expiresAt field (Unix milliseconds)"
+      ],
+      "observed_reality": [
+        "claudeAiOauth.expiresAt IS present and correct",
+        "claudeAiOauth.accountId is NO LONGER present in current Claude Code versions",
+        "claudeAiOauth.email is NO LONGER present in current Claude Code versions",
+        "claudeAiOauth.subscriptionType MAY be present (seen as 'max')"
+      ],
+      "classification": "fixable",
+      "action": "Return empty strings for missing fields gracefully; document that email/accountId are unavailable; consider removing misleading TUI display",
+      "risk_level": "medium",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-002",
+      "file": "internal/discovery/identity.go",
+      "function": "extractClaudeIdentity",
+      "lines": "31-68",
+      "description": "Extracts user identity from auth files by checking fields and JWT tokens",
+      "assumptions": [
+        "Auth files may contain email, user.email, or accountId fields",
+        "Access tokens are JWTs that can be decoded to extract email claims"
+      ],
+      "observed_reality": [
+        "Auth files do NOT contain email or accountId anymore",
+        "Claude access tokens are OPAQUE (not JWTs) - they cannot be decoded",
+        "No way to reliably extract user identity from current auth files"
+      ],
+      "classification": "remove_or_disable",
+      "action": "Remove JWT decoding attempt for Claude; return empty identity with success=true to avoid errors; update callers to handle empty identity gracefully",
+      "risk_level": "high",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-003",
+      "file": "internal/provider/claude/claude.go",
+      "function": "AuthFiles",
+      "lines": "88-113",
+      "description": "Defines auth file paths for Claude Code",
+      "assumptions": [
+        "Primary: ~/.claude/.credentials.json (OAuth credentials)",
+        "Optional: ~/.claude.json (legacy location)",
+        "Optional: ~/.config/claude-code/auth.json",
+        "Optional: ~/.claude/settings.json (API key mode)"
+      ],
+      "observed_reality": [
+        "~/.claude/.credentials.json IS the correct primary location",
+        "~/.claude.json is legacy but may exist on older installs",
+        "File paths are CORRECT"
+      ],
+      "classification": "correct",
+      "action": "No changes needed",
+      "risk_level": "low",
+      "user_visible": false
+    },
+    {
+      "id": "CLAUDE-004",
+      "file": "internal/provider/claude/claude.go",
+      "function": "DetectExistingAuth / ValidateToken",
+      "lines": "388-530, 706-903",
+      "description": "Detects and validates Claude auth files",
+      "assumptions": [
+        "claudeAiOauth object with accessToken/refreshToken indicates valid auth",
+        "expiresAt field provides token expiry time",
+        "Legacy files may have oauthToken, sessionKey fields"
+      ],
+      "observed_reality": [
+        "claudeAiOauth structure IS correct for current Claude Code",
+        "expiresAt IS present and correctly formatted (Unix milliseconds)",
+        "Legacy field checks are safe fallbacks"
+      ],
+      "classification": "correct",
+      "action": "No changes needed - validation logic is sound",
+      "risk_level": "low",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-005",
+      "file": "internal/health/expiry.go",
+      "function": "ParseClaudeExpiry / parseClaudeCredentialsFile",
+      "lines": "37-138, 156-192",
+      "description": "Parses token expiry from Claude credentials files",
+      "assumptions": [
+        "claudeAiOauth.expiresAt contains Unix milliseconds timestamp",
+        "claudeAiOauth.refreshToken indicates refresh capability"
+      ],
+      "observed_reality": [
+        "expiresAt IS present and IS Unix milliseconds",
+        "refreshToken IS present",
+        "Parsing logic is CORRECT"
+      ],
+      "classification": "correct",
+      "action": "No changes needed - expiry parsing works correctly",
+      "risk_level": "low",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-006",
+      "file": "internal/refresh/claude.go",
+      "function": "RefreshClaudeToken / UpdateClaudeAuth",
+      "lines": "32-157",
+      "description": "Refreshes OAuth tokens via API endpoint",
+      "assumptions": [
+        "OAuth token refresh endpoint exists at api.anthropic.com/oauth/token",
+        "Standard OAuth2 refresh_token grant type works",
+        "Client ID 'claude-code-cli' is valid"
+      ],
+      "observed_reality": [
+        "This endpoint is SPECULATIVE - code comments say 'TODO: Reverse engineer or find official docs'",
+        "No public documentation confirms this endpoint exists",
+        "Actual refresh may be handled differently by Claude Code internally",
+        "If endpoint doesn't exist, refresh will fail silently"
+      ],
+      "classification": "remove_or_disable",
+      "action": "Disable automatic token refresh for Claude; add warning that refresh is unsupported; rely on manual re-login via /login",
+      "risk_level": "high",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-007",
+      "file": "internal/usage/claude.go",
+      "function": "ClaudeFetcher.Fetch",
+      "lines": "44-141",
+      "description": "Fetches usage data from Claude API",
+      "assumptions": [
+        "Usage API exists at api.anthropic.com/api/oauth/usage",
+        "anthropic-beta: oauth-2025-04-20 header enables the feature",
+        "Response includes five_hour, seven_day, opus utilization windows"
+      ],
+      "observed_reality": [
+        "This API is UNDOCUMENTED - may work but is not guaranteed",
+        "The beta header suggests experimental/internal API",
+        "Feature may break without notice as it's not public"
+      ],
+      "classification": "fixable",
+      "action": "Add graceful degradation with clear error messages when API fails; consider marking feature as experimental in UI; add config option to disable",
+      "risk_level": "medium",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-008",
+      "file": "internal/pricing/claude.go",
+      "function": "ClaudePricing",
+      "lines": "4-13",
+      "description": "Token pricing for Claude models",
+      "assumptions": [
+        "Pricing applies per-1M tokens",
+        "Models: opus ($15/75), sonnet ($3/15), haiku ($0.25/1.25)"
+      ],
+      "observed_reality": [
+        "Pricing is CORRECT for API usage",
+        "However, Claude Max subscription is all-you-can-eat - pricing doesn't apply",
+        "This feature is only meaningful for API key mode, not OAuth/Max subscription"
+      ],
+      "classification": "fixable",
+      "action": "Add warning/note that pricing applies to API key mode only; consider hiding pricing display for Max subscription profiles",
+      "risk_level": "low",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-009",
+      "file": "internal/logs/claude.go",
+      "function": "ClaudeScanner",
+      "lines": "12-188",
+      "description": "Parses Claude Code JSONL log files",
+      "assumptions": [
+        "Logs are stored at ~/.local/share/claude/logs/",
+        "Logs are in JSONL format with specific fields",
+        "Fields: timestamp, type, model, conversation_uuid, message_uuid, usage"
+      ],
+      "observed_reality": [
+        "Log location MAY be correct but needs verification",
+        "Log format may have changed in newer Claude Code versions",
+        "Feature may not work if Claude Code changed logging behavior"
+      ],
+      "classification": "remove_or_disable",
+      "action": "Verify log location and format; if incorrect, disable feature or add version-specific handling; add graceful degradation",
+      "risk_level": "medium",
+      "user_visible": true
+    },
+    {
+      "id": "CLAUDE-010",
+      "file": "internal/handoff/claude.go",
+      "function": "ClaudeLoginHandler",
+      "lines": "12-153",
+      "description": "Handles login flow for Claude Code via PTY injection",
+      "assumptions": [
+        "/login command triggers authentication",
+        "Output patterns indicate login progress/success/failure"
+      ],
+      "observed_reality": [
+        "/login IS the documented way to authenticate in Claude Code",
+        "Output patterns are reasonable heuristics",
+        "This feature is CORRECT"
+      ],
+      "classification": "correct",
+      "action": "No changes needed - login command and patterns are accurate",
+      "risk_level": "low",
+      "user_visible": false
+    }
+  ],
+  "action_items": [
+    {
+      "priority": 1,
+      "feature_ids": ["CLAUDE-002", "CLAUDE-006"],
+      "action": "Disable broken identity extraction and token refresh features",
+      "rationale": "These features cannot work with current Claude Code and may mislead users"
+    },
+    {
+      "priority": 2,
+      "feature_ids": ["CLAUDE-001"],
+      "action": "Update identity extraction to handle missing fields gracefully",
+      "rationale": "Feature works partially but TUI may show empty/misleading identity info"
+    },
+    {
+      "priority": 3,
+      "feature_ids": ["CLAUDE-007", "CLAUDE-008"],
+      "action": "Add experimental/conditional flags for undocumented features",
+      "rationale": "Features may work but are not guaranteed; users should be warned"
+    },
+    {
+      "priority": 4,
+      "feature_ids": ["CLAUDE-009"],
+      "action": "Verify log parsing against current Claude Code version",
+      "rationale": "May need updates if log format/location changed"
+    }
+  ]
+}

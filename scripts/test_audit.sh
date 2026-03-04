@@ -1,0 +1,491 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+artifact_dir="$repo_root/artifacts/test-audit"
+mkdir -p "$artifact_dir"
+snapshot_root="$artifact_dir/snapshots"
+mkdir -p "$snapshot_root"
+
+coverage_json="$artifact_dir/coverage_by_package.json"
+coverage_risk_json="$artifact_dir/coverage_by_package_with_risk.json"
+coverage_md="$artifact_dir/test_audit.md"
+summary_json="$artifact_dir/test_audit.json"
+e2e_json="$artifact_dir/e2e_inventory.json"
+double_json="$artifact_dir/mock_fake_stub_by_package.json"
+double_file_json="$artifact_dir/mock_fake_stub_by_file.json"
+baseline_snapshot_json="$artifact_dir/baseline_snapshot.json"
+baseline_ref_path="${TEST_AUDIT_BASELINE_FILE:-$repo_root/docs/testing/coverage_baseline.json}"
+realism_allowlist_path="${TEST_AUDIT_REALISM_ALLOWLIST:-$repo_root/docs/testing/test_realism_allowlist.json}"
+timestamp_utc="$(date -u +"%Y%m%dT%H%M%SZ")"
+snapshot_dir="$snapshot_root/$timestamp_utc"
+
+threshold="${TEST_AUDIT_COVERAGE_THRESHOLD:-70.0}"
+tmp_cov="$(mktemp)"
+tmp_pkgs="$(mktemp)"
+tmp_pkg_cov="$(mktemp)"
+tmp_double_events="$(mktemp)"
+tmp_scenarios="$(mktemp)"
+trap 'rm -f "$tmp_cov" "$tmp_pkgs" "$tmp_pkg_cov" "$tmp_double_events" "$tmp_scenarios"' EXIT
+
+export GOFLAGS="${GOFLAGS:--buildvcs=false}"
+go test ./... -coverprofile="$tmp_cov" >/dev/null
+
+module_path="$(go list -m -f '{{.Path}}' 2>/dev/null || true)"
+
+normalize_pkg_path() {
+  local pkg="$1"
+  if [[ -n "$module_path" && "$pkg" == "$module_path" ]]; then
+    echo "."
+    return
+  fi
+  if [[ -n "$module_path" && "$pkg" == "$module_path/"* ]]; then
+    echo "./${pkg#"$module_path/"}"
+    return
+  fi
+  echo "$pkg"
+}
+
+go list ./... >"$tmp_pkgs"
+while IFS= read -r pkg; do
+  # Single-package run makes per-package coverage explicit and scriptable.
+  line="$(go test -cover "$pkg" 2>/dev/null | awk '/coverage:/{print $0}' | tail -n1 || true)"
+  pct="$(awk '{for(i=1;i<=NF;i++) if ($i ~ /[0-9]+\.[0-9]+%|[0-9]+%/) {gsub("%","",$i); print $i; exit}}' <<<"$line")"
+  if [[ -z "$pct" ]]; then
+    pct="0.0"
+  fi
+  printf '%s\t%s\n' "$pkg" "$pct" >>"$tmp_pkg_cov"
+done <"$tmp_pkgs"
+
+awk -F '\t' 'BEGIN{print "["} {printf "%s{\"package\":\"%s\",\"coverage\":%s}", (NR==1?"":","), $1, $2} END{print "]"}' "$tmp_pkg_cov" >"$coverage_json"
+
+get_risk_tier() {
+  case "$1" in
+    "./cmd/caam/cmd"|"./internal/exec"|"./internal/coordinator"|"./internal/agent")
+      echo "A"
+      ;;
+    "./internal/deploy"|"./internal/sync"|"./internal/setup"|"./internal/provider/claude"|"./internal/provider/codex"|"./internal/provider/gemini")
+      echo "B"
+      ;;
+    *)
+      echo "C"
+      ;;
+  esac
+}
+
+get_risk_floor() {
+  case "$1" in
+    A) echo "80" ;;
+    B) echo "70" ;;
+    C) echo "60" ;;
+    *) echo "60" ;;
+  esac
+}
+
+get_owner_hint() {
+  case "$1" in
+    "./cmd/caam/cmd") echo "cli-team" ;;
+    "./internal/exec") echo "runtime-team" ;;
+    "./internal/coordinator") echo "coordinator-team" ;;
+    "./internal/agent") echo "agent-team" ;;
+    "./internal/deploy") echo "deploy-team" ;;
+    "./internal/sync") echo "sync-team" ;;
+    "./internal/setup") echo "setup-team" ;;
+    "./internal/provider/claude"|"./internal/provider/codex"|"./internal/provider/gemini") echo "provider-team" ;;
+    "./internal/rotation"|"./internal/refresh"|"./internal/ratelimit") echo "switching-core-team" ;;
+    "./internal/authfile"|"./internal/authpool"|"./internal/identity"|"./internal/profile") echo "identity-core-team" ;;
+    *) echo "unassigned" ;;
+  esac
+}
+
+is_critical_path_package() {
+  case "$1" in
+    "./cmd/caam/cmd"|\
+    "./internal/agent"|\
+    "./internal/coordinator"|\
+    "./internal/rotation"|\
+    "./internal/refresh"|\
+    "./internal/ratelimit"|\
+    "./internal/authfile"|\
+    "./internal/authpool"|\
+    "./internal/identity"|\
+    "./internal/profile"|\
+    "./internal/monitor"|\
+    "./internal/health"|\
+    "./internal/prediction")
+      echo "true"
+      ;;
+    *)
+      echo "false"
+      ;;
+  esac
+}
+
+tmp_pkg_cov_risk="$(mktemp)"
+trap 'rm -f "$tmp_cov" "$tmp_pkgs" "$tmp_pkg_cov" "$tmp_double_events" "$tmp_scenarios" "$tmp_pkg_cov_risk"' EXIT
+
+while IFS=$'\t' read -r pkg pct; do
+  normalized_pkg="$(normalize_pkg_path "$pkg")"
+  tier="$(get_risk_tier "$normalized_pkg")"
+  floor="$(get_risk_floor "$tier")"
+  owner="$(get_owner_hint "$normalized_pkg")"
+  critical_path="$(is_critical_path_package "$normalized_pkg")"
+  status="on_track"
+  if awk "BEGIN {exit !($pct < $floor)}"; then
+    status="below_floor"
+  elif awk "BEGIN {exit !($pct >= ($floor + 10))}"; then
+    status="above_floor"
+  fi
+  jq -cn \
+    --arg package "$normalized_pkg" \
+    --arg import_path "$pkg" \
+    --arg tier "$tier" \
+    --arg owner "$owner" \
+    --arg status "$status" \
+    --arg critical_path "$critical_path" \
+    --argjson coverage "$pct" \
+    --argjson floor "$floor" \
+    '{
+      package:$package,
+      import_path:$import_path,
+      coverage:$coverage,
+      risk_tier:$tier,
+      floor:$floor,
+      owner:$owner,
+      critical_path:($critical_path=="true"),
+      status:$status
+    }' >>"$tmp_pkg_cov_risk"
+done <"$tmp_pkg_cov"
+
+if [[ -s "$tmp_pkg_cov_risk" ]]; then
+  jq -s 'sort_by(.risk_tier, .package)' "$tmp_pkg_cov_risk" >"$coverage_risk_json"
+else
+  echo "[]" >"$coverage_risk_json"
+fi
+
+total_cov="$(go tool cover -func="$tmp_cov" | awk '/^total:/{gsub("%","",$3); print $3}')"
+if [[ -z "$total_cov" ]]; then
+  total_cov="0.0"
+fi
+
+baseline_cov="$(
+  if [[ -f "$baseline_ref_path" ]]; then
+    jq -r '.baseline_total_coverage // empty' "$baseline_ref_path" 2>/dev/null || true
+  fi
+)"
+if [[ -z "$baseline_cov" ]]; then
+  baseline_cov="$total_cov"
+fi
+coverage_delta="$(awk -v cur="$total_cov" -v base="$baseline_cov" 'BEGIN{printf "%.1f", cur-base}')"
+
+below_threshold="$(awk -F '\t' -v t="$threshold" '$2+0 < t {print $1}' "$tmp_pkg_cov" | jq -R -s -c 'split("\n") | map(select(length>0))')"
+critical_path_below_floor="$(jq -c '[.[] | select(.critical_path == true and .status == "below_floor")]' "$coverage_risk_json")"
+critical_path_below_floor_count="$(jq 'length' <<<"$critical_path_below_floor")"
+
+double_hits="$(rg -n --glob '*_test.go' '\b(mock|fake|stub)\b' . || true)"
+mock_count="$(printf "%s\n" "$double_hits" | sed '/^$/d' | wc -l | tr -d ' ')"
+if [[ ! -f "$realism_allowlist_path" ]]; then
+  echo "realism allowlist not found: $realism_allowlist_path" >&2
+  exit 1
+fi
+rule_rows="$(jq -r '.rules[]? | [.prefix, .scope, .owner] | @tsv' "$realism_allowlist_path")"
+
+while IFS= read -r hit; do
+  [[ -z "$hit" ]] && continue
+  path="${hit%%:*}"
+  rest="${hit#*:}"
+  line="${rest%%:*}"
+  text="${rest#*:}"
+  term="$(printf "%s\n" "$text" | rg -oi '\b(mock|fake|stub)\b' | head -n1 | tr '[:upper:]' '[:lower:]' || true)"
+  if [[ -z "$term" ]]; then
+    term="unknown"
+  fi
+
+  scope="core"
+  owner_hint="unassigned"
+  while IFS=$'\t' read -r prefix scope_rule owner_rule; do
+    [[ -z "$prefix" ]] && continue
+    if [[ "$path" == "$prefix"* ]]; then
+      scope="$scope_rule"
+      owner_hint="$owner_rule"
+      break
+    fi
+  done <<<"$rule_rows"
+
+  severity="violation"
+  if [[ "$scope" == "boundary" ]]; then
+    severity="allowed"
+  fi
+
+  jq -nc \
+    --arg file "$path" \
+    --argjson line "$line" \
+    --arg term "$term" \
+    --arg scope "$scope" \
+    --arg severity "$severity" \
+    --arg owner_hint "$owner_hint" \
+    '{file:$file,line:$line,term:$term,scope:$scope,severity:$severity,owner_hint:$owner_hint}' \
+    >>"$tmp_double_events"
+done <<<"$(printf "%s\n" "$double_hits" | sed '/^$/d')"
+
+if [[ -s "$tmp_double_events" ]]; then
+  double_by_file_json="$(jq -s '.' "$tmp_double_events")"
+else
+  double_by_file_json="[]"
+fi
+printf "%s\n" "$double_by_file_json" >"$double_file_json"
+double_violation_count="$(jq '[.[] | select(.severity=="violation")] | length' <<<"$double_by_file_json")"
+
+double_by_package_json="$(
+  printf "%s\n" "$double_hits" \
+    | awk -F: '
+      NF {
+        path=$1
+        gsub(/^\.\//, "", path)
+        n=split(path, seg, "/")
+        if (n <= 1) {
+          pkg="."
+        } else {
+          pkg=seg[1]
+          for (i=2; i<n; i++) {
+            pkg=pkg "/" seg[i]
+          }
+        }
+        c[pkg]++
+      }
+      END {
+        for (k in c) {
+          printf "%s\t%s\n", k, c[k]
+        }
+      }
+    ' \
+    | sort -k2,2nr -k1,1 \
+    | jq -R -s -c '
+        split("\n")
+        | map(select(length>0))
+        | map(split("\t"))
+        | map({
+            package: .[0],
+            matches: (.[1] | tonumber),
+            owner: "unassigned"
+          })
+      '
+)"
+if [[ -z "$double_by_package_json" || "$double_by_package_json" == "null" ]]; then
+  double_by_package_json="[]"
+fi
+printf "%s\n" "$double_by_package_json" >"$double_json"
+
+e2e_files_json="$(find . -type f \
+  \( \
+    -path './internal/e2e/workflows/*_test.go' \
+    -o -path './cmd/caam/cmd/*e2e*_test.go' \
+    -o -name '*e2e*_test.go' \
+  \) \
+  | sort \
+  | sed 's#^\./##' \
+  | jq -R -s -c 'split("\n") | map(select(length>0))')"
+e2e_count="$(jq 'length' <<<"$e2e_files_json")"
+
+while IFS= read -r rel_file; do
+  [[ -z "$rel_file" ]] && continue
+  owner="unassigned"
+  if [[ "$rel_file" == internal/e2e/workflows/* ]]; then
+    owner="e2e-team"
+  elif [[ "$rel_file" == cmd/caam/cmd/* ]]; then
+    owner="cli-team"
+  fi
+  workflow="${rel_file##*/}"
+  workflow="${workflow%_test.go}"
+
+  tests_found=0
+  while IFS= read -r test_name; do
+    [[ -z "$test_name" ]] && continue
+    tests_found=1
+    jq -nc \
+      --arg file "$rel_file" \
+      --arg workflow "$workflow" \
+      --arg test_name "$test_name" \
+      --arg owner "$owner" \
+      '{file:$file,workflow:$workflow,scenario_id:$test_name,owner:$owner}' \
+      >>"$tmp_scenarios"
+  done < <(rg -n '^func Test[A-Za-z0-9_]+' "$rel_file" | awk '{print $2}' | cut -d'(' -f1)
+
+  if [[ "$tests_found" -eq 0 ]]; then
+    jq -nc \
+      --arg file "$rel_file" \
+      --arg workflow "$workflow" \
+      --arg owner "$owner" \
+      '{file:$file,workflow:$workflow,scenario_id:"UNDETECTED_TEST_NAME",owner:$owner}' \
+      >>"$tmp_scenarios"
+  fi
+done < <(jq -r '.[]' <<<"$e2e_files_json")
+
+if [[ -s "$tmp_scenarios" ]]; then
+  e2e_scenarios_json="$(jq -s '.' "$tmp_scenarios")"
+else
+  e2e_scenarios_json="[]"
+fi
+
+workflow_files_count="$(jq '[.[] | select(startswith("internal/e2e/workflows/"))] | length' <<<"$e2e_files_json")"
+workflow_covered_count="$(jq '[.[] | select(.file | startswith("internal/e2e/workflows/")) | .file] | unique | length' <<<"$e2e_scenarios_json")"
+cmd_e2e_files_count="$(jq '[.[] | select(startswith("cmd/caam/cmd/"))] | length' <<<"$e2e_files_json")"
+cmd_e2e_covered_count="$(jq '[.[] | select(.file | startswith("cmd/caam/cmd/")) | .file] | unique | length' <<<"$e2e_scenarios_json")"
+all_workflows_covered="false"
+all_cmd_e2e_covered="false"
+if [[ "$workflow_files_count" -gt 0 && "$workflow_files_count" -eq "$workflow_covered_count" ]]; then
+  all_workflows_covered="true"
+fi
+if [[ "$cmd_e2e_files_count" -gt 0 && "$cmd_e2e_files_count" -eq "$cmd_e2e_covered_count" ]]; then
+  all_cmd_e2e_covered="true"
+fi
+
+cat >"$e2e_json" <<EOF
+{
+  "scenario_files": $e2e_files_json,
+  "scenario_count": $e2e_count,
+  "scenario_catalog": $e2e_scenarios_json,
+  "completeness": {
+    "internal_workflow_files": $workflow_files_count,
+    "internal_workflow_files_with_scenarios": $workflow_covered_count,
+    "all_internal_workflow_files_covered": $all_workflows_covered,
+    "cmd_e2e_files": $cmd_e2e_files_count,
+    "cmd_e2e_files_with_scenarios": $cmd_e2e_covered_count,
+    "all_cmd_e2e_files_covered": $all_cmd_e2e_covered
+  }
+}
+EOF
+
+cat >"$summary_json" <<EOF
+{
+  "generated_at_utc": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "aggregate_total_coverage": $total_cov,
+  "baseline_total_coverage": $baseline_cov,
+  "coverage_delta_from_baseline": $coverage_delta,
+  "coverage_threshold": $threshold,
+  "below_threshold_packages": $below_threshold,
+  "mock_fake_stub_matches": $mock_count,
+  "mock_fake_stub_violations": $double_violation_count,
+  "realism_allowlist_path": "${realism_allowlist_path#$repo_root/}",
+  "baseline_reference_path": "${baseline_ref_path#$repo_root/}",
+  "baseline_snapshot_path": "artifacts/test-audit/baseline_snapshot.json",
+  "mock_fake_stub_by_package_path": "artifacts/test-audit/mock_fake_stub_by_package.json",
+  "mock_fake_stub_by_file_path": "artifacts/test-audit/mock_fake_stub_by_file.json",
+  "coverage_by_package_path": "artifacts/test-audit/coverage_by_package.json",
+  "coverage_by_package_with_risk_path": "artifacts/test-audit/coverage_by_package_with_risk.json",
+  "critical_path_below_floor_count": $critical_path_below_floor_count,
+  "critical_path_below_floor": $critical_path_below_floor,
+  "e2e_inventory_path": "artifacts/test-audit/e2e_inventory.json",
+  "snapshot_dir": "artifacts/test-audit/snapshots/$timestamp_utc"
+}
+EOF
+
+cat >"$baseline_snapshot_json" <<EOF
+{
+  "generated_at_utc": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "baseline_reference_path": "${baseline_ref_path#$repo_root/}",
+  "baseline_total_coverage": $baseline_cov,
+  "current_total_coverage": $total_cov,
+  "coverage_delta_from_baseline": $coverage_delta
+}
+EOF
+
+cat >"$coverage_md" <<EOF
+# Test Audit Report
+
+- Generated at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+- Aggregate total coverage: ${total_cov}%
+- Baseline total coverage: ${baseline_cov}%
+- Coverage delta vs baseline: ${coverage_delta}%
+- Coverage threshold: ${threshold}%
+- Mock/fake/stub matches in test files: ${mock_count}
+- Mock/fake/stub violations in core scope: ${double_violation_count}
+- E2E scenario file count: ${e2e_count}
+
+## Artifact Paths
+
+- JSON summary: \`artifacts/test-audit/test_audit.json\`
+- Baseline snapshot: \`artifacts/test-audit/baseline_snapshot.json\`
+- Baseline reference: \`${baseline_ref_path#$repo_root/}\`
+- Realism allowlist: \`${realism_allowlist_path#$repo_root/}\`
+- Package coverage: \`artifacts/test-audit/coverage_by_package.json\`
+- Package coverage with risk tiers: \`artifacts/test-audit/coverage_by_package_with_risk.json\`
+- Mock/fake/stub by package: \`artifacts/test-audit/mock_fake_stub_by_package.json\`
+- Mock/fake/stub by file: \`artifacts/test-audit/mock_fake_stub_by_file.json\`
+- E2E inventory: \`artifacts/test-audit/e2e_inventory.json\`
+
+## Packages Below Threshold (${threshold}%)
+
+EOF
+
+if [[ "$below_threshold" != "[]" ]]; then
+  jq -r '.[] | "- `\(.)`"' <<<"$below_threshold" >>"$coverage_md"
+else
+  echo "- None" >>"$coverage_md"
+fi
+
+cat >>"$coverage_md" <<EOF
+
+## Critical Path Packages Below Floor
+
+EOF
+if [[ "$critical_path_below_floor" != "[]" ]]; then
+  jq -r '.[] | "- `\(.package)` tier=`\(.risk_tier)` coverage=\(.coverage)% floor=\(.floor)% owner=`\(.owner)`"' <<<"$critical_path_below_floor" >>"$coverage_md"
+else
+  echo "- None" >>"$coverage_md"
+fi
+
+cat >>"$coverage_md" <<EOF
+
+## Mock/Fake/Stub Matches By Package
+
+EOF
+if [[ "$double_by_package_json" != "[]" ]]; then
+  jq -r '.[] | "- `\(.package)` (\(.matches)) owner=`\(.owner)`"' <<<"$double_by_package_json" >>"$coverage_md"
+else
+  echo "- None" >>"$coverage_md"
+fi
+
+cat >>"$coverage_md" <<EOF
+
+## Mock/Fake/Stub File-Level Classification
+
+EOF
+if [[ "$double_by_file_json" != "[]" ]]; then
+  jq -r '.[] | "- `\(.file):\(.line)` term=`\(.term)` scope=`\(.scope)` severity=`\(.severity)` owner=`\(.owner_hint)`"' <<<"$double_by_file_json" >>"$coverage_md"
+else
+  echo "- None" >>"$coverage_md"
+fi
+
+mkdir -p "$snapshot_dir"
+cp "$summary_json" "$snapshot_dir/test_audit.json"
+cp "$coverage_md" "$snapshot_dir/test_audit.md"
+cp "$coverage_json" "$snapshot_dir/coverage_by_package.json"
+cp "$coverage_risk_json" "$snapshot_dir/coverage_by_package_with_risk.json"
+cp "$double_json" "$snapshot_dir/mock_fake_stub_by_package.json"
+cp "$double_file_json" "$snapshot_dir/mock_fake_stub_by_file.json"
+cp "$e2e_json" "$snapshot_dir/e2e_inventory.json"
+cp "$baseline_snapshot_json" "$snapshot_dir/baseline_snapshot.json"
+
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  {
+    echo "## Test Audit Snapshot"
+    echo
+    echo "- Timestamp: \`$timestamp_utc\`"
+    echo "- Summary: \`artifacts/test-audit/test_audit.json\`"
+    echo "- Markdown: \`artifacts/test-audit/test_audit.md\`"
+    echo "- Snapshot dir: \`artifacts/test-audit/snapshots/$timestamp_utc\`"
+  } >>"$GITHUB_STEP_SUMMARY"
+fi
+
+echo "wrote $summary_json"
+echo "wrote $baseline_snapshot_json"
+echo "wrote $coverage_md"
+echo "wrote $coverage_json"
+echo "wrote $coverage_risk_json"
+echo "wrote $double_json"
+echo "wrote $double_file_json"
+echo "wrote $e2e_json"
+echo "wrote $snapshot_dir"

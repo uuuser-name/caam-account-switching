@@ -1,0 +1,10 @@
+{
+  "baseline_version": "2026-03-01",
+  "baseline_total_coverage": 55.1,
+  "latest_observed_at_utc": "2026-03-04T14:41:58Z",
+  "latest_observed_total_coverage": 64.2,
+  "latest_observed_delta_from_baseline": 9.1,
+  "latest_observed_source": "artifacts/test-audit/test_audit.json",
+  "notes": "Initial measured coverage baseline captured for bd-1r67 coverage program.",
+  "source": "artifacts/test-audit/test_audit.json"
+}

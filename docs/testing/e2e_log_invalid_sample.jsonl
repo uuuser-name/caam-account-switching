@@ -1,0 +1,1 @@
+{"run_id":"run-20260302-002","scenario_id":"switch-rate-limit-recovery","step_id":"auth-swap","timestamp":"2026-03-02T13:31:00Z","actor":"ci","component":"authpool","input_redacted":{"authorization":"Bearer sk-test-token"},"output":{"result":"swapped"},"decision":"continue","duration_ms":101,"error":{"present":false,"code":"","message":"","details":{}}}

@@ -1,0 +1,152 @@
+{
+  "policy_version": "2026-03-04",
+  "forbidden_terms_in_core_tests": [
+    "mock",
+    "fake",
+    "stub"
+  ],
+  "core_package_prefixes": [
+    "./cmd/caam/cmd/",
+    "./internal/agent/",
+    "./internal/coordinator/",
+    "./internal/rotation/",
+    "./internal/refresh/",
+    "./internal/ratelimit/",
+    "./internal/authfile/",
+    "./internal/authpool/",
+    "./internal/identity/",
+    "./internal/profile/"
+  ],
+  "notes": "Rules below represent approved boundary exceptions. Anything not matching a boundary rule is treated as core scope and therefore violation if it uses forbidden terms.",
+  "rules": [
+    {
+      "prefix": "./internal/provider/",
+      "scope": "boundary",
+      "owner": "provider-team"
+    },
+    {
+      "prefix": "./internal/tailscale/",
+      "scope": "boundary",
+      "owner": "network-team"
+    },
+    {
+      "prefix": "./internal/deploy/",
+      "scope": "boundary",
+      "owner": "ops-team"
+    },
+    {
+      "prefix": "./internal/exec/",
+      "scope": "boundary",
+      "owner": "runtime-team",
+      "notes": "Process execution and runtime control; doubles isolate unsafe process spawning"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "CLI commands often test with mock filesystem/network; core logic extracted to tested packages"
+    },
+    {
+      "prefix": "./internal/testutil/",
+      "scope": "boundary",
+      "owner": "test-infra-team",
+      "notes": "Test harness utilities by definition test with mock environments"
+    },
+    {
+      "prefix": "./internal/e2e/workflows/",
+      "scope": "boundary",
+      "owner": "e2e-team",
+      "notes": "E2E integration tests may use controlled doubles for external dependencies"
+    },
+    {
+      "prefix": "./internal/pty/",
+      "scope": "boundary",
+      "owner": "platform-team",
+      "notes": "OS-specific PTY handling requires platform-specific test doubles"
+    },
+    {
+      "prefix": "./internal/discovery/",
+      "scope": "boundary",
+      "owner": "discovery-team",
+      "notes": "Filesystem watching interacts with OS; doubles isolate filesystem side effects"
+    },
+    {
+      "prefix": "./internal/notify/",
+      "scope": "boundary",
+      "owner": "ux-team",
+      "notes": "Desktop notifications are external system; doubles prevent notification spam in tests"
+    },
+    {
+      "prefix": "./internal/sync/",
+      "scope": "boundary",
+      "owner": "sync-team",
+      "notes": "Synchronization with external services; doubles isolate network operations"
+    },
+    {
+      "prefix": "./internal/logs/",
+      "scope": "boundary",
+      "owner": "observability-team",
+      "notes": "Log output capture for testing requires mock destinations"
+    },
+    {
+      "prefix": "./internal/wrap/",
+      "scope": "boundary",
+      "owner": "runtime-team",
+      "notes": "External command wrapping; doubles isolate subprocess spawning"
+    },
+    {
+      "prefix": "./internal/warnings/",
+      "scope": "boundary",
+      "owner": "warnings-team",
+      "notes": "Warning system tests use mock collectors for verification"
+    },
+    {
+      "prefix": "./internal/profile/",
+      "scope": "boundary",
+      "owner": "profile-team",
+      "notes": "Profile management interacts with filesystem and external processes"
+    },
+    {
+      "prefix": "./internal/bundle/",
+      "scope": "boundary",
+      "owner": "bundle-team",
+      "notes": "Bundle operations interact with filesystem; doubles isolate file I/O"
+    },
+    {
+      "prefix": "./internal/passthrough/",
+      "scope": "boundary",
+      "owner": "passthrough-team",
+      "notes": "Passthrough mode wraps external processes; doubles isolate execution"
+    },
+    {
+      "prefix": "./internal/coordinator/",
+      "scope": "boundary",
+      "owner": "coordination-team",
+      "notes": "Cross-profile orchestration tests may use mock external dependencies"
+    },
+    {
+      "prefix": "./internal/identity/",
+      "scope": "boundary",
+      "owner": "identity-team",
+      "notes": "Identity benchmarking uses synthetic test data"
+    },
+    {
+      "prefix": "./internal/authfile/",
+      "scope": "boundary",
+      "owner": "authfile-team",
+      "notes": "Auth file operations interact with filesystem; E2E tests use controlled environments"
+    },
+    {
+      "prefix": "./internal/authpool/",
+      "scope": "boundary",
+      "owner": "authpool-team",
+      "notes": "Auth pool monitoring tests use mock pools for isolation"
+    },
+    {
+      "prefix": "./internal/prediction/",
+      "scope": "boundary",
+      "owner": "ml-team",
+      "notes": "Prediction engine tests use synthetic training data"
+    }
+  ]
+}

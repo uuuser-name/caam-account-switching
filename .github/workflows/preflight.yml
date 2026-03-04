@@ -1,0 +1,135 @@
+name: Preflight Gate
+
+# A3.1 CI preflight gate: runs audit and realism checks before expensive stages.
+# This job provides early failure for policy violations with minimal runtime overhead.
+# See: docs/testing/test_realism_taxonomy.md
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    name: Preflight Audit + Realism Check
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+
+    - name: Install ripgrep
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ripgrep
+
+    - name: Install jq
+      run: |
+        sudo apt-get install -y jq
+
+    - name: Verify test audit script exists
+      run: |
+        if [[ ! -x scripts/test_audit.sh ]]; then
+          echo "::error::scripts/test_audit.sh not found or not executable"
+          exit 1
+        fi
+
+    - name: Verify realism lint script exists
+      run: |
+        if [[ ! -x scripts/lint_test_realism.sh ]]; then
+          echo "::error::scripts/lint_test_realism.sh not found or not executable"
+          exit 1
+        fi
+
+    - name: Verify e2e quality gate script exists
+      run: |
+        if [[ ! -x scripts/ci_e2e_quality_gate.sh ]]; then
+          echo "::error::scripts/ci_e2e_quality_gate.sh not found or not executable"
+          exit 1
+        fi
+
+    - name: Run test audit
+      id: test_audit
+      run: |
+        echo "::group::Running test audit"
+        ./scripts/test_audit.sh 2>&1
+        echo "::endgroup::"
+        
+        # Parse summary for GitHub output
+        if [[ -f artifacts/test-audit/test_audit.json ]]; then
+          total_cov=$(jq -r '.aggregate_total_coverage' artifacts/test-audit/test_audit.json)
+          mock_violations=$(jq -r '.mock_fake_stub_violations' artifacts/test-audit/test_audit.json)
+          echo "total_coverage=${total_cov}" >> $GITHUB_OUTPUT
+          echo "mock_violations=${mock_violations}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run realism lint (strict mode)
+      id: realism_lint
+      run: |
+        echo "::group::Running test realism lint"
+        ./scripts/lint_test_realism.sh --strict
+        lint_exit=$?
+        echo "::endgroup::"
+        exit $lint_exit
+
+    - name: Run e2e quality gate
+      id: e2e_quality
+      run: |
+        echo "::group::Running e2e quality gate"
+        ./scripts/ci_e2e_quality_gate.sh
+        quality_exit=$?
+        echo "::endgroup::"
+        exit $quality_exit
+
+    - name: Preflight Summary
+      if: always()
+      run: |
+        echo "## Preflight Gate Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ -f artifacts/test-audit/test_audit.json ]]; then
+          echo "### Test Audit Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Aggregate Coverage**: \(.aggregate_total_coverage)%"' artifacts/test-audit/test_audit.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Mock/Fake/Stub Violations**: \(.mock_fake_stub_violations)"' artifacts/test-audit/test_audit.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Packages Below Threshold**: \(.below_threshold_packages | length)"' artifacts/test-audit/test_audit.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **E2E Scenario Files**: \(.e2e_inventory_path)"' artifacts/test-audit/test_audit.json >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Artifacts: \`artifacts/test-audit/\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Test audit artifact not generated" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [[ -f artifacts/test-audit/e2e_quality_gate.json ]]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### E2E Quality Gate Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Covered Scenarios**: \(.totals.covered)"' artifacts/test-audit/e2e_quality_gate.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Uncovered Scenarios**: \(.totals.uncovered)"' artifacts/test-audit/e2e_quality_gate.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Coverage Ratio**: \(.totals.coverage_pct)%"' artifacts/test-audit/e2e_quality_gate.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Gate Pass**: \(.pass)"' artifacts/test-audit/e2e_quality_gate.json >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Failure Criteria" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- Core-scope mock/fake/stub violations detected (strict realism lint fails)" >> $GITHUB_STEP_SUMMARY
+        echo "- Required scripts or configurations missing" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload preflight artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: preflight-audit
+        path: |
+          artifacts/test-audit/
+          artifacts/cli-matrix/scenario_traceability.json
+        retention-days: 7
+
+  # This job is a required status check that must pass before other CI jobs proceed.
+  # Add this job as a required status check in repository branch protection rules.

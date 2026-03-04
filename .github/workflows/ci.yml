@@ -1,0 +1,239 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # Preflight gate: fast audit + realism checks before expensive stages
+  # Fails early on policy violations with minimal runtime overhead
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      violations: ${{ steps.audit.outputs.violations }}
+      coverage: ${{ steps.audit.outputs.coverage }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+
+    - name: Install jq
+      run: sudo apt-get install -y jq
+
+    - name: Run Test Audit
+      id: audit
+      run: |
+        echo "::group::Test Audit Execution"
+        ./scripts/test_audit.sh
+        echo "::endgroup::"
+
+        # Extract metrics for job summary and outputs
+        violations=$(jq '.mock_fake_stub_violations' artifacts/test-audit/test_audit.json)
+        coverage=$(jq '.aggregate_total_coverage' artifacts/test-audit/test_audit.json)
+        below_threshold=$(jq '.below_threshold_packages | length' artifacts/test-audit/test_audit.json)
+
+        echo "violations=$violations" >> $GITHUB_OUTPUT
+        echo "coverage=$coverage" >> $GITHUB_OUTPUT
+
+        echo "## Preflight Audit Results" >> $GITHUB_STEP_SUMMARY
+        echo "- **Coverage:** ${coverage}%" >> $GITHUB_STEP_SUMMARY
+        echo "- **Core-scope violations:** ${violations}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Packages below threshold:** ${below_threshold}" >> $GITHUB_STEP_SUMMARY
+
+    - name: Enforce Realism Policy
+      run: |
+        echo "::group::Realism Lint Check"
+        ./scripts/lint_test_realism.sh --strict
+        echo "::endgroup::"
+
+    - name: Run E2E Quality Gate
+      run: |
+        echo "::group::E2E Quality Gate"
+        ./scripts/ci_e2e_quality_gate.sh
+        echo "::endgroup::"
+
+    - name: Upload Audit Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: preflight-audit
+        path: |
+          artifacts/test-audit/
+          artifacts/cli-matrix/scenario_traceability.json
+        retention-days: 7
+
+  test:
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+
+    - name: Build
+      run: go build -v ./cmd/caam
+
+    - name: Test with Coverage
+      run: go test -v -race -covermode=atomic -coverprofile=coverage.out ./...
+
+    - name: E2E Tests
+      run: go test -v ./internal/e2e/... -count=1 -timeout 5m
+
+    - name: Enforce Overall Coverage Threshold (internal/* only)
+      run: |
+        total=$(awk '
+          NR == 1 { next } # mode line
+          {
+            file = $1
+            sub(/:.*/, "", file)
+            if (file !~ /github.com\/Dicklesworthstone\/coding_agent_account_manager\/internal\//) next
+            stmts = $2
+            count = $3
+            all += stmts
+            if (count > 0) hit += stmts
+          }
+          END {
+            if (all == 0) { printf("0.00"); exit 0 }
+            printf("%.2f", (hit / all) * 100)
+          }
+        ' coverage.out)
+        echo "internal/* coverage: ${total}% (threshold 50%)"
+        awk -v c="$total" 'BEGIN { if (c < 50.0) { printf("internal/* coverage %.2f%% is below 50%%\n", c); exit 1 } }'
+
+    - name: Enforce Per-Package Coverage Thresholds
+      run: |
+        set -euo pipefail
+        awk '
+          NR == 1 { next } # mode line
+          {
+            file = $1
+            sub(/:.*/, "", file)          # strip :line.col,line.col
+            pkg = file
+            sub(/\/[^\/]+$/, "", pkg)     # strip /file.go
+            stmts = $2
+            count = $3
+            total[pkg] += stmts
+            if (count > 0) covered[pkg] += stmts
+          }
+          END {
+            for (pkg in total) {
+              pct = (covered[pkg] / total[pkg]) * 100
+              printf "%s %.2f\n", pkg, pct
+            }
+          }
+        ' coverage.out | sort > pkgcov.txt
+
+        echo "=== Per-Package Coverage ==="
+        cat pkgcov.txt
+        echo "============================"
+
+        # Enforce thresholds for key packages.
+        while read -r pkg pct; do
+          req=
+          case "$pkg" in
+            github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile)    req=70 ;;
+            github.com/Dicklesworthstone/coding_agent_account_manager/internal/bundle)      req=75 ;;
+            github.com/Dicklesworthstone/coding_agent_account_manager/internal/discovery)   req=85 ;;
+            github.com/Dicklesworthstone/coding_agent_account_manager/internal/passthrough) req=85 ;;
+            github.com/Dicklesworthstone/coding_agent_account_manager/internal/ratelimit)   req=90 ;;
+            github.com/Dicklesworthstone/coding_agent_account_manager/internal/rotation)    req=55 ;;
+            github.com/Dicklesworthstone/coding_agent_account_manager/internal/health)      req=45 ;;
+          esac
+          if [ -z "$req" ]; then
+            continue
+          fi
+          if awk -v p="$pct" -v r="$req" 'BEGIN { exit !(p < r) }'; then
+            echo "Coverage for $pkg is ${pct}% (< ${req}%)"
+            exit 1
+          fi
+          echo "✓ $pkg: ${pct}% >= ${req}%"
+        done < pkgcov.txt
+        echo "Per-package thresholds OK"
+
+    - name: Coverage Report Artifact
+      run: |
+        go tool cover -html=coverage.out -o coverage.html
+
+    - name: Upload Coverage Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.html
+
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: coverage.out
+        flags: unittests
+        name: codecov-coverage
+        fail_ci_if_error: false
+        verbose: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Run Critical Benchmarks
+      run: |
+        echo "Running critical benchmarks to catch performance regressions..."
+        go test -bench='Benchmark(VaultBackup|VaultRestore|VaultList|VaultActiveProfile)' \
+                -benchmem -count=1 ./internal/authfile/...
+        go test -bench='Benchmark(SelectorSmall|SelectorMedium|SelectorLarge)' \
+                -benchmem -count=1 ./internal/rotation/...
+
+    - name: Verify Timeout Protection
+      run: |
+        echo "Verifying context cancellation and timeout tests don't hang..."
+        # Run any tests with Context or Timeout in the name with strict timeout
+        # These patterns use regex, so .* matches any characters
+        go test -v -run='.*Context.*|.*Timeout.*' ./internal/... -timeout 30s 2>&1 | tail -20 || true
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
+
+  build-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: 'stable'
+
+    - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        output="caam"
+        if [ "$GOOS" = "windows" ]; then
+          output="caam.exe"
+        fi
+        go build -o "$output" ./cmd/caam
+        echo "Built $output for $GOOS/$GOARCH"

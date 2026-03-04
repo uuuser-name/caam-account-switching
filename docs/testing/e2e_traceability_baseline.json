@@ -1,0 +1,7 @@
+{
+  "baseline_version": "2026-03-04",
+  "required_scenarios": 227,
+  "covered_scenarios": 74,
+  "uncovered_scenarios": 153,
+  "notes": "Baseline captured at J3 closure (bd-1r67.13.3)."
+}

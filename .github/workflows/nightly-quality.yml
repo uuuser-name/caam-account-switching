@@ -1,0 +1,49 @@
+name: Nightly Quality Matrix
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: "stable"
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq ripgrep
+
+    - name: Run full test audit
+      run: ./scripts/test_audit.sh
+
+    - name: Run e2e quality gate
+      run: ./scripts/ci_e2e_quality_gate.sh
+
+    - name: Build quality trend diff
+      run: ./scripts/build_quality_trend_diff.sh
+
+    - name: Auto-create regression remediation bead
+      if: always()
+      run: |
+        ./scripts/auto_create_regression_bead.sh artifacts/test-audit/quality_trend_diff.json \
+          | tee artifacts/test-audit/regression_autocreate_result.json
+
+    - name: Upload nightly artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: nightly-quality-artifacts
+        path: |
+          artifacts/test-audit/
+          artifacts/cli-matrix/scenario_traceability.json
+        retention-days: 14

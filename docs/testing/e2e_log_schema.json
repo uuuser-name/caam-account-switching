@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:caam:e2e-log-schema:1.1.0",
+  "title": "CAAM Canonical E2E Log Event",
+  "schema_version": "1.1.0",
+  "compatibility": {
+    "minor_additive_only": true,
+    "major_breaking_requires_migration": true,
+    "policy_doc": "docs/testing/e2e_log_schema_policy.md"
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "scenario_id",
+    "step_id",
+    "timestamp",
+    "actor",
+    "component",
+    "input_redacted",
+    "output",
+    "decision",
+    "duration_ms",
+    "error"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Stable identifier for one full e2e execution run."
+    },
+    "scenario_id": {
+      "type": "string",
+      "description": "Stable scenario key in the workflow matrix."
+    },
+    "step_id": {
+      "type": "string",
+      "description": "Stable step key inside a scenario."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC3339 UTC timestamp for this log event."
+    },
+    "actor": {
+      "type": "string",
+      "description": "Human or automation actor producing the event."
+    },
+    "component": {
+      "type": "string",
+      "description": "Logical component or subsystem touched by this step."
+    },
+    "input_redacted": {
+      "type": "object",
+      "description": "Input summary with secrets/tokens removed."
+    },
+    "output": {
+      "type": "object",
+      "description": "Output summary (stdout/stderr snippets, state deltas, artifacts)."
+    },
+    "decision": {
+      "type": "string",
+      "description": "Action decision taken at this step (pass, retry, abort, continue)."
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Execution latency in milliseconds for this step."
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "present",
+        "code",
+        "message",
+        "details"
+      ],
+      "properties": {
+        "present": {
+          "type": "boolean",
+          "description": "Whether this event represents an error condition."
+        },
+        "code": {
+          "type": "string",
+          "description": "Machine-readable error code; empty when no error."
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error summary; empty when no error."
+        },
+        "details": {
+          "type": "object",
+          "description": "Structured error metadata for debugging."
+        }
+      }
+    }
+  }
+}
