@@ -42,6 +42,8 @@ Thumbs.db
 # Temporary files
 tmp/
 *.tmp
+*.bak
+*.bak.*
 
 # bv (beads viewer) local config and caches
 .bv/
