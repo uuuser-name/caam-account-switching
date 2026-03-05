@@ -24,6 +24,40 @@ caam activate claude bob@gmail.com      # Switch instantly
 
 ---
 
+## 🤖 Agent Quickstart (JSON)
+
+**Use `--json` in agent contexts.** stdout = data, stderr = diagnostics, exit 0 = success.
+
+```bash
+# List available profiles (machine-readable)
+caam list --json
+
+# Show current status for all tools
+caam status --json
+
+# Switch accounts
+caam activate claude alice@gmail.com --json
+```
+
+**Output conventions**
+- stdout: machine-readable JSON only
+- stderr: diagnostics/logging
+- exit code `0`: success
+
+`caam run` currently does not expose `--json`; use it for runtime failover behavior, and use `status/list/activate` for machine-readable control flow.
+
+---
+
+## 📚 Documentation Map
+
+- Core architecture and profile management: [`docs/SMART_PROFILE_MANAGEMENT.md`](docs/SMART_PROFILE_MANAGEMENT.md)
+- Distributed recovery and auth sync: [`docs/DISTRIBUTED_AUTH_RECOVERY.md`](docs/DISTRIBUTED_AUTH_RECOVERY.md)
+- Interface roadmap and feature planning: [`docs/AIM_UNIFIED_INTERFACE_PLAN.md`](docs/AIM_UNIFIED_INTERFACE_PLAN.md), [`docs/FEATURE_PLAN_2025Q1.md`](docs/FEATURE_PLAN_2025Q1.md)
+- Testing governance, e2e contracts, and traceability: [`docs/testing/`](docs/testing/)
+- Full docs index and authoring conventions: [`docs/README.md`](docs/README.md)
+
+---
+
 ## The Problem
 
 You're paying $200-275/month for fixed-cost AI coding subscriptions (Claude Max, GPT Pro, Gemini Ultra). These plans have usage limits—not billing caps, but rate limits that reset over time. When you hit them mid-flow, the official way to switch accounts:
