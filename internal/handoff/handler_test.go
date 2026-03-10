@@ -267,6 +267,7 @@ func TestCodexLoginHandler(t *testing.T) {
 			{"Invalid API key", true},
 			{"Authentication failed", true},
 			{"Rate limit exceeded", true},
+			{"■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:05 PM.", true},
 			{"Your access token could not be refreshed because your refresh token was already used.", true},
 			{"oauth error: refresh_token_reused", true},
 			{"Logged in", false},

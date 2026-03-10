@@ -86,3 +86,15 @@ func TestCodexSessionCapture_ProviderFilter(t *testing.T) {
 		t.Fatalf("unexpected session id: %q", got)
 	}
 }
+
+func TestCodexSessionCapture_PreservesOptionsAndQuotedPrompt(t *testing.T) {
+	c := &codexSessionCapture{}
+	line := `To continue this session, run codex resume --model gpt-5 33333333-3333-3333-3333-333333333333 "continue from here"`
+	c.ObserveLine(line)
+	if got := c.ID(); got != "33333333-3333-3333-3333-333333333333" {
+		t.Fatalf("unexpected session id: %q", got)
+	}
+	if got := c.Command(); got != `codex resume --model gpt-5 33333333-3333-3333-3333-333333333333 "continue from here"` {
+		t.Fatalf("unexpected resume command: %q", got)
+	}
+}

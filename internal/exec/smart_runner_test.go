@@ -546,11 +546,37 @@ func TestResumeArgsFromHint(t *testing.T) {
 		}
 	})
 
+	t.Run("preserves quoted prompt and options from hint", func(t *testing.T) {
+		hint := `To continue this session, run codex resume --model gpt-5 019b2e3d-b524-7c22-91da-47de9068d09a "continue from here"`
+		args, ok := resumeArgsFromHint("codex", hint, "")
+		if !ok {
+			t.Fatal("expected quoted hint to parse")
+		}
+		if len(args) != 5 {
+			t.Fatalf("unexpected arg count: %v", args)
+		}
+		if args[0] != "resume" || args[1] != "--model" || args[2] != "gpt-5" || args[3] != "019b2e3d-b524-7c22-91da-47de9068d09a" || args[4] != "continue from here" {
+			t.Fatalf("unexpected parsed args: %v", args)
+		}
+	})
+
 	t.Run("rejects non-codex hint without fallback", func(t *testing.T) {
 		if args, ok := resumeArgsFromHint("claude", "caam resume codex backup --session id", ""); ok || len(args) > 0 {
 			t.Fatalf("expected no args, got %v (ok=%v)", args, ok)
 		}
 	})
+}
+
+func TestResumeHasPrompt(t *testing.T) {
+	if resumeHasPrompt([]string{"resume", "session-1"}, "session-1") {
+		t.Fatal("expected bare resume command to require a continuation prompt")
+	}
+	if !resumeHasPrompt([]string{"resume", "session-1", "continue previous task"}, "session-1") {
+		t.Fatal("expected resume command with trailing payload to be treated as already prompted")
+	}
+	if !resumeHasPrompt([]string{"resume", "--model", "gpt-5", "session-1", "continue previous task"}, "session-1") {
+		t.Fatal("expected prompt detection to survive leading options")
+	}
 }
 
 func TestSeamlessResumeDepth(t *testing.T) {
@@ -638,6 +664,33 @@ func TestMaybeRunSeamlessResumeSkipsInterruptExit(t *testing.T) {
 	}
 	if resumed {
 		t.Fatal("expected seamless resume to be skipped for user-interrupt exit")
+	}
+}
+
+func TestMaybeRunSeamlessResumeAllowsExitZeroAfterHandoff(t *testing.T) {
+	registry := provider.NewRegistry()
+	sr := NewSmartRunner(NewRunner(registry), SmartRunnerOptions{})
+	sr.providerID = "codex"
+	sr.currentProfile = "backup"
+	sr.lastSessionID = "session-1"
+	sr.seamlessResumePending = true
+	sr.seamlessResumeHint = "codex resume session-1"
+	sr.seamlessResumeArmedAt = time.Now()
+	sr.seamlessResumeOutput = true
+
+	resumed, err := sr.maybeRunSeamlessResume(context.Background(), RunOptions{
+		Profile: &profile.Profile{
+			Name:     "active",
+			Provider: "codex",
+			BasePath: filepath.Join(t.TempDir(), "active"),
+		},
+	}, 0, nil)
+
+	if err != nil {
+		t.Fatalf("maybeRunSeamlessResume returned unexpected error: %v", err)
+	}
+	if resumed {
+		t.Fatal("expected exit-zero run with post-handoff output to skip seamless resume")
 	}
 }
 

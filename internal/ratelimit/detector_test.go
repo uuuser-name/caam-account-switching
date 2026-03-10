@@ -126,6 +126,14 @@ func TestDetector_Check(t *testing.T) {
 			want:     true,
 		},
 		{
+			name:     "codex usage limit exact message",
+			provider: ProviderCodex,
+			texts: []string{
+				"■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:05 PM.",
+			},
+			want: true,
+		},
+		{
 			name:     "codex refresh token reused",
 			provider: ProviderCodex,
 			texts: []string{

@@ -108,7 +108,9 @@ func (h *CodexLoginHandler) IsLoginFailed(output string) (bool, string) {
 		{"permission denied", "Permission denied"},
 		{"access denied", "Access denied"},
 		{"rate limit", "Rate limited"},
+		{"usage limit", "Rate limited"},
 		{"quota exceeded", "Quota exceeded"},
+		{"purchase more credits", "Rate limited"},
 		{"access token could not be refreshed", "Token refresh failed"},
 		{"refresh token was already used", "Refresh token already used"},
 		{"refresh_token_reused", "Refresh token already used"},
@@ -136,7 +138,7 @@ func (h *CodexLoginHandler) ExpectedPatterns() map[string]string {
 	return map[string]string{
 		"progress": `(?i)(please log ?in|api key:|waiting for|authenticate with openai)`,
 		"success":  `(?i)(logged in|api key saved|authentication complete)`,
-		"failure":  `(?i)(invalid api key|authentication failed|unauthorized|rate limit|refresh token was already used|refresh_token_reused|access token could not be refreshed|invalid_grant)`,
+		"failure":  `(?i)(invalid api key|authentication failed|unauthorized|rate limit|usage limit|purchase more credits|refresh token was already used|refresh_token_reused|access token could not be refreshed|invalid_grant)`,
 	}
 }
 

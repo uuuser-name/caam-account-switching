@@ -407,8 +407,12 @@ func runWrap(cmd *cobra.Command, args []string) error {
 		activeProfileName = nextProf.Name
 	}
 
-	// Handle signals - use cmd.Context() for proper context propagation
-	ctx, cancel := context.WithCancel(cmd.Context())
+	// Handle signals - default to Background when the command context is unset.
+	parentCtx := cmd.Context()
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
 	sigChan := make(chan os.Signal, 1)

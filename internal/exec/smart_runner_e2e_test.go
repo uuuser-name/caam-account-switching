@@ -84,8 +84,9 @@ func TestMockCLI_Handoff(t *testing.T) {
 		if count == 1 {
 			fmt.Println("Processing...")
 			time.Sleep(100 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+			fmt.Println("at 3:05 PM.")
 			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
-			fmt.Println("Error: rate limit exceeded")
 			os.Exit(1)
 			return
 		}
@@ -101,6 +102,258 @@ func TestMockCLI_Handoff(t *testing.T) {
 
 		fmt.Println("Resumed session OK")
 		return
+	}
+	if mode == "rate_limit_exit_then_resume_requires_prompt" {
+		counterFile := strings.TrimSpace(os.Getenv("MOCK_CLI_COUNTER_FILE"))
+		expectedSessionID := strings.TrimSpace(os.Getenv("MOCK_EXPECT_RESUME_ID"))
+		continuationFile := strings.TrimSpace(os.Getenv("MOCK_CONTINUATION_FILE"))
+		count := 0
+		if counterFile != "" {
+			if data, err := os.ReadFile(counterFile); err == nil {
+				if parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
+					count = parsed
+				}
+			}
+		}
+		count++
+		if counterFile != "" {
+			_ = os.WriteFile(counterFile, []byte(strconv.Itoa(count)), 0600)
+		}
+
+		if count == 1 {
+			fmt.Println("Processing...")
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+			fmt.Println("at 3:05 PM.")
+			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
+			os.Exit(1)
+			return
+		}
+
+		if expectedSessionID != "" {
+			joinedArgs := strings.Join(os.Args, " ")
+			if !strings.Contains(joinedArgs, "resume "+expectedSessionID) {
+				fmt.Printf("Missing expected resume args: %s\n", expectedSessionID)
+				os.Exit(1)
+				return
+			}
+		}
+
+		fmt.Println("Resumed session idle, awaiting continuation input")
+		lineCh := make(chan string, 1)
+		go func() {
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+			lineCh <- line
+		}()
+
+		select {
+		case line := <-lineCh:
+			trimmed := strings.TrimSpace(line)
+			if continuationFile != "" {
+				_ = os.WriteFile(continuationFile, []byte(trimmed), 0600)
+			}
+			lower := strings.ToLower(trimmed)
+			if !strings.Contains(lower, "continue exactly where you left off") {
+				fmt.Printf("Unexpected continuation prompt: %s\n", trimmed)
+				os.Exit(1)
+				return
+			}
+			fmt.Println("Resumed session continued")
+			return
+		case <-time.After(3 * time.Second):
+			fmt.Println("Resumed session idle awaiting user input")
+			os.Exit(1)
+			return
+		}
+	}
+	if mode == "rate_limit_exit_then_resume_requires_prompt_arg" {
+		counterFile := strings.TrimSpace(os.Getenv("MOCK_CLI_COUNTER_FILE"))
+		expectedSessionID := strings.TrimSpace(os.Getenv("MOCK_EXPECT_RESUME_ID"))
+		continuationFile := strings.TrimSpace(os.Getenv("MOCK_CONTINUATION_FILE"))
+		count := 0
+		if counterFile != "" {
+			if data, err := os.ReadFile(counterFile); err == nil {
+				if parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
+					count = parsed
+				}
+			}
+		}
+		count++
+		if counterFile != "" {
+			_ = os.WriteFile(counterFile, []byte(strconv.Itoa(count)), 0600)
+		}
+
+		if count == 1 {
+			fmt.Println("Processing...")
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+			fmt.Println("at 3:05 PM.")
+			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
+			os.Exit(1)
+			return
+		}
+
+		joinedArgs := strings.Join(os.Args, " ")
+		if expectedSessionID != "" && !strings.Contains(joinedArgs, "resume "+expectedSessionID) {
+			fmt.Printf("Missing expected resume args: %s\n", expectedSessionID)
+			os.Exit(1)
+			return
+		}
+		if strings.Contains(strings.ToLower(joinedArgs), "continue exactly where you left off") {
+			if continuationFile != "" {
+				_ = os.WriteFile(continuationFile, []byte(joinedArgs), 0600)
+			}
+			fmt.Println("Resumed session continued from argv prompt")
+			return
+		}
+		lineCh := make(chan string, 1)
+		go func() {
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+			lineCh <- line
+		}()
+		select {
+		case line := <-lineCh:
+			trimmed := strings.TrimSpace(line)
+			if continuationFile != "" {
+				_ = os.WriteFile(continuationFile, []byte(trimmed), 0600)
+			}
+			if !strings.Contains(strings.ToLower(trimmed), "continue exactly where you left off") {
+				fmt.Printf("Unexpected continuation prompt: %s\n", trimmed)
+				os.Exit(1)
+				return
+			}
+			fmt.Println("Resumed session continued from stdin prompt")
+			return
+		case <-time.After(3 * time.Second):
+			fmt.Println("Resumed session idle awaiting user input")
+			os.Exit(1)
+			return
+		}
+	}
+	if mode == "rate_limit_exit_with_stale_duplicate_then_resume_prompt_arg" {
+		counterFile := strings.TrimSpace(os.Getenv("MOCK_CLI_COUNTER_FILE"))
+		expectedSessionID := strings.TrimSpace(os.Getenv("MOCK_EXPECT_RESUME_ID"))
+		continuationFile := strings.TrimSpace(os.Getenv("MOCK_CONTINUATION_FILE"))
+		count := 0
+		if counterFile != "" {
+			if data, err := os.ReadFile(counterFile); err == nil {
+				if parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
+					count = parsed
+				}
+			}
+		}
+		count++
+		if counterFile != "" {
+			_ = os.WriteFile(counterFile, []byte(strconv.Itoa(count)), 0600)
+		}
+
+		if count == 1 {
+			fmt.Println("Processing...")
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+			fmt.Println("at 3:05 PM.")
+			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
+			time.Sleep(700 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+			os.Exit(1)
+			return
+		}
+
+		joinedArgs := strings.Join(os.Args, " ")
+		if expectedSessionID != "" && !strings.Contains(joinedArgs, "resume "+expectedSessionID) {
+			fmt.Printf("Missing expected resume args: %s\n", expectedSessionID)
+			os.Exit(1)
+			return
+		}
+		if strings.Contains(strings.ToLower(joinedArgs), "continue exactly where you left off") {
+			if continuationFile != "" {
+				_ = os.WriteFile(continuationFile, []byte(joinedArgs), 0600)
+			}
+			fmt.Println("Resumed session continued after stale duplicate output")
+			return
+		}
+		lineCh := make(chan string, 1)
+		go func() {
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+			lineCh <- line
+		}()
+		select {
+		case line := <-lineCh:
+			trimmed := strings.TrimSpace(line)
+			if continuationFile != "" {
+				_ = os.WriteFile(continuationFile, []byte(trimmed), 0600)
+			}
+			if !strings.Contains(strings.ToLower(trimmed), "continue exactly where you left off") {
+				fmt.Printf("Unexpected continuation prompt: %s\n", trimmed)
+				os.Exit(1)
+				return
+			}
+			fmt.Println("Resumed session continued after stale duplicate output")
+			return
+		case <-time.After(3 * time.Second):
+			fmt.Println("Resumed session idle awaiting user input")
+			os.Exit(1)
+			return
+		}
+	}
+	if mode == "rate_limit_exit_zero_then_resume_requires_prompt" {
+		counterFile := strings.TrimSpace(os.Getenv("MOCK_CLI_COUNTER_FILE"))
+		expectedSessionID := strings.TrimSpace(os.Getenv("MOCK_EXPECT_RESUME_ID"))
+		continuationFile := strings.TrimSpace(os.Getenv("MOCK_CONTINUATION_FILE"))
+		count := 0
+		if counterFile != "" {
+			if data, err := os.ReadFile(counterFile); err == nil {
+				if parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
+					count = parsed
+				}
+			}
+		}
+		count++
+		if counterFile != "" {
+			_ = os.WriteFile(counterFile, []byte(strconv.Itoa(count)), 0o600)
+		}
+		if count == 1 {
+			fmt.Println("Processing...")
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+			fmt.Println("at 3:05 PM.")
+			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
+			return
+		}
+		joinedArgs := strings.Join(os.Args, " ")
+		if expectedSessionID != "" && !strings.Contains(joinedArgs, "resume "+expectedSessionID) {
+			fmt.Printf("Missing expected resume args: %s\n", expectedSessionID)
+			os.Exit(1)
+			return
+		}
+		fmt.Println("Resumed session idle, awaiting continuation input")
+		lineCh := make(chan string, 1)
+		go func() {
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+			lineCh <- line
+		}()
+		select {
+		case line := <-lineCh:
+			trimmed := strings.TrimSpace(line)
+			if continuationFile != "" {
+				_ = os.WriteFile(continuationFile, []byte(trimmed), 0o600)
+			}
+			if !strings.Contains(strings.ToLower(trimmed), "continue exactly where you left off") {
+				fmt.Printf("Unexpected continuation prompt: %s\n", trimmed)
+				os.Exit(1)
+				return
+			}
+			fmt.Println("Resumed session continued after exit-zero rate limit")
+			return
+		case <-time.After(3 * time.Second):
+			fmt.Println("Resumed session idle awaiting user input")
+			os.Exit(1)
+			return
+		}
 	}
 	if mode == "codex_rate_limit_no_login_needed" {
 		fmt.Println("Processing...")
@@ -737,6 +990,280 @@ func TestSmartRunner_E2E_CodexRateLimitExitAutoResumesOnSwitchedProfile(t *testi
 		}
 	}
 	assert.True(t, foundSwitchNotice, "expected handoff notification before seamless resume")
+}
+
+func TestSmartRunner_E2E_CodexRateLimitExitAutoResumesAndContinuesOnSwitchedProfile(t *testing.T) {
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	rootDir := h.TempDir
+	vaultDir := filepath.Join(rootDir, "vault")
+	dbPath := filepath.Join(rootDir, "caam.db")
+	profilesDir := filepath.Join(rootDir, "profiles")
+	codexHome := filepath.Join(rootDir, ".codex")
+	counterFile := filepath.Join(rootDir, "resume_count.txt")
+	continuationFile := filepath.Join(rootDir, "continuation_prompt.txt")
+	sessionID := "019b2e3d-b524-7c22-91da-47de9068d09a"
+
+	h.SetEnv("HOME", rootDir)
+	h.SetEnv("CODEX_HOME", codexHome)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "active"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "backup"), 0755))
+	require.NoError(t, os.MkdirAll(codexHome, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "active", "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "backup", "auth.json"), []byte(`{"tokens":{"access_token":"token-b"}}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0600))
+
+	vault := authfile.NewVault(vaultDir)
+	db, err := caamdb.OpenAt(dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	originalExec := ExecCommand
+	defer func() { ExecCommand = originalExec }()
+	ExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=^TestMockCLI_Handoff$", "--"}
+		cs = append(cs, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cs...)
+		cmd.Env = append(os.Environ(),
+			"GO_WANT_MOCK_CLI=1",
+			"MOCK_CLI_MODE=rate_limit_exit_then_resume_requires_prompt",
+			"MOCK_CLI_COUNTER_FILE="+counterFile,
+			"MOCK_EXPECT_RESUME_ID="+sessionID,
+			"MOCK_CONTINUATION_FILE="+continuationFile,
+		)
+		return cmd
+	}
+
+	cfg := config.DefaultSPMConfig().Handoff
+	cfg.MaxRetries = 2
+	notifier := &MockNotifier{}
+	selector := rotation.NewSelector(rotation.AlgorithmRoundRobin, nil, db)
+	sr := NewSmartRunner(&Runner{}, SmartRunnerOptions{
+		HandoffConfig: &cfg,
+		Vault:         vault,
+		DB:            db,
+		Rotation:      selector,
+		Notifier:      notifier,
+	})
+
+	store := profile.NewStore(profilesDir)
+	prof, err := store.Create("codex", "active", "oauth")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	runErr := sr.Run(ctx, RunOptions{
+		Profile:  prof,
+		Provider: &MockProvider{id: "codex"},
+		Args:     []string{},
+		Env: map[string]string{
+			"GO_WANT_MOCK_CLI":       "1",
+			"MOCK_CLI_MODE":          "rate_limit_exit_then_resume_requires_prompt",
+			"MOCK_CLI_COUNTER_FILE":  counterFile,
+			"MOCK_EXPECT_RESUME_ID":  sessionID,
+			"MOCK_CONTINUATION_FILE": continuationFile,
+		},
+	})
+
+	require.NoError(t, runErr)
+	assert.Equal(t, "backup", sr.currentProfile, "runner should preserve switched profile after seamless resume")
+	assert.Equal(t, 1, sr.handoffCount, "runner should record one handoff before auto-resume")
+
+	countData, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "2", strings.TrimSpace(string(countData)), "mock command should run twice (initial + seamless resume)")
+
+	continuationData, promptErr := os.ReadFile(continuationFile)
+	require.NoError(t, promptErr)
+	continuationText := strings.ToLower(strings.TrimSpace(string(continuationData)))
+	assert.Contains(t, continuationText, "continue exactly where you left off", "expected SmartRunner to inject a continuation prompt after seamless resume")
+
+	activeProfile, activeErr := vault.ActiveProfile(authfile.CodexAuthFiles())
+	require.NoError(t, activeErr)
+	assert.Equal(t, "backup", activeProfile, "vault active profile should remain on backup after seamless resume")
+
+	foundSwitchNotice := false
+	for _, alert := range notifier.Alerts {
+		if strings.Contains(alert.Message, "Switched to backup") {
+			foundSwitchNotice = true
+			break
+		}
+	}
+	assert.True(t, foundSwitchNotice, "expected handoff notification before seamless resume")
+}
+
+func TestSmartRunner_E2E_CodexRateLimitExitIgnoresStaleRedispatchBeforeSeamlessResume(t *testing.T) {
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	rootDir := h.TempDir
+	vaultDir := filepath.Join(rootDir, "vault")
+	dbPath := filepath.Join(rootDir, "caam.db")
+	profilesDir := filepath.Join(rootDir, "profiles")
+	codexHome := filepath.Join(rootDir, ".codex")
+	counterFile := filepath.Join(rootDir, "resume_count.txt")
+	continuationFile := filepath.Join(rootDir, "continuation_prompt.txt")
+	sessionID := "019b2e3d-b524-7c22-91da-47de9068d09a"
+
+	h.SetEnv("HOME", rootDir)
+	h.SetEnv("CODEX_HOME", codexHome)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "active"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "backup"), 0755))
+	require.NoError(t, os.MkdirAll(codexHome, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "active", "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "backup", "auth.json"), []byte(`{"tokens":{"access_token":"token-b"}}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0600))
+
+	vault := authfile.NewVault(vaultDir)
+	db, err := caamdb.OpenAt(dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	originalExec := ExecCommand
+	defer func() { ExecCommand = originalExec }()
+	ExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=^TestMockCLI_Handoff$", "--"}
+		cs = append(cs, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cs...)
+		cmd.Env = append(os.Environ(),
+			"GO_WANT_MOCK_CLI=1",
+			"MOCK_CLI_MODE=rate_limit_exit_with_stale_duplicate_then_resume_prompt_arg",
+			"MOCK_CLI_COUNTER_FILE="+counterFile,
+			"MOCK_EXPECT_RESUME_ID="+sessionID,
+			"MOCK_CONTINUATION_FILE="+continuationFile,
+		)
+		return cmd
+	}
+
+	cfg := config.DefaultSPMConfig().Handoff
+	cfg.MaxRetries = 2
+	notifier := &MockNotifier{}
+	selector := rotation.NewSelector(rotation.AlgorithmRoundRobin, nil, db)
+	sr := NewSmartRunner(&Runner{}, SmartRunnerOptions{
+		HandoffConfig: &cfg,
+		Vault:         vault,
+		DB:            db,
+		Rotation:      selector,
+		Notifier:      notifier,
+	})
+
+	store := profile.NewStore(profilesDir)
+	prof, err := store.Create("codex", "active", "oauth")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	runErr := sr.Run(ctx, RunOptions{
+		Profile:  prof,
+		Provider: &MockProvider{id: "codex"},
+		Args:     []string{},
+		Env: map[string]string{
+			"GO_WANT_MOCK_CLI":       "1",
+			"MOCK_CLI_MODE":          "rate_limit_exit_with_stale_duplicate_then_resume_prompt_arg",
+			"MOCK_CLI_COUNTER_FILE":  counterFile,
+			"MOCK_EXPECT_RESUME_ID":  sessionID,
+			"MOCK_CONTINUATION_FILE": continuationFile,
+		},
+	})
+
+	require.NoError(t, runErr)
+	assert.Equal(t, "backup", sr.currentProfile, "runner should keep the switched profile instead of bouncing back after stale duplicate rate-limit output")
+
+	continuationData, promptErr := os.ReadFile(continuationFile)
+	require.NoError(t, promptErr)
+	continuationText := strings.ToLower(strings.TrimSpace(string(continuationData)))
+	assert.Contains(t, continuationText, "continue exactly where you left off")
+
+	activeProfile, activeErr := vault.ActiveProfile(authfile.CodexAuthFiles())
+	require.NoError(t, activeErr)
+	assert.Equal(t, "backup", activeProfile, "vault active profile should remain on backup after stale duplicate output")
+}
+
+func TestSmartRunner_E2E_CodexRateLimitExitZeroStillSeamlesslyResumes(t *testing.T) {
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	rootDir := h.TempDir
+	vaultDir := filepath.Join(rootDir, "vault")
+	dbPath := filepath.Join(rootDir, "caam.db")
+	profilesDir := filepath.Join(rootDir, "profiles")
+	codexHome := filepath.Join(rootDir, ".codex")
+	counterFile := filepath.Join(rootDir, "resume_count.txt")
+	continuationFile := filepath.Join(rootDir, "continuation_prompt.txt")
+	sessionID := "019b2e3d-b524-7c22-91da-47de9068d09a"
+
+	h.SetEnv("HOME", rootDir)
+	h.SetEnv("CODEX_HOME", codexHome)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "active"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "backup"), 0o755))
+	require.NoError(t, os.MkdirAll(codexHome, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "active", "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "backup", "auth.json"), []byte(`{"tokens":{"access_token":"token-b"}}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0o600))
+
+	vault := authfile.NewVault(vaultDir)
+	db, err := caamdb.OpenAt(dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	originalExec := ExecCommand
+	defer func() { ExecCommand = originalExec }()
+	ExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=^TestMockCLI_Handoff$", "--"}
+		cs = append(cs, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cs...)
+		cmd.Env = append(os.Environ(),
+			"GO_WANT_MOCK_CLI=1",
+			"MOCK_CLI_MODE=rate_limit_exit_zero_then_resume_requires_prompt",
+			"MOCK_CLI_COUNTER_FILE="+counterFile,
+			"MOCK_EXPECT_RESUME_ID="+sessionID,
+			"MOCK_CONTINUATION_FILE="+continuationFile,
+		)
+		return cmd
+	}
+
+	cfg := config.DefaultSPMConfig().Handoff
+	cfg.MaxRetries = 2
+	sr := NewSmartRunner(&Runner{}, SmartRunnerOptions{
+		HandoffConfig: &cfg,
+		Vault:         vault,
+		DB:            db,
+		Rotation:      rotation.NewSelector(rotation.AlgorithmRoundRobin, nil, db),
+		Notifier:      &MockNotifier{},
+	})
+
+	store := profile.NewStore(profilesDir)
+	prof, err := store.Create("codex", "active", "oauth")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	runErr := sr.Run(ctx, RunOptions{
+		Profile:  prof,
+		Provider: &MockProvider{id: "codex"},
+		Args:     []string{},
+		Env: map[string]string{
+			"GO_WANT_MOCK_CLI":       "1",
+			"MOCK_CLI_MODE":          "rate_limit_exit_zero_then_resume_requires_prompt",
+			"MOCK_CLI_COUNTER_FILE":  counterFile,
+			"MOCK_EXPECT_RESUME_ID":  sessionID,
+			"MOCK_CONTINUATION_FILE": continuationFile,
+		},
+	})
+
+	require.NoError(t, runErr)
+	countData, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, "2", strings.TrimSpace(string(countData)), "expected exit-zero rate limit path to still auto-resume")
+
+	continuationData, promptErr := os.ReadFile(continuationFile)
+	require.NoError(t, promptErr)
+	assert.Contains(t, strings.ToLower(strings.TrimSpace(string(continuationData))), "continue exactly where you left off")
+	assert.Equal(t, "backup", sr.currentProfile)
 }
 
 func TestSmartRunner_E2E_MultiProfileChainUntilHealthy(t *testing.T) {

@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,8 +48,76 @@ func TestHelperProcess_Run(t *testing.T) {
 			fmt.Println("Command success (failover)")
 			os.Exit(0)
 		}
+	case "codex_rate_limit_resume_continue":
+		counterFile := os.Getenv("MOCK_COUNTER_FILE")
+		authPath := os.Getenv("MOCK_AUTH_PATH")
+		expectedSessionID := os.Getenv("MOCK_EXPECT_RESUME_ID")
+		continuationFile := os.Getenv("MOCK_CONTINUATION_FILE")
+
+		count := 0
+		if counterFile != "" {
+			if data, err := os.ReadFile(counterFile); err == nil {
+				if parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
+					count = parsed
+				}
+			}
+		}
+		count++
+		if counterFile != "" {
+			_ = os.WriteFile(counterFile, []byte(strconv.Itoa(count)), 0600)
+		}
+
+		if count == 1 {
+			fmt.Println("Processing...")
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+			fmt.Println("at 3:05 PM.")
+			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
+			time.Sleep(700 * time.Millisecond)
+			os.Exit(1)
+			return
+		}
+
+		joinedArgs := strings.Join(os.Args, " ")
+		if expectedSessionID != "" && !strings.Contains(joinedArgs, "resume "+expectedSessionID) {
+			fmt.Printf("Missing expected resume args: %s\n", expectedSessionID)
+			os.Exit(1)
+			return
+		}
+		if authPath != "" {
+			content, _ := os.ReadFile(authPath)
+			if strings.TrimSpace(string(content)) != `{"token":"backup"}` {
+				fmt.Printf("Expected switched backup auth, got: %s\n", strings.TrimSpace(string(content)))
+				os.Exit(1)
+				return
+			}
+		}
+		fmt.Println("Resumed session idle, awaiting continuation input")
+		lineCh := make(chan string, 1)
+		go func() {
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+			lineCh <- line
+		}()
+		select {
+		case line := <-lineCh:
+			trimmed := strings.TrimSpace(line)
+			if continuationFile != "" {
+				_ = os.WriteFile(continuationFile, []byte(trimmed), 0600)
+			}
+			if !strings.Contains(strings.ToLower(trimmed), "continue exactly where you left off") {
+				fmt.Printf("Unexpected continuation prompt: %s\n", trimmed)
+				os.Exit(1)
+				return
+			}
+			fmt.Println("Resumed session continued on switched profile")
+			os.Exit(0)
+		case <-time.After(3 * time.Second):
+			fmt.Println("Resumed session idle awaiting user input")
+			os.Exit(1)
+		}
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown mode: %s\n", mode)
+		fmt.Fprintln(os.Stderr, "Unknown mode")
 		os.Exit(1)
 	}
 }
@@ -340,6 +411,163 @@ func TestProviderSwitchCandidateAndHardBlocked(t *testing.T) {
 			t.Fatal("expected openclaw alias to be excluded from switch candidates when exhausted")
 		}
 	})
+}
+
+func TestRunWrap_CodexRateLimitResumeContinuesOnSwitchedProfile(t *testing.T) {
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	rootDir := h.TempDir
+	vaultDir := filepath.Join(rootDir, "vault")
+	codexHome := filepath.Join(rootDir, ".codex")
+	profilesDir := filepath.Join(rootDir, "caam", "profiles")
+	binDir := filepath.Join(rootDir, "bin")
+	counterFile := filepath.Join(rootDir, "resume_count.txt")
+	continuationFile := filepath.Join(rootDir, "continuation_args.txt")
+	sessionID := "019b2e3d-b524-7c22-91da-47de9068d09a"
+	liveAuthPath := filepath.Join(codexHome, "auth.json")
+
+	h.SetEnv("HOME", rootDir)
+	h.SetEnv("XDG_DATA_HOME", rootDir)
+	h.SetEnv("XDG_CONFIG_HOME", rootDir)
+	h.SetEnv("CAAM_HOME", filepath.Join(rootDir, "caam"))
+	h.SetEnv("CODEX_HOME", codexHome)
+	h.SetEnv("MOCK_RUN_MODE", "codex_rate_limit_resume_continue")
+	h.SetEnv("MOCK_COUNTER_FILE", counterFile)
+	h.SetEnv("MOCK_AUTH_PATH", liveAuthPath)
+	h.SetEnv("MOCK_EXPECT_RESUME_ID", sessionID)
+	h.SetEnv("MOCK_CONTINUATION_FILE", continuationFile)
+	h.SetEnv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "active"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "backup"), 0755))
+	require.NoError(t, os.MkdirAll(codexHome, 0755))
+	require.NoError(t, os.MkdirAll(profilesDir, 0755))
+	require.NoError(t, os.MkdirAll(binDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "active", "auth.json"), []byte(`{"token":"active"}`), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "backup", "auth.json"), []byte(`{"token":"backup"}`), 0600))
+	require.NoError(t, os.WriteFile(liveAuthPath, []byte(`{"token":"active"}`), 0600))
+
+	codexScript := `#!/usr/bin/env python3
+import os
+import sys
+import time
+
+counter_file = os.getenv("MOCK_COUNTER_FILE", "").strip()
+auth_path = os.getenv("MOCK_AUTH_PATH", "").strip()
+expected_session = os.getenv("MOCK_EXPECT_RESUME_ID", "").strip()
+continuation_file = os.getenv("MOCK_CONTINUATION_FILE", "").strip()
+
+count = 0
+if counter_file:
+    try:
+        with open(counter_file, "r", encoding="utf-8") as fh:
+            count = int(fh.read().strip() or "0")
+    except FileNotFoundError:
+        count = 0
+count += 1
+if counter_file:
+    with open(counter_file, "w", encoding="utf-8") as fh:
+        fh.write(str(count))
+
+if count == 1:
+    print("Processing...", flush=True)
+    time.sleep(0.1)
+    print("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again", flush=True)
+    print("at 3:05 PM.", flush=True)
+    print(f"To continue this session, run codex resume {expected_session}", flush=True)
+    time.sleep(0.7)
+    sys.exit(1)
+
+joined_args = " ".join(sys.argv[1:])
+if expected_session and f"resume {expected_session}" not in joined_args:
+    print(f"Missing expected resume args: {expected_session}", flush=True)
+    sys.exit(1)
+if auth_path:
+    with open(auth_path, "r", encoding="utf-8") as fh:
+        auth_text = fh.read().strip()
+    if auth_text != '{"token":"backup"}':
+        print(f"Expected switched backup auth, got: {auth_text}", flush=True)
+        sys.exit(1)
+print("Resumed session idle, awaiting continuation input", flush=True)
+continuation = sys.stdin.readline().strip()
+if continuation_file:
+    with open(continuation_file, "w", encoding="utf-8") as fh:
+        fh.write(continuation)
+if "continue exactly where you left off" not in continuation.lower():
+    print(f"Unexpected continuation prompt: {continuation}", flush=True)
+    sys.exit(1)
+print("Resumed session continued on switched profile", flush=True)
+sys.exit(0)
+`
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "codex"), []byte(codexScript), 0755))
+
+	originalVault := vault
+	originalTools := make(map[string]func() authfile.AuthFileSet)
+	for k, v := range tools {
+		originalTools[k] = v
+	}
+	originalRegistry := registry
+	originalGetWd := getWd
+	originalProfileStore := profileStore
+	originalRunner := runner
+	defer func() {
+		vault = originalVault
+		tools = originalTools
+		registry = originalRegistry
+		getWd = originalGetWd
+		profileStore = originalProfileStore
+		runner = originalRunner
+		_ = runCmd.Flags().Set("quiet", "false")
+		_ = runCmd.Flags().Set("algorithm", "smart")
+		_ = runCmd.Flags().Set("cooldown", "1h")
+		_ = runCmd.Flags().Set("max-retries", "1")
+	}()
+
+	vault = authfile.NewVault(vaultDir)
+	tools["codex"] = func() authfile.AuthFileSet {
+		return authfile.AuthFileSet{
+			Tool: "codex",
+			Files: []authfile.AuthFileSpec{
+				{Tool: "codex", Path: liveAuthPath, Required: true},
+			},
+		}
+	}
+	registry = provider.NewRegistry()
+	registry.Register(&MockProvider{id: "codex"})
+	profileStore = profile.NewStore(profilesDir)
+	getWd = func() (string, error) { return rootDir, nil }
+	runner = nil
+
+	_, err := profileStore.Create("codex", "active", "oauth")
+	require.NoError(t, err)
+	_, err = profileStore.Create("codex", "backup", "oauth")
+	require.NoError(t, err)
+
+	require.NoError(t, runCmd.Flags().Set("quiet", "true"))
+	require.NoError(t, runCmd.Flags().Set("algorithm", "round_robin"))
+	require.NoError(t, runCmd.Flags().Set("cooldown", "30m"))
+	require.NoError(t, runCmd.Flags().Set("max-retries", "2"))
+
+	err = runWrap(runCmd, []string{"codex", "--model", "gpt-5.4", "continue working"})
+	require.NoError(t, err)
+
+	countData, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	require.Equal(t, "2", strings.TrimSpace(string(countData)), "expected one initial run plus one seamless resume")
+
+	continuationData, continuationErr := os.ReadFile(continuationFile)
+	require.NoError(t, continuationErr)
+	continuationText := strings.ToLower(strings.TrimSpace(string(continuationData)))
+	require.Contains(t, continuationText, "continue exactly where you left off", "expected seamless continuation prompt to be injected after resume")
+
+	activeProfile, activeErr := vault.ActiveProfile(tools["codex"]())
+	require.NoError(t, activeErr)
+	require.Equal(t, "backup", activeProfile, "expected switched backup profile to remain active after seamless resume")
+
+	authData, authErr := os.ReadFile(liveAuthPath)
+	require.NoError(t, authErr)
+	require.Equal(t, `{"token":"backup"}`, strings.TrimSpace(string(authData)), "expected live auth file to stay on backup profile")
 }
 
 func TestIsProfileLockedErr(t *testing.T) {

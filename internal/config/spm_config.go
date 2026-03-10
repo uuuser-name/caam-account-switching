@@ -16,20 +16,20 @@ import (
 // SPMConfig holds Smart Profile Management configuration.
 // This is stored in YAML format at ~/.caam/config.yaml
 type SPMConfig struct {
-	Version       int                        `yaml:"version"`
-	Health        HealthConfig               `yaml:"health"`
-	Analytics     AnalyticsConfig            `yaml:"analytics"`
-	Runtime       RuntimeConfig              `yaml:"runtime"`
-	Project       ProjectConfig              `yaml:"project"`
-	Stealth       StealthConfig              `yaml:"stealth"`
-	Safety        SafetyConfig               `yaml:"safety"`
-	Alerts        AlertConfig                `yaml:"alerts"`
-	Handoff       HandoffConfig              `yaml:"handoff"`
-	RateLimits    RateLimitPatternsConfig    `yaml:"rate_limits"`
-	LoginPatterns LoginPatternsConfig        `yaml:"login_patterns"`
+	Version       int                           `yaml:"version"`
+	Health        HealthConfig                  `yaml:"health"`
+	Analytics     AnalyticsConfig               `yaml:"analytics"`
+	Runtime       RuntimeConfig                 `yaml:"runtime"`
+	Project       ProjectConfig                 `yaml:"project"`
+	Stealth       StealthConfig                 `yaml:"stealth"`
+	Safety        SafetyConfig                  `yaml:"safety"`
+	Alerts        AlertConfig                   `yaml:"alerts"`
+	Handoff       HandoffConfig                 `yaml:"handoff"`
+	RateLimits    RateLimitPatternsConfig       `yaml:"rate_limits"`
+	LoginPatterns LoginPatternsConfig           `yaml:"login_patterns"`
 	Subscriptions map[string]SubscriptionConfig `yaml:"subscriptions,omitempty"`
-	Daemon        DaemonConfig               `yaml:"daemon"`
-	TUI           TUIConfig                  `yaml:"tui"`
+	Daemon        DaemonConfig                  `yaml:"daemon"`
+	TUI           TUIConfig                     `yaml:"tui"`
 }
 
 // TUIConfig holds TUI appearance and behavior preferences.
@@ -205,10 +205,10 @@ type DaemonConfig struct {
 
 // AuthPoolConfig holds auth pool settings.
 type AuthPoolConfig struct {
-	Enabled               bool     `yaml:"enabled"`
-	MaxConcurrentRefresh  int      `yaml:"max_concurrent_refresh"`
-	RefreshRetryDelay     Duration `yaml:"refresh_retry_delay"`
-	MaxRefreshRetries     int      `yaml:"max_refresh_retries"`
+	Enabled              bool     `yaml:"enabled"`
+	MaxConcurrentRefresh int      `yaml:"max_concurrent_refresh"`
+	RefreshRetryDelay    Duration `yaml:"refresh_retry_delay"`
+	MaxRefreshRetries    int      `yaml:"max_refresh_retries"`
 }
 
 // Duration is a time.Duration that supports YAML marshaling/unmarshaling
@@ -324,8 +324,8 @@ func DefaultSPMConfig() *SPMConfig {
 		},
 		Alerts: AlertConfig{
 			Enabled:           true,
-			WarningThreshold:  70,  // 70% usage triggers warning
-			CriticalThreshold: 85,  // 85% usage triggers critical
+			WarningThreshold:  70, // 70% usage triggers warning
+			CriticalThreshold: 85, // 85% usage triggers critical
 			Notifications: NotificationConfig{
 				Terminal: true,
 				Desktop:  true,
@@ -333,10 +333,10 @@ func DefaultSPMConfig() *SPMConfig {
 			},
 		},
 		Handoff: HandoffConfig{
-			AutoTrigger:      true,                       // Auto-trigger by default
-			DebounceDelay:    Duration(2 * time.Second),  // Wait 2s before triggering
-			MaxRetries:       1,                          // One retry per session
-			FallbackToManual: true,                       // Show manual instructions on failure
+			AutoTrigger:      true,                      // Auto-trigger by default
+			DebounceDelay:    Duration(2 * time.Second), // Wait 2s before triggering
+			MaxRetries:       1,                         // One retry per session
+			FallbackToManual: true,                      // Show manual instructions on failure
 		},
 		RateLimits: RateLimitPatternsConfig{
 			Claude: []string{
@@ -347,7 +347,9 @@ func DefaultSPMConfig() *SPMConfig {
 			},
 			Codex: []string{
 				"rate limit exceeded",
+				"usage limit",
 				"quota exceeded",
+				"purchase more credits",
 				"too many requests",
 			},
 			Gemini: []string{
@@ -738,7 +740,7 @@ func (c *SPMConfig) ApplyEnvOverrides() {
 			c.Daemon.Verbose = b
 		}
 	}
-	
+
 	// Health
 	if v := os.Getenv("CAAM_HEALTH_REFRESH_THRESHOLD"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {

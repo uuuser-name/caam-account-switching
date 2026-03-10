@@ -43,10 +43,13 @@ func DefaultPatterns() map[Provider][]string {
 		},
 		ProviderCodex: {
 			`(?i)rate.?limit`,
+			`(?i)usage.?limit`,
+			`(?i)you.?ve hit your usage.?limit`,
 			`(?i)quota.?exceeded`,
 			`(?i)insufficient.?credits`,
 			`(?i)out.?of.?credits`,
 			`(?i)no.?credits`,
+			`(?i)purchase more credits`,
 			`(?i)credits?.*(exhausted|depleted|used.?up)`,
 			`(?i)access token could not be refreshed`,
 			`(?i)refresh token (was )?already used`,

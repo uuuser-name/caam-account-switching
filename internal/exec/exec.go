@@ -63,6 +63,15 @@ type RunOptions struct {
 	// to use the global user environment. This is required for vault-based
 	// auth file swapping (caam run).
 	UseGlobalEnv bool
+
+	// PostStartCommand injects a command into a PTY-managed session shortly
+	// after startup. This is used for resumed interactive sessions that need
+	// one extra prompt to continue working after re-entry.
+	PostStartCommand string
+
+	// PostStartDelay waits before injecting PostStartCommand.
+	// If zero, the caller's default delay is used.
+	PostStartDelay time.Duration
 }
 
 // ExitCodeError wraps a process exit code.
