@@ -28,10 +28,21 @@ tmp_pkgs="$(mktemp)"
 tmp_pkg_cov="$(mktemp)"
 tmp_double_events="$(mktemp)"
 tmp_scenarios="$(mktemp)"
+go_test_failure_log="$artifact_dir/go_test_failures.log"
+suite_failed="false"
+first_failure_stage=""
+first_failure_package=""
 trap 'rm -f "$tmp_cov" "$tmp_pkgs" "$tmp_pkg_cov" "$tmp_double_events" "$tmp_scenarios"' EXIT
 
+: >"$go_test_failure_log"
+
 export GOFLAGS="${GOFLAGS:--buildvcs=false}"
-go test ./... -coverprofile="$tmp_cov" >/dev/null
+if ! aggregate_test_output="$(go test ./... -coverprofile="$tmp_cov" 2>&1)"; then
+  suite_failed="true"
+  first_failure_stage="aggregate"
+  printf '== aggregate go test ./... failure ==\n%s\n' "$aggregate_test_output" >"$go_test_failure_log"
+  echo "test audit: go test ./... failed while generating coverage profile; continuing to emit partial artifacts" >&2
+fi
 
 module_path="$(go list -m -f '{{.Path}}' 2>/dev/null || true)"
 
@@ -51,7 +62,21 @@ normalize_pkg_path() {
 go list ./... >"$tmp_pkgs"
 while IFS= read -r pkg; do
   # Single-package run makes per-package coverage explicit and scriptable.
-  line="$(go test -cover "$pkg" 2>/dev/null | awk '/coverage:/{print $0}' | tail -n1 || true)"
+  if ! pkg_test_output="$(go test -cover "$pkg" 2>&1)"; then
+    suite_failed="true"
+    if [[ -z "$first_failure_stage" ]]; then
+      first_failure_stage="per_package"
+      first_failure_package="$pkg"
+    fi
+    {
+      printf '== package %s failure ==\n' "$pkg"
+      printf '%s\n' "$pkg_test_output"
+    } >>"$go_test_failure_log"
+    echo "test audit: go test -cover failed for package: $pkg; recording 0.0% and continuing" >&2
+    printf '%s\t%s\n' "$pkg" "0.0" >>"$tmp_pkg_cov"
+    continue
+  fi
+  line="$(printf '%s\n' "$pkg_test_output" | awk '/coverage:/{print $0}' | tail -n1 || true)"
   pct="$(awk '{for(i=1;i<=NF;i++) if ($i ~ /[0-9]+\.[0-9]+%|[0-9]+%/) {gsub("%","",$i); print $i; exit}}' <<<"$line")"
   if [[ -z "$pct" ]]; then
     pct="0.0"
@@ -108,6 +133,7 @@ is_critical_path_package() {
     "./internal/rotation"|\
     "./internal/refresh"|\
     "./internal/ratelimit"|\
+    "./internal/exec"|\
     "./internal/authfile"|\
     "./internal/authpool"|\
     "./internal/identity"|\
@@ -165,9 +191,12 @@ else
   echo "[]" >"$coverage_risk_json"
 fi
 
-total_cov="$(go tool cover -func="$tmp_cov" | awk '/^total:/{gsub("%","",$3); print $3}')"
-if [[ -z "$total_cov" ]]; then
-  total_cov="0.0"
+total_cov="0.0"
+if [[ -s "$tmp_cov" && "$suite_failed" != "true" ]]; then
+  total_cov="$(go tool cover -func="$tmp_cov" | awk '/^total:/{gsub("%","",$3); print $3}')"
+  if [[ -z "$total_cov" ]]; then
+    total_cov="0.0"
+  fi
 fi
 
 baseline_cov="$(
@@ -378,6 +407,10 @@ cat >"$summary_json" <<EOF
   "critical_path_below_floor_count": $critical_path_below_floor_count,
   "critical_path_below_floor": $critical_path_below_floor,
   "e2e_inventory_path": "artifacts/test-audit/e2e_inventory.json",
+  "go_test_pass": $( [[ "$suite_failed" == "true" ]] && echo "false" || echo "true" ),
+  "first_failure_stage": $( if [[ -n "$first_failure_stage" ]]; then printf '"%s"' "$first_failure_stage"; else printf 'null'; fi ),
+  "first_failure_package": $( if [[ -n "$first_failure_package" ]]; then printf '"%s"' "$first_failure_package"; else printf 'null'; fi ),
+  "go_test_failure_log_path": "artifacts/test-audit/go_test_failures.log",
   "snapshot_dir": "artifacts/test-audit/snapshots/$timestamp_utc"
 }
 EOF
@@ -403,6 +436,7 @@ cat >"$coverage_md" <<EOF
 - Mock/fake/stub matches in test files: ${mock_count}
 - Mock/fake/stub violations in core scope: ${double_violation_count}
 - E2E scenario file count: ${e2e_count}
+- Go test pass: $([[ "$suite_failed" == "true" ]] && echo "false" || echo "true")
 
 ## Artifact Paths
 
@@ -468,6 +502,7 @@ cp "$double_json" "$snapshot_dir/mock_fake_stub_by_package.json"
 cp "$double_file_json" "$snapshot_dir/mock_fake_stub_by_file.json"
 cp "$e2e_json" "$snapshot_dir/e2e_inventory.json"
 cp "$baseline_snapshot_json" "$snapshot_dir/baseline_snapshot.json"
+cp "$go_test_failure_log" "$snapshot_dir/go_test_failures.log"
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   {
@@ -489,3 +524,8 @@ echo "wrote $double_json"
 echo "wrote $double_file_json"
 echo "wrote $e2e_json"
 echo "wrote $snapshot_dir"
+
+if [[ "$suite_failed" == "true" ]]; then
+  echo "test audit detected failing go test runs; partial artifacts emitted" >&2
+  exit 1
+fi

@@ -2,6 +2,8 @@ package testutil
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -698,5 +700,74 @@ func TestExtendedHarness_LastLogLines_LessThanN(t *testing.T) {
 
 	if len(lines) != 5 {
 		t.Errorf("lastLogLinesUnsafe(10) with 5 entries returned %d lines, want 5", len(lines))
+	}
+}
+
+func TestExtendedHarness_SetCanonicalOutputPathSupportsRelativePathAndDisable(t *testing.T) {
+	tmpDir := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+
+	h := NewExtendedHarness(t)
+
+	if err := h.SetCanonicalOutputPath("canonical.jsonl"); err != nil {
+		t.Fatalf("SetCanonicalOutputPath(relative): %v", err)
+	}
+	h.StartStep("first", "relative path should work")
+	h.EndStep("first")
+
+	if err := h.SetCanonicalOutputPath(""); err != nil {
+		t.Fatalf("SetCanonicalOutputPath(disable): %v", err)
+	}
+	h.StartStep("second", "disabled output should skip file writes")
+	h.EndStep("second")
+	h.Close()
+
+	data, err := os.ReadFile(filepath.Join(tmpDir, "canonical.jsonl"))
+	if err != nil {
+		t.Fatalf("ReadFile(canonical.jsonl): %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "first-start") {
+		t.Fatalf("expected first step in canonical file, got %q", content)
+	}
+	if strings.Contains(content, "second-start") {
+		t.Fatalf("expected disabled canonical output path to stop file writes, got %q", content)
+	}
+}
+
+func TestExtendedHarness_ValidateCanonicalLogsReadsOnDiskArtifact(t *testing.T) {
+	h := NewExtendedHarness(t)
+	defer h.Close()
+
+	logPath := filepath.Join(t.TempDir(), "canonical.jsonl")
+	if err := h.SetCanonicalOutputPath(logPath); err != nil {
+		t.Fatalf("SetCanonicalOutputPath: %v", err)
+	}
+	h.StartStep("first", "write canonical event")
+	h.EndStep("first")
+
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatalf("OpenFile(canonical.jsonl): %v", err)
+	}
+	_, err = f.WriteString("{not-json}\n")
+	if closeErr := f.Close(); closeErr != nil {
+		t.Fatalf("Close(canonical.jsonl): %v", closeErr)
+	}
+	if err != nil {
+		t.Fatalf("WriteString(canonical.jsonl): %v", err)
+	}
+
+	if err := h.ValidateCanonicalLogs(); err == nil {
+		t.Fatal("expected validation to fail for corrupted on-disk canonical artifact")
 	}
 }

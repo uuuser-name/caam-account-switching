@@ -13,20 +13,32 @@
 name: Notify ACFS of Installer Changes
 
 on:
+  workflow_dispatch:  # Manual trigger for testing (default for local-first repos)
+  release:
+    types: [published]
   push:
     branches: [main, master]
     paths:
       - 'install.sh'
-  workflow_dispatch:  # Manual trigger for testing
+      - 'scripts/install.sh'
 
 jobs:
   notify-acfs:
     runs-on: ubuntu-latest
+    env:
+      ACFS_REPO_DISPATCH_TOKEN: ${{ secrets.ACFS_REPO_DISPATCH_TOKEN }}
     steps:
+      - name: Skip if ACFS token is not configured
+        if: ${{ env.ACFS_REPO_DISPATCH_TOKEN == '' }}
+        run: |
+          echo "::warning::ACFS_REPO_DISPATCH_TOKEN is not configured; skipping ACFS dispatch."
+          echo "Configure the secret later when ACFS sync is enabled for this repo."
+
       - name: Trigger ACFS checksum update
+        if: ${{ env.ACFS_REPO_DISPATCH_TOKEN != '' }}
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.ACFS_REPO_DISPATCH_TOKEN }}
+          token: ${{ env.ACFS_REPO_DISPATCH_TOKEN }}
           repository: Dicklesworthstone/agentic_coding_flywheel_setup
           event-type: upstream-changed
           client-payload: |
@@ -35,12 +47,18 @@ jobs:
               "ref": "${{ github.ref }}",
               "sha": "${{ github.sha }}",
               "actor": "${{ github.actor }}",
-              "timestamp": "${{ github.event.head_commit.timestamp }}"
+              "timestamp": "${{ github.event.head_commit.timestamp || github.event.release.published_at || github.event.repository.updated_at }}"
             }
 
       - name: Log dispatch
+        if: ${{ env.ACFS_REPO_DISPATCH_TOKEN != '' }}
         run: |
           echo "✅ Dispatched upstream-changed event to ACFS"
           echo "   Tool: ${{ github.event.repository.name }}"
           echo "   SHA: ${{ github.sha }}"
           echo "   Triggered by: ${{ github.actor }}"
+
+      - name: Log skipped dispatch
+        if: ${{ env.ACFS_REPO_DISPATCH_TOKEN == '' }}
+        run: |
+          echo "ℹ️ Skipped ACFS dispatch because ACFS_REPO_DISPATCH_TOKEN is not configured"

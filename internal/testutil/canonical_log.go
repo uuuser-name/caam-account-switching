@@ -135,9 +135,13 @@ func NewCanonicalLogger(config CanonicalLoggerConfig) *CanonicalLogger {
 		runID:      runID,
 		scenarioID: config.ScenarioID,
 		actor:      actor,
-		outputPath: config.OutputPath,
 		events:     make([]CanonicalLogEvent, 0),
 		startTime:  time.Now(),
+	}
+	if strings.TrimSpace(config.OutputPath) != "" {
+		if err := l.SetOutputPath(config.OutputPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to initialize canonical log output: %v\n", err)
+		}
 	}
 
 	return l
@@ -165,18 +169,21 @@ func (l *CanonicalLogger) SetOutputPath(path string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Close existing file if open
-	if l.file != nil {
-		l.file.Close()
-		l.file = nil
+	if err := l.closeFileLocked(); err != nil {
+		return fmt.Errorf("close existing output file: %w", err)
 	}
 
 	l.outputPath = path
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
 
 	// Create directory if needed
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("create output directory: %w", err)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create output directory: %w", err)
+		}
 	}
 
 	// Open file for appending
@@ -186,6 +193,17 @@ func (l *CanonicalLogger) SetOutputPath(path string) error {
 	}
 	l.file = f
 
+	return nil
+}
+
+func (l *CanonicalLogger) closeFileLocked() error {
+	if l.file == nil {
+		return nil
+	}
+	if err := l.file.Close(); err != nil {
+		return err
+	}
+	l.file = nil
 	return nil
 }
 
@@ -283,14 +301,7 @@ func (l *CanonicalLogger) Events() []CanonicalLogEvent {
 func (l *CanonicalLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	if l.file != nil {
-		if err := l.file.Close(); err != nil {
-			return err
-		}
-		l.file = nil
-	}
-	return nil
+	return l.closeFileLocked()
 }
 
 // DumpJSONL returns all events as JSONL string.

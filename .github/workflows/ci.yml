@@ -20,7 +20,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: 'stable'
+        go-version: '1.24.4'
 
     - name: Install jq
       run: sudo apt-get install -y jq
@@ -58,6 +58,7 @@ jobs:
         echo "::endgroup::"
 
     - name: Upload Audit Artifacts
+      if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
         name: preflight-audit
@@ -75,7 +76,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: 'stable'
+        go-version: '1.24.4'
 
     - name: Build
       run: go build -v ./cmd/caam
@@ -201,7 +202,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: 'stable'
+        go-version: '1.24.4'
 
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v6
@@ -224,7 +225,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: 'stable'
+        go-version: '1.24.4'
 
     - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
       env:

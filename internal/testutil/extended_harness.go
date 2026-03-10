@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -40,20 +41,22 @@ type StepLog struct {
 type ExtendedHarness struct {
 	*TestHarness
 
-	mu              sync.Mutex
-	logBuffer       *bytes.Buffer
-	stepLogs        []*StepLog
-	stepStack       []*StepLog // For nested steps
-	metrics         map[string]time.Duration
-	startTime       time.Time
-	stepCount       int
-	errorCount      int
+	mu         sync.Mutex
+	logBuffer  *bytes.Buffer
+	stepLogs   []*StepLog
+	stepStack  []*StepLog // For nested steps
+	metrics    map[string]time.Duration
+	startTime  time.Time
+	stepCount  int
+	errorCount int
 
 	// Canonical log fields
-	runID           string           // Stable ID for this test run
-	scenarioID      string           // Scenario identifier (test name normalized)
-	canonicalBuffer *bytes.Buffer    // Buffer for canonical JSONL output
-	canonicalFile   *os.File         // Optional file for canonical log output
+	runID             string        // Stable ID for this test run
+	scenarioID        string        // Scenario identifier (test name normalized)
+	canonicalBuffer   *bytes.Buffer // Buffer for canonical JSONL output
+	canonicalFile     *os.File      // Optional file for canonical log output
+	canonicalPath     string        // Optional file path for canonical log output
+	canonicalWriteErr error         // First file-write failure observed for canonical output
 }
 
 // NewExtendedHarness creates a new extended harness wrapping TestHarness.
@@ -275,8 +278,19 @@ func (h *ExtendedHarness) writeCanonicalLogEvent(event *CanonicalLogEvent) {
 
 	// Also write to file if configured
 	if h.canonicalFile != nil {
-		h.canonicalFile.Write(jsonBytes)
-		h.canonicalFile.WriteString("\n")
+		if _, err := h.canonicalFile.Write(jsonBytes); err != nil {
+			if h.canonicalWriteErr == nil {
+				h.canonicalWriteErr = err
+			}
+			h.Log.Warn(fmt.Sprintf("Failed to write canonical log event: %v", err))
+			return
+		}
+		if _, err := h.canonicalFile.WriteString("\n"); err != nil {
+			if h.canonicalWriteErr == nil {
+				h.canonicalWriteErr = err
+			}
+			h.Log.Warn(fmt.Sprintf("Failed to terminate canonical log event: %v", err))
+		}
 	}
 }
 
@@ -292,22 +306,26 @@ func (h *ExtendedHarness) SetCanonicalOutputPath(path string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Close existing file if open
-	if h.canonicalFile != nil {
-		h.canonicalFile.Close()
-		h.canonicalFile = nil
+	if err := h.closeCanonicalFileLocked(); err != nil {
+		return fmt.Errorf("close existing canonical output file: %w", err)
+	}
+	h.canonicalPath = strings.TrimSpace(path)
+	h.canonicalWriteErr = nil
+
+	if h.canonicalPath == "" {
+		return nil
 	}
 
 	// Create directory if needed
-	dir := path[:strings.LastIndex(path, "/")]
-	if dir != "" {
+	dir := filepath.Dir(h.canonicalPath)
+	if dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("create output directory: %w", err)
 		}
 	}
 
 	// Open file for appending
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(h.canonicalPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return fmt.Errorf("open output file: %w", err)
 	}
@@ -316,12 +334,36 @@ func (h *ExtendedHarness) SetCanonicalOutputPath(path string) error {
 	return nil
 }
 
+func (h *ExtendedHarness) closeCanonicalFileLocked() error {
+	if h.canonicalFile == nil {
+		return nil
+	}
+	if err := h.canonicalFile.Close(); err != nil {
+		return err
+	}
+	h.canonicalFile = nil
+	return nil
+}
+
 // ValidateCanonicalLogs validates all canonical log events against the schema.
 func (h *ExtendedHarness) ValidateCanonicalLogs() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	lines := strings.Split(strings.TrimSpace(h.canonicalBuffer.String()), "\n")
+	if h.canonicalWriteErr != nil {
+		return fmt.Errorf("canonical file write failed: %w", h.canonicalWriteErr)
+	}
+
+	source := h.canonicalBuffer.String()
+	if h.canonicalPath != "" {
+		data, err := os.ReadFile(h.canonicalPath)
+		if err != nil {
+			return fmt.Errorf("read canonical log file: %w", err)
+		}
+		source = string(data)
+	}
+
+	lines := strings.Split(strings.TrimSpace(source), "\n")
 	for i, line := range lines {
 		if line == "" {
 			continue
@@ -627,9 +669,8 @@ func (h *ExtendedHarness) Close() {
 
 	// Close canonical output file if open.
 	h.mu.Lock()
-	if h.canonicalFile != nil {
-		_ = h.canonicalFile.Close()
-		h.canonicalFile = nil
+	if err := h.closeCanonicalFileLocked(); err != nil {
+		h.T.Logf("close canonical output file: %v", err)
 	}
 	h.mu.Unlock()
 
@@ -830,16 +871,16 @@ type BaselineMetrics struct {
 
 // PerformanceComparison represents the result of comparing against a baseline.
 type PerformanceComparison struct {
-	TestName      string                   `json:"test_name"`
-	BaselineDate  time.Time                `json:"baseline_date"`
-	CurrentTimeMs int64                    `json:"current_time_ms"`
-	BaselineMs    int64                    `json:"baseline_ms"`
-	DeltaMs       int64                    `json:"delta_ms"`
-	DeltaPercent  float64                  `json:"delta_percent"`
-	Regressions   []MetricRegression       `json:"regressions,omitempty"`
-	Improvements  []MetricRegression       `json:"improvements,omitempty"`
-	Threshold     float64                  `json:"threshold_percent"`
-	IsRegression  bool                     `json:"is_regression"`
+	TestName      string             `json:"test_name"`
+	BaselineDate  time.Time          `json:"baseline_date"`
+	CurrentTimeMs int64              `json:"current_time_ms"`
+	BaselineMs    int64              `json:"baseline_ms"`
+	DeltaMs       int64              `json:"delta_ms"`
+	DeltaPercent  float64            `json:"delta_percent"`
+	Regressions   []MetricRegression `json:"regressions,omitempty"`
+	Improvements  []MetricRegression `json:"improvements,omitempty"`
+	Threshold     float64            `json:"threshold_percent"`
+	IsRegression  bool               `json:"is_regression"`
 }
 
 // MetricRegression represents a single metric that regressed or improved.

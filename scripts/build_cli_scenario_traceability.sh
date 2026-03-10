@@ -7,25 +7,45 @@ INVENTORY_JSON="${2:-$ROOT_DIR/artifacts/test-audit/e2e_inventory.json}"
 OUT_JSON="${3:-$ROOT_DIR/artifacts/cli-matrix/scenario_traceability.json}"
 OUT_MD="${4:-$ROOT_DIR/docs/testing/cli_scenario_traceability.md}"
 BINDINGS_JSON="${5:-$ROOT_DIR/artifacts/cli-matrix/scenario_test_bindings.json}"
+bindings_src="$BINDINGS_JSON"
+bindings_mode="explicit"
+tmp_bindings=""
+
+cleanup() {
+  if [[ -n "$tmp_bindings" && -f "$tmp_bindings" ]]; then
+    rm -f "$tmp_bindings"
+  fi
+}
+trap cleanup EXIT
 
 mkdir -p "$(dirname "$OUT_JSON")" "$(dirname "$OUT_MD")"
 
-# Build lookup from explicit bindings file (if exists)
-BINDINGS_ARG=""
-if [[ -f "$BINDINGS_JSON" ]]; then
-  BINDINGS_ARG="--slurpfile b $BINDINGS_JSON"
+if [[ ! -f "$MATRIX_JSON" ]]; then
+  echo "missing CLI workflow matrix artifact: $MATRIX_JSON" >&2
+  echo "provide MATRIX_JSON explicitly or generate artifacts/cli-matrix/cli_workflow_matrix.json first" >&2
+  exit 2
+fi
+
+if [[ ! -f "$INVENTORY_JSON" ]]; then
+  echo "missing e2e inventory artifact: $INVENTORY_JSON" >&2
+  echo "run ./scripts/test_audit.sh before generating scenario traceability" >&2
+  exit 2
+fi
+
+if [[ ! -f "$BINDINGS_JSON" ]]; then
+  tmp_bindings="$(mktemp)"
+  printf '{"bindings":[]}\n' >"$tmp_bindings"
+  bindings_src="$tmp_bindings"
+  bindings_mode="fallback_empty"
 fi
 
 # First pass: use explicit bindings if available, fall back to heuristic matching
-jq -n --slurpfile m "$MATRIX_JSON" --slurpfile i "$INVENTORY_JSON" $BINDINGS_ARG '
+jq -n --slurpfile m "$MATRIX_JSON" --slurpfile i "$INVENTORY_JSON" --slurpfile b "$bindings_src" '
   def norm: ascii_downcase | gsub("[^a-z0-9]+"; "");
   
-  # Build explicit binding lookup if available
   def binding_lookup:
-    if $b then
-      [$b[0].bindings[] | {key: (.family + ":" + .scenario_type + ":" + .required_scenario), value: .}]
-      | from_entries
-    else {} end;
+    [($b[0].bindings // [])[] | {key: (.family + ":" + .scenario_type + ":" + .required_scenario), value: .}]
+    | from_entries;
   
   def matches_explicit($fam; $stype; $sid; $lookup):
     ($lookup[$fam + ":" + $stype + ":" + $sid] // null) as $binding
@@ -66,7 +86,8 @@ jq -n --slurpfile m "$MATRIX_JSON" --slurpfile i "$INVENTORY_JSON" $BINDINGS_ARG
   | {
       generated_at: (now | todateiso8601),
       source_bead: "bd-1r67.3.3.3",
-      bindings_file: (if $b then $BINDINGS_JSON else "not_provided" end),
+      bindings_file: $BINDINGS_JSON,
+      bindings_mode: $BINDINGS_MODE,
       totals: {
         required_scenarios: ($rows|length),
         covered: ([ $rows[] | select(.coverage_status=="covered") ] | length),
@@ -76,7 +97,7 @@ jq -n --slurpfile m "$MATRIX_JSON" --slurpfile i "$INVENTORY_JSON" $BINDINGS_ARG
       },
       rows: $rows
     }
-' --arg BINDINGS_JSON "$BINDINGS_JSON" > "$OUT_JSON"
+' --arg BINDINGS_JSON "$BINDINGS_JSON" --arg BINDINGS_MODE "$bindings_mode" > "$OUT_JSON"
 
 covered="$(jq -r '.totals.covered' "$OUT_JSON")"
 uncovered="$(jq -r '.totals.uncovered' "$OUT_JSON")"
