@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/sync"
+	"github.com/spf13/cobra"
 )
 
 // Test helper functions that are exported
@@ -216,5 +218,79 @@ func TestRemoteVaultPath(t *testing.T) {
 	custom := &sync.Machine{RemotePath: "/data/caam"}
 	if got := remoteVaultPath(custom); got != "/data/caam/vault" {
 		t.Fatalf("remoteVaultPath(custom) = %q, want %q", got, "/data/caam/vault")
+	}
+}
+
+func TestParseEditorCommandSupportsArguments(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+
+	editorPath, editorArgs, err := parseEditorCommand(exe + " --wait")
+	if err != nil {
+		t.Fatalf("parseEditorCommand: %v", err)
+	}
+	if editorPath != exe {
+		t.Fatalf("editorPath = %q, want %q", editorPath, exe)
+	}
+	if len(editorArgs) != 1 || editorArgs[0] != "--wait" {
+		t.Fatalf("editorArgs = %#v, want [--wait]", editorArgs)
+	}
+}
+
+func TestResolveEditorCommandPrefersEditorEnv(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+
+	t.Setenv("EDITOR", exe+" --flag")
+	t.Setenv("VISUAL", "")
+
+	editorPath, editorArgs, err := resolveEditorCommand()
+	if err != nil {
+		t.Fatalf("resolveEditorCommand: %v", err)
+	}
+	if editorPath != exe {
+		t.Fatalf("editorPath = %q, want %q", editorPath, exe)
+	}
+	if len(editorArgs) != 1 || editorArgs[0] != "--flag" {
+		t.Fatalf("editorArgs = %#v, want [--flag]", editorArgs)
+	}
+}
+
+func TestSanitizeTerminalTextStripsEscapeAndControlSequences(t *testing.T) {
+	raw := "work-\x1b[31mlaptop\x1b[0m\x1b]52;c;ZGF0YQ==\a\n\t\u202E"
+	if got := sanitizeTerminalText(raw); got != "work-laptop" {
+		t.Fatalf("sanitizeTerminalText() = %q, want %q", got, "work-laptop")
+	}
+}
+
+func TestRunSyncDryRunSanitizesMachineDisplay(t *testing.T) {
+	setupSyncHome(t)
+	loadAndSaveState(t, func(state *sync.SyncState) {
+		m := sync.NewMachine("work-\x1b[31mlaptop\x1b[0m", "10.0.0.2\x1b]52;c;ZGF0YQ==\a\n")
+		if err := state.Pool.AddMachine(m); err != nil {
+			t.Fatalf("add machine: %v", err)
+		}
+	})
+
+	var out bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&out)
+	cmd.Flags().Bool("dry-run", true, "")
+	cmd.Flags().String("machine", "", "")
+
+	if err := runSync(cmd, nil); err != nil {
+		t.Fatalf("runSync failed: %v", err)
+	}
+
+	got := out.String()
+	if strings.Contains(got, "\x1b") || strings.Contains(got, "\a") {
+		t.Fatalf("unexpected terminal escape sequence in output: %q", got)
+	}
+	if !strings.Contains(got, "work-laptop (10.0.0.2)") {
+		t.Fatalf("expected sanitized machine output, got: %q", got)
 	}
 }

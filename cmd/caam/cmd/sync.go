@@ -9,11 +9,18 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/sync"
 	"github.com/spf13/cobra"
+)
+
+var (
+	syncANSIEscapeRe  = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	syncOSCSequenceRe = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 )
 
 // syncCmd is the parent command for sync operations.
@@ -256,6 +263,22 @@ func loadSyncState() (*sync.SyncState, error) {
 	return state, nil
 }
 
+func sanitizeTerminalText(value string) string {
+	cleaned := syncOSCSequenceRe.ReplaceAllString(value, "")
+	cleaned = syncANSIEscapeRe.ReplaceAllString(cleaned, "")
+	cleaned = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.In(r, unicode.Cf):
+			return -1
+		case unicode.IsControl(r):
+			return ' '
+		default:
+			return r
+		}
+	}, cleaned)
+	return strings.Join(strings.Fields(cleaned), " ")
+}
+
 // runSync performs a sync with all or specific machines.
 func runSync(cmd *cobra.Command, args []string) error {
 	state, err := loadSyncState()
@@ -291,7 +314,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if dryRun {
 		fmt.Fprintln(cmd.OutOrStdout(), "Dry run - would sync with:")
 		for _, m := range machines {
-			fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s)\n", m.Name, m.Address)
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s)\n", sanitizeTerminalText(m.Name), sanitizeTerminalText(m.Address))
 		}
 		return nil
 	}
@@ -310,11 +333,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	var allResults []*sync.SyncResult
 	for _, m := range machines {
-		fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s):\n", m.Name, m.Address)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s (%s):\n", sanitizeTerminalText(m.Name), sanitizeTerminalText(m.Address))
 
 		results, err := syncer.SyncWithMachine(ctx, m)
 		if err != nil {
-			fmt.Fprintf(cmd.OutOrStdout(), "    ✗ Error: %v\n\n", err)
+			fmt.Fprintf(cmd.OutOrStdout(), "    ✗ Error: %s\n\n", sanitizeTerminalText(err.Error()))
 			continue
 		}
 
@@ -326,17 +349,22 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 		for _, r := range results {
 			profile := fmt.Sprintf("%s/%s", r.Operation.Provider, r.Operation.Profile)
+			safeProfile := sanitizeTerminalText(profile)
 			if r.Success {
 				switch r.Operation.Direction {
 				case sync.SyncPush:
-					fmt.Fprintf(cmd.OutOrStdout(), "    ✓ %s: pushed (local fresher)\n", profile)
+					fmt.Fprintf(cmd.OutOrStdout(), "    ✓ %s: pushed (local fresher)\n", safeProfile)
 				case sync.SyncPull:
-					fmt.Fprintf(cmd.OutOrStdout(), "    ✓ %s: pulled (remote fresher)\n", profile)
+					fmt.Fprintf(cmd.OutOrStdout(), "    ✓ %s: pulled (remote fresher)\n", safeProfile)
 				case sync.SyncSkip:
-					fmt.Fprintf(cmd.OutOrStdout(), "    ✓ %s: up to date\n", profile)
+					fmt.Fprintf(cmd.OutOrStdout(), "    ✓ %s: up to date\n", safeProfile)
 				}
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "    ✗ %s: %v\n", profile, r.Error)
+				errText := "unknown error"
+				if r.Error != nil {
+					errText = sanitizeTerminalText(r.Error.Error())
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "    ✗ %s: %s\n", safeProfile, errText)
 			}
 		}
 		fmt.Fprintln(cmd.OutOrStdout())
@@ -565,14 +593,14 @@ func runSyncTest(cmd *cobra.Command, args []string) error {
 
 	if len(machines) == 1 {
 		m := machines[0]
-		fmt.Fprintf(cmd.OutOrStdout(), "Testing connection to %s (%s)...\n", m.Name, m.Address)
+		fmt.Fprintf(cmd.OutOrStdout(), "Testing connection to %s (%s)...\n", sanitizeTerminalText(m.Name), sanitizeTerminalText(m.Address))
 		testSyncMachine(cmd.OutOrStdout(), pool, m)
 	} else {
 		fmt.Fprintln(cmd.OutOrStdout(), "Testing all machines...")
 		fmt.Fprintln(cmd.OutOrStdout())
 		passed := 0
 		for _, m := range machines {
-			fmt.Fprintf(cmd.OutOrStdout(), "%s (%s):\n", m.Name, m.Address)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s (%s):\n", sanitizeTerminalText(m.Name), sanitizeTerminalText(m.Address))
 			if testSyncMachine(cmd.OutOrStdout(), pool, m) {
 				passed++
 			}
@@ -587,7 +615,7 @@ func runSyncTest(cmd *cobra.Command, args []string) error {
 func testSyncMachine(out io.Writer, pool *sync.ConnectionPool, m *sync.Machine) bool {
 	client, err := pool.Get(m)
 	if err != nil {
-		fmt.Fprintf(out, "  SSH connection: ✗ %v\n", err)
+		fmt.Fprintf(out, "  SSH connection: ✗ %s\n", sanitizeTerminalText(err.Error()))
 		return false
 	}
 
@@ -596,7 +624,7 @@ func testSyncMachine(out io.Writer, pool *sync.ConnectionPool, m *sync.Machine) 
 	exists, err := client.FileExists(vaultPath)
 	if err != nil {
 		fmt.Fprintf(out, "  SSH connection: ✓ connected\n")
-		fmt.Fprintf(out, "  CAAM vault: ⚠️  could not check (%v)\n", err)
+		fmt.Fprintf(out, "  CAAM vault: ⚠️  could not check (%s)\n", sanitizeTerminalText(err.Error()))
 		return true
 	}
 	if exists {
@@ -717,14 +745,14 @@ func runSyncLog(cmd *cobra.Command, args []string) error {
 	for _, e := range filtered {
 		status := "✓"
 		if !e.Success {
-			status = "✗ " + e.Error
+			status = "✗ " + sanitizeTerminalText(e.Error)
 		}
-		profile := fmt.Sprintf("%s/%s", e.Provider, e.Profile)
+		profile := sanitizeTerminalText(fmt.Sprintf("%s/%s", e.Provider, e.Profile))
 		fmt.Fprintf(cmd.OutOrStdout(), "%-20s %-15s %-25s %-8s %s\n",
 			e.Timestamp.Format("2006-01-02 15:04:05"),
-			e.Machine,
+			sanitizeTerminalText(e.Machine),
 			profile,
-			e.Action,
+			sanitizeTerminalText(e.Action),
 			status,
 		)
 	}
@@ -771,7 +799,12 @@ func runSyncDiscover(cmd *cobra.Command, args []string) error {
 			keyPath = "(default)"
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "  %-15s %-20s %-25s %s\n", m.Name, m.Address, keyPath, status)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %-15s %-20s %-25s %s\n",
+			sanitizeTerminalText(m.Name),
+			sanitizeTerminalText(m.Address),
+			sanitizeTerminalText(keyPath),
+			sanitizeTerminalText(status),
+		)
 
 		if addToPool && existing == nil {
 			if err := state.Pool.AddMachine(m); err == nil {
@@ -829,12 +862,12 @@ func runSyncQueue(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "  %-25s %-15s %-10s %s\n", "PROFILE", "MACHINE", "ATTEMPTS", "LAST ERROR")
 
 	for _, e := range state.Queue.Entries {
-		profile := fmt.Sprintf("%s/%s", e.Provider, e.Profile)
-		lastError := e.LastError
+		profile := sanitizeTerminalText(fmt.Sprintf("%s/%s", e.Provider, e.Profile))
+		lastError := sanitizeTerminalText(e.LastError)
 		if len(lastError) > 30 {
 			lastError = lastError[:27] + "..."
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "  %-25s %-15s %-10d %s\n", profile, e.Machine, e.Attempts, lastError)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %-25s %-15s %-10d %s\n", profile, sanitizeTerminalText(e.Machine), e.Attempts, lastError)
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), "")
@@ -854,34 +887,48 @@ func runSyncEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create CSV: %w", err)
 	}
 	if created {
-		fmt.Fprintf(cmd.OutOrStdout(), "Created new sync machines file: %s\n\n", csvPath)
+		fmt.Fprintf(cmd.OutOrStdout(), "Created new sync machines file: %s\n\n", sanitizeTerminalText(csvPath))
 	}
 
-	// Get editor
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		// Try common editors
-		for _, e := range []string{"nano", "vim", "vi"} {
-			if _, err := exec.LookPath(e); err == nil {
-				editor = e
-				break
-			}
-		}
-	}
-	if editor == "" {
-		return fmt.Errorf("no editor found - set $EDITOR environment variable")
+	editorPath, editorArgs, err := resolveEditorCommand()
+	if err != nil {
+		return err
 	}
 
 	// Open editor
-	c := exec.Command(editor, csvPath)
+	c := exec.Command(editorPath, append(editorArgs, csvPath)...)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 
 	return c.Run()
+}
+
+func resolveEditorCommand() (string, []string, error) {
+	if editorSpec := strings.TrimSpace(os.Getenv("EDITOR")); editorSpec != "" {
+		return parseEditorCommand(editorSpec)
+	}
+	if editorSpec := strings.TrimSpace(os.Getenv("VISUAL")); editorSpec != "" {
+		return parseEditorCommand(editorSpec)
+	}
+	for _, candidate := range []string{"nano", "vim", "vi"} {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return path, nil, nil
+		}
+	}
+	return "", nil, fmt.Errorf("no editor found - set $EDITOR environment variable")
+}
+
+func parseEditorCommand(spec string) (string, []string, error) {
+	fields := strings.Fields(strings.TrimSpace(spec))
+	if len(fields) == 0 {
+		return "", nil, fmt.Errorf("no editor found - set $EDITOR environment variable")
+	}
+	editorPath, err := exec.LookPath(fields[0])
+	if err != nil {
+		return "", nil, fmt.Errorf("find editor %q: %w", fields[0], err)
+	}
+	return editorPath, fields[1:], nil
 }
 
 // runSyncInit implements the first-time setup wizard.
