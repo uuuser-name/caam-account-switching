@@ -38,6 +38,30 @@ func TestPreventDuplicateUserProfile_AllowsPromotionFromSystemSnapshot(t *testin
 	require.NoError(t, err)
 }
 
+func TestPreventDuplicateUserProfile_IgnoresProfileListErrors(t *testing.T) {
+	_, codexHome := setupDriftGuardTestEnv(t)
+	fileSet := tools["codex"]()
+
+	brokenBase := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(brokenBase, "codex"), []byte("not-a-directory"), 0o600))
+	vault = authfile.NewVault(brokenBase)
+
+	writeCurrentCodexAuth(t, codexHome, "a@example.com", "acc-A", "token-a")
+
+	err := preventDuplicateUserProfile("codex", fileSet, "secondary")
+	require.NoError(t, err)
+}
+
+func TestPreventDuplicateUserProfile_IgnoresMalformedCurrentIdentity(t *testing.T) {
+	_, codexHome := setupDriftGuardTestEnv(t)
+	fileSet := tools["codex"]()
+
+	require.NoError(t, os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte("{not-json"), 0o600))
+
+	err := preventDuplicateUserProfile("codex", fileSet, "secondary")
+	require.NoError(t, err)
+}
+
 func setupDriftGuardTestEnv(t *testing.T) (vaultDir string, codexHome string) {
 	t.Helper()
 

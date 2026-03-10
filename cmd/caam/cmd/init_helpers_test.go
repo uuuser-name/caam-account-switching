@@ -64,6 +64,11 @@ func TestInitPromptAndShellHelpers(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, content, string(data2))
 
+	fishRC := filepath.Join(home, ".config", "fish", "config.fish")
+	require.NoError(t, appendToShellRC(fishRC, "caam shell init --fish | source"))
+	_, err = os.Stat(fishRC)
+	require.NoError(t, err)
+
 	withTestStdin(t, "\n", func() {
 		require.Equal(t, "fallback", promptWithDefault("Profile:", "fallback"))
 	})

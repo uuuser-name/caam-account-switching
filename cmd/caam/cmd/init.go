@@ -246,7 +246,7 @@ func setupShellIntegration() {
 	fmt.Println("  STEP 2: Shell Integration")
 	fmt.Println("------------------------------------------------------------")
 	fmt.Println()
-	fmt.Println("  Shell integration creates wrapper functions so that running")
+	fmt.Println("  Shell integration installs CAAM shim commands so that running")
 	fmt.Println("  'claude', 'codex', or 'gemini' automatically uses caam's")
 	fmt.Println("  rate limit handling and profile switching.")
 	fmt.Println()
@@ -334,6 +334,10 @@ func appendToShellRC(rcFile, line string) error {
 	if err == nil && strings.Contains(string(content), "caam shell init") {
 		// Already configured
 		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(rcFile), 0o755); err != nil {
+		return err
 	}
 
 	// Append to file

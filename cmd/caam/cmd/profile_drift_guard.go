@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -27,7 +29,11 @@ func preventDuplicateUserProfile(tool string, fileSet authfile.AuthFileSet, targ
 		)
 	}
 
-	currentIdentity := getCurrentAuthIdentity(tool)
+	currentIdentity, err := getCurrentAuthIdentity(tool)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: duplicate profile guard skipped current %s identity check: %v\n", tool, err)
+		return nil
+	}
 	currentKey := identityDedupKey(currentIdentity)
 	if currentKey == "" {
 		return nil
@@ -35,6 +41,7 @@ func preventDuplicateUserProfile(tool string, fileSet authfile.AuthFileSet, targ
 
 	profiles, err := vault.List(tool)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: duplicate profile guard skipped %s vault scan: %v\n", tool, err)
 		return nil
 	}
 	for _, profileName := range profiles {
@@ -52,25 +59,29 @@ func preventDuplicateUserProfile(tool string, fileSet authfile.AuthFileSet, targ
 	return nil
 }
 
-func getCurrentAuthIdentity(tool string) *identity.Identity {
+func getCurrentAuthIdentity(tool string) (*identity.Identity, error) {
 	getFileSet, ok := tools[tool]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	fileSet := getFileSet()
 	if len(fileSet.Files) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	switch tool {
 	case "codex":
 		id, err := identity.ExtractFromCodexAuth(fileSet.Files[0].Path)
 		if err != nil {
-			return nil
+			if errors.Is(err, os.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("extract current codex identity: %w", err)
 		}
 		normalizeIdentityPlan(id)
-		return id
+		return id, nil
 	case "claude":
+		var firstErr error
 		for _, spec := range fileSet.Files {
 			path := spec.Path
 			base := filepath.Base(path)
@@ -79,12 +90,20 @@ func getCurrentAuthIdentity(tool string) *identity.Identity {
 			}
 			id, err := identity.ExtractFromClaudeCredentials(path)
 			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				if firstErr == nil {
+					firstErr = fmt.Errorf("extract current claude identity from %s: %w", path, err)
+				}
 				continue
 			}
 			normalizeIdentityPlan(id)
-			return id
+			return id, nil
 		}
+		return nil, firstErr
 	case "gemini":
+		var firstErr error
 		for _, spec := range fileSet.Files {
 			path := spec.Path
 			if base := filepath.Base(path); !strings.EqualFold(base, "settings.json") && !strings.EqualFold(base, "oauth_credentials.json") {
@@ -92,12 +111,19 @@ func getCurrentAuthIdentity(tool string) *identity.Identity {
 			}
 			id, err := identity.ExtractFromGeminiConfig(path)
 			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				if firstErr == nil {
+					firstErr = fmt.Errorf("extract current gemini identity from %s: %w", path, err)
+				}
 				continue
 			}
 			normalizeIdentityPlan(id)
-			return id
+			return id, nil
 		}
+		return nil, firstErr
 	}
 
-	return nil
+	return nil, nil
 }

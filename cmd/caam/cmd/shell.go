@@ -23,7 +23,7 @@ Use 'caam shell-init' to set up automatic profile management.`,
 var shellInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Output shell initialization code",
-	Long: `Outputs shell initialization code that wraps AI CLI commands.
+	Long: `Outputs shell initialization code that installs CAAM-owned shim commands.
 
 Add this to your shell's rc file:
 
@@ -36,11 +36,14 @@ Add this to your shell's rc file:
   # For fish (~/.config/fish/config.fish):
   caam shell init --fish | source
 
-This creates wrapper functions for claude, codex, gemini, and openclaw that:
+This installs shim commands for claude, codex, gemini, and openclaw that:
 - Automatically use the best available profile
 - Handle rate limits transparently
 - Record usage for analytics
 - Route openclaw through codex-compatible account switching
+
+It also removes stale shell functions and aliases with those names so codex, claude,
+and the other tool commands resolve to the CAAM-managed shims on PATH.
 
 After setup, just use the tools normally:
   claude "explain this code"
@@ -66,6 +69,8 @@ func init() {
 
 func runShellInit(cmd *cobra.Command, args []string) error {
 	fish, _ := cmd.Flags().GetBool("fish")
+	bash, _ := cmd.Flags().GetBool("bash")
+	zsh, _ := cmd.Flags().GetBool("zsh")
 	posix, _ := cmd.Flags().GetBool("posix")
 	noWrap, _ := cmd.Flags().GetBool("no-wrap")
 	toolsStr, _ := cmd.Flags().GetString("tools")
@@ -79,13 +84,7 @@ func runShellInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Detect shell if not specified
-	shell := detectShell()
-	if fish {
-		shell = "fish"
-	} else if posix {
-		shell = "sh"
-	}
+	shell := resolveShellInitTarget(fish, bash, zsh, posix)
 
 	// Find caam binary path
 	caamPath, err := findCaamPath()
@@ -98,12 +97,31 @@ func runShellInit(cmd *cobra.Command, args []string) error {
 	switch shell {
 	case "fish":
 		output = generateFishInit(caamPath, tools, noWrap)
+	case "zsh":
+		output = generateZshInit(caamPath, tools, noWrap)
+	case "sh":
+		output = generatePOSIXInit(caamPath, tools, noWrap)
 	default:
 		output = generateBashInit(caamPath, tools, noWrap)
 	}
 
-	fmt.Print(output)
+	fmt.Fprint(cmd.OutOrStdout(), output)
 	return nil
+}
+
+func resolveShellInitTarget(fish, bash, zsh, posix bool) string {
+	switch {
+	case fish:
+		return "fish"
+	case zsh:
+		return "zsh"
+	case posix:
+		return "sh"
+	case bash:
+		return "bash"
+	default:
+		return detectShell()
+	}
 }
 
 func detectShell() string {
@@ -179,20 +197,7 @@ func generateBashInit(caamPath string, tools []string, noWrap bool) string {
 	sb.WriteString("# Add to your ~/.bashrc or ~/.zshrc:\n")
 	sb.WriteString("#   eval \"$(caam shell init)\"\n\n")
 
-	// Quote the caam path for safe shell interpolation
-	quotedPath := shellQuote(caamPath)
-
-	// Tool wrapper functions
-	if !noWrap {
-		for _, tool := range tools {
-			sb.WriteString(fmt.Sprintf(`# %s wrapper with automatic rate limit handling
-%s() {
-  %s run %s --precheck -- "$@"
-}
-
-`, tool, tool, quotedPath, tool))
-		}
-	}
+	writePOSIXShimInit(&sb, caamPath, tools, noWrap)
 
 	// Completion for caam command
 	sb.WriteString(`# caam command completion
@@ -227,6 +232,82 @@ complete -F _caam_completions caam
 	return sb.String()
 }
 
+func generateZshInit(caamPath string, tools []string, noWrap bool) string {
+	var sb strings.Builder
+
+	sb.WriteString("# caam shell integration for zsh\n")
+	sb.WriteString("# Add to your ~/.zshrc:\n")
+	sb.WriteString("#   eval \"$(caam shell init --zsh)\"\n\n")
+
+	writePOSIXShimInit(&sb, caamPath, tools, noWrap)
+
+	sb.WriteString(`# zsh completion
+autoload -Uz compinit 2>/dev/null || true
+if ! command -v compdef >/dev/null 2>&1; then
+  compinit -i >/dev/null 2>&1 || true
+fi
+if command -v compdef >/dev/null 2>&1; then
+  source <(caam shell completion zsh 2>/dev/null) 2>/dev/null || true
+fi
+`)
+
+	return sb.String()
+}
+
+func generatePOSIXInit(caamPath string, tools []string, noWrap bool) string {
+	var sb strings.Builder
+
+	sb.WriteString("# caam shell integration for POSIX shells\n")
+	sb.WriteString("# Add to your ~/.profile:\n")
+	sb.WriteString("#   eval \"$(caam shell init --posix)\"\n\n")
+
+	writePOSIXShimInit(&sb, caamPath, tools, noWrap)
+	sb.WriteString("# POSIX shells do not have a portable completion protocol.\n")
+
+	return sb.String()
+}
+
+func writePOSIXShimInit(sb *strings.Builder, caamPath string, tools []string, noWrap bool) {
+	quotedPath := shellQuote(caamPath)
+
+	if noWrap {
+		return
+	}
+
+	sb.WriteString("# Install CAAM provider shims and prefer them on PATH\n")
+	sb.WriteString(fmt.Sprintf("_caam_path=%s\n", quotedPath))
+	sb.WriteString("_caam_shim_dir=\"${CAAM_HOME:-$HOME/.caam}/shims\"\n")
+	sb.WriteString("mkdir -p \"$_caam_shim_dir\"\n")
+	if len(tools) > 0 {
+		sb.WriteString("unalias")
+		for _, tool := range tools {
+			sb.WriteString(" " + tool)
+		}
+		sb.WriteString(" 2>/dev/null || true\n")
+		sb.WriteString("unset -f")
+		for _, tool := range tools {
+			sb.WriteString(" " + tool)
+		}
+		sb.WriteString(" 2>/dev/null || true\n")
+		sb.WriteString("for _caam_tool in")
+		for _, tool := range tools {
+			sb.WriteString(" " + tool)
+		}
+		sb.WriteString("; do\n")
+		sb.WriteString("  if [ \"$(readlink \"$_caam_shim_dir/$_caam_tool\" 2>/dev/null)\" != \"$_caam_path\" ]; then\n")
+		sb.WriteString("    rm -f \"$_caam_shim_dir/$_caam_tool\"\n")
+		sb.WriteString("    ln -s \"$_caam_path\" \"$_caam_shim_dir/$_caam_tool\"\n")
+		sb.WriteString("  fi\n")
+		sb.WriteString("done\n")
+	}
+	sb.WriteString("case \":$PATH:\" in\n")
+	sb.WriteString("  *\":$_caam_shim_dir:\"*) ;;\n")
+	sb.WriteString("  *) export PATH=\"$_caam_shim_dir:$PATH\" ;;\n")
+	sb.WriteString("esac\n")
+	sb.WriteString("hash -r 2>/dev/null || true\n")
+	sb.WriteString("unset _caam_path _caam_shim_dir _caam_tool\n\n")
+}
+
 // fishQuote returns a properly quoted string for fish shell.
 func fishQuote(s string) string {
 	// If the string contains no special characters, return as-is
@@ -258,16 +339,38 @@ func generateFishInit(caamPath string, tools []string, noWrap bool) string {
 	// Quote the caam path for safe shell interpolation
 	quotedPath := fishQuote(caamPath)
 
-	// Tool wrapper functions
+	// Install PATH shims instead of shell functions so direct `codex` invocations
+	// are still routed through CAAM even outside the current shell process.
 	if !noWrap {
-		for _, tool := range tools {
-			sb.WriteString(fmt.Sprintf(`# %s wrapper with automatic rate limit handling
-function %s
-  %s run %s --precheck -- $argv
-end
-
-`, tool, tool, quotedPath, tool))
+		sb.WriteString("# Install CAAM provider shims and prefer them on PATH\n")
+		sb.WriteString(fmt.Sprintf("set -l _caam_path %s\n", quotedPath))
+		sb.WriteString("set -l _caam_shim_dir \"$HOME/.caam/shims\"\n")
+		sb.WriteString("if set -q CAAM_HOME\n")
+		sb.WriteString("  set _caam_shim_dir \"$CAAM_HOME/shims\"\n")
+		sb.WriteString("end\n")
+		sb.WriteString("mkdir -p \"$_caam_shim_dir\"\n")
+		if len(tools) > 0 {
+			sb.WriteString("for _caam_tool in")
+			for _, tool := range tools {
+				sb.WriteString(" " + tool)
+			}
+			sb.WriteString("\n")
+			sb.WriteString("  functions -q $_caam_tool; and functions -e $_caam_tool\n")
+			sb.WriteString("  set -l _caam_target \"$_caam_shim_dir/$_caam_tool\"\n")
+			sb.WriteString("  set -l _caam_current \"\"\n")
+			sb.WriteString("  if test -L \"$_caam_target\"\n")
+			sb.WriteString("    set _caam_current (readlink \"$_caam_target\" 2>/dev/null)\n")
+			sb.WriteString("  end\n")
+			sb.WriteString("  if test \"$_caam_current\" != \"$_caam_path\"\n")
+			sb.WriteString("    rm -f \"$_caam_target\"\n")
+			sb.WriteString("    ln -s \"$_caam_path\" \"$_caam_target\"\n")
+			sb.WriteString("  end\n")
+			sb.WriteString("end\n")
 		}
+		sb.WriteString("if not contains -- \"$_caam_shim_dir\" $PATH\n")
+		sb.WriteString("  set -gx PATH \"$_caam_shim_dir\" $PATH\n")
+		sb.WriteString("end\n")
+		sb.WriteString("set -e _caam_path _caam_shim_dir _caam_tool _caam_target _caam_current\n\n")
 	}
 
 	// Completion for caam command

@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -12,26 +15,26 @@ func TestGenerateBashInit(t *testing.T) {
 
 	output := generateBashInit(caamPath, tools, false)
 
-	// Check for wrapper functions
-	if !strings.Contains(output, "claude()") {
-		t.Error("Missing claude() function")
+	if !strings.Contains(output, "_caam_shim_dir") {
+		t.Error("Missing CAAM shim directory setup")
 	}
-	if !strings.Contains(output, "codex()") {
-		t.Error("Missing codex() function")
+	if !strings.Contains(output, "unalias claude codex gemini openclaw") {
+		t.Error("Missing stale-alias cleanup")
 	}
-	if !strings.Contains(output, "gemini()") {
-		t.Error("Missing gemini() function")
+	if !strings.Contains(output, "unset -f claude codex gemini openclaw") {
+		t.Error("Missing stale-function cleanup")
 	}
-	if !strings.Contains(output, "openclaw()") {
-		t.Error("Missing openclaw() function")
+	if !strings.Contains(output, "for _caam_tool in claude codex gemini openclaw") {
+		t.Error("Missing shim install loop")
 	}
-
-	// Check for caam run with precheck usage
-	if !strings.Contains(output, "caam run claude --precheck --") {
-		t.Error("Missing 'caam run claude --precheck --' in wrapper")
+	if !strings.Contains(output, "ln -s \"$_caam_path\" \"$_caam_shim_dir/$_caam_tool\"") {
+		t.Error("Missing shim symlink install command")
 	}
-	if !strings.Contains(output, "caam run openclaw --precheck --") {
-		t.Error("Missing 'caam run openclaw --precheck --' in wrapper")
+	if !strings.Contains(output, "export PATH=\"$_caam_shim_dir:$PATH\"") {
+		t.Error("Missing PATH prepend for shims")
+	}
+	if strings.Contains(output, "codex()") {
+		t.Error("Should not emit shell wrapper functions when shims are enabled")
 	}
 
 	// Check for completion
@@ -49,9 +52,9 @@ func TestGenerateBashInit_NoWrap(t *testing.T) {
 
 	output := generateBashInit(caamPath, tools, true)
 
-	// Should NOT have wrapper functions
-	if strings.Contains(output, "claude()") {
-		t.Error("Should not have claude() function when noWrap=true")
+	// Should NOT have shim installation
+	if strings.Contains(output, "_caam_shim_dir") {
+		t.Error("Should not have shim setup when noWrap=true")
 	}
 
 	// Should still have completions
@@ -66,14 +69,17 @@ func TestGenerateBashInit_CustomTools(t *testing.T) {
 
 	output := generateBashInit(caamPath, tools, false)
 
-	if !strings.Contains(output, "claude()") {
-		t.Error("Missing claude() function")
+	if !strings.Contains(output, "for _caam_tool in claude") {
+		t.Error("Missing claude shim loop")
 	}
-	if strings.Contains(output, "codex()") {
-		t.Error("Should not have codex() function")
+	if strings.Contains(output, "unalias claude codex") {
+		t.Error("Should not clean up codex alias when only claude is requested")
 	}
-	if strings.Contains(output, "gemini()") {
-		t.Error("Should not have gemini() function")
+	if strings.Contains(output, "for _caam_tool in claude codex") {
+		t.Error("Should not have codex shim when only claude is requested")
+	}
+	if strings.Contains(output, "unset -f claude codex") {
+		t.Error("Should not clean up codex when only claude is requested")
 	}
 }
 
@@ -83,30 +89,28 @@ func TestGenerateFishInit(t *testing.T) {
 
 	output := generateFishInit(caamPath, tools, false)
 
-	// Check for fish function syntax
-	if !strings.Contains(output, "function claude") {
-		t.Error("Missing claude function")
+	if !strings.Contains(output, "set -l _caam_shim_dir") {
+		t.Error("Missing fish shim directory setup")
 	}
-	if !strings.Contains(output, "function codex") {
-		t.Error("Missing codex function")
+	if !strings.Contains(output, "for _caam_tool in claude codex gemini openclaw") {
+		t.Error("Missing fish shim install loop")
 	}
-	if !strings.Contains(output, "function gemini") {
-		t.Error("Missing gemini function")
+	if !strings.Contains(output, "functions -q $_caam_tool; and functions -e $_caam_tool") {
+		t.Error("Missing fish stale-function cleanup")
 	}
-	if !strings.Contains(output, "function openclaw") {
-		t.Error("Missing openclaw function")
+	if !strings.Contains(output, "ln -s \"$_caam_path\" \"$_caam_target\"") {
+		t.Error("Missing fish shim symlink install command")
+	}
+	if !strings.Contains(output, "set -gx PATH \"$_caam_shim_dir\" $PATH") {
+		t.Error("Missing fish PATH prepend for shims")
+	}
+	if strings.Contains(output, "function codex") {
+		t.Error("Should not emit fish wrapper functions when shims are enabled")
 	}
 
 	// Check for fish completion syntax
 	if !strings.Contains(output, "complete -c caam") {
 		t.Error("Missing fish completion")
-	}
-
-	if !strings.Contains(output, "/usr/local/bin/caam run claude --precheck --") {
-		t.Error("Missing fish wrapper with --precheck")
-	}
-	if !strings.Contains(output, "/usr/local/bin/caam run openclaw --precheck --") {
-		t.Error("Missing fish openclaw wrapper with --precheck")
 	}
 }
 
@@ -116,14 +120,81 @@ func TestGenerateFishInit_NoWrap(t *testing.T) {
 
 	output := generateFishInit(caamPath, tools, true)
 
-	// Should NOT have wrapper functions
-	if strings.Contains(output, "function claude") {
-		t.Error("Should not have claude function when noWrap=true")
+	// Should NOT have shim installation
+	if strings.Contains(output, "_caam_shim_dir") {
+		t.Error("Should not have shim setup when noWrap=true")
 	}
 
 	// Should still have completions
 	if !strings.Contains(output, "complete -c caam") {
 		t.Error("Missing fish completion even with noWrap=true")
+	}
+}
+
+func TestResolveShellInitTarget(t *testing.T) {
+	t.Setenv("SHELL", "/bin/fish")
+
+	if got := resolveShellInitTarget(false, false, true, false); got != "zsh" {
+		t.Fatalf("resolveShellInitTarget(... zsh ...) = %q, want zsh", got)
+	}
+	if got := resolveShellInitTarget(false, true, false, false); got != "bash" {
+		t.Fatalf("resolveShellInitTarget(... bash ...) = %q, want bash", got)
+	}
+	if got := resolveShellInitTarget(false, false, false, true); got != "sh" {
+		t.Fatalf("resolveShellInitTarget(... posix ...) = %q, want sh", got)
+	}
+	if got := resolveShellInitTarget(false, false, false, false); got != "fish" {
+		t.Fatalf("resolveShellInitTarget(... default ...) = %q, want fish", got)
+	}
+}
+
+func TestGenerateZshInit_AvoidsBashCompletionSyntax(t *testing.T) {
+	output := generateZshInit("/usr/local/bin/caam", []string{"codex"}, false)
+	if strings.Contains(output, "_init_completion") || strings.Contains(output, "complete -F") {
+		t.Fatal("zsh init should not emit bash completion helpers")
+	}
+	if !strings.Contains(output, "shell completion zsh") {
+		t.Fatal("zsh init should load zsh completion")
+	}
+}
+
+func TestGeneratePOSIXInit_AvoidsBashSpecificSyntax(t *testing.T) {
+	output := generatePOSIXInit("/usr/local/bin/caam", []string{"codex"}, false)
+	if strings.Contains(output, "_init_completion") || strings.Contains(output, "complete -F") || strings.Contains(output, "[[") {
+		t.Fatal("POSIX init should not emit bash-specific completion syntax")
+	}
+}
+
+func TestGenerateZshInit_SourcesCleanly(t *testing.T) {
+	zshPath, err := exec.LookPath("zsh")
+	if err != nil {
+		t.Skip("zsh not available")
+	}
+
+	tmp := t.TempDir()
+	initFile := filepath.Join(tmp, "caam.zsh")
+	if err := os.WriteFile(initFile, []byte(generateZshInit("/bin/echo", []string{"codex"}, false)), 0o600); err != nil {
+		t.Fatalf("write init file: %v", err)
+	}
+
+	cmd := exec.Command(zshPath, initFile)
+	cmd.Env = append(os.Environ(), "HOME="+tmp)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("zsh init failed: %v\n%s", err, out)
+	}
+}
+
+func TestGeneratePOSIXInit_SourcesCleanly(t *testing.T) {
+	tmp := t.TempDir()
+	initFile := filepath.Join(tmp, "caam.sh")
+	if err := os.WriteFile(initFile, []byte(generatePOSIXInit("/bin/echo", []string{"codex"}, false)), 0o600); err != nil {
+		t.Fatalf("write init file: %v", err)
+	}
+
+	cmd := exec.Command("sh", initFile)
+	cmd.Env = append(os.Environ(), "HOME="+tmp)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("posix init failed: %v\n%s", err, out)
 	}
 }
 
