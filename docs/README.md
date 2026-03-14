@@ -1,6 +1,6 @@
 # Documentation Index
 
-This repository follows the same documentation style used across Jeffrey Emanuel's public tooling repos:
+This repository uses the same agent-facing documentation style used across the flywheel tooling repos:
 
 - Front-load install and quick usage examples.
 - Include an explicit **Agent Quickstart** with machine-output expectations.
@@ -17,6 +17,7 @@ This repository follows the same documentation style used across Jeffrey Emanuel
 - Claude auth inventory: [`CLAUDE_AUTH_INVENTORY.md`](CLAUDE_AUTH_INVENTORY.md), [`CLAUDE_AUTH_INVENTORY.json`](CLAUDE_AUTH_INVENTORY.json)
 - Clean environment support matrix: [`testing/clean_environment_support_matrix.md`](testing/clean_environment_support_matrix.md)
 - Bounded live validation protocols: [`testing/bounded_live_validation_protocols.md`](testing/bounded_live_validation_protocols.md)
+- Agent install and Codex setup: [`AGENT_INSTALL.md`](AGENT_INSTALL.md)
 - Testing docs: [`testing/`](testing/)
 
 ## Authoring Template

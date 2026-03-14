@@ -1,11 +1,22 @@
-# caam - Coding Agent Account Manager
+# caam-account-switching - CAAM-based Codex account switcher
 
 ![Release](https://img.shields.io/github/v/release/uuuser-name/caam-account-switching?style=for-the-badge&color=bd93f9)
 ![Go Version](https://img.shields.io/github/go-mod/go-version/uuuser-name/caam-account-switching?style=for-the-badge&color=6272a4)
 ![License](https://img.shields.io/badge/License-MIT-50fa7b?style=for-the-badge)
 ![Build Status](https://img.shields.io/github/actions/workflow/status/uuuser-name/caam-account-switching/ci.yml?style=for-the-badge&logo=github)
 
-> **Sub-100ms account switching for AI coding CLIs with fixed-cost subscription plans. When you hit usage limits on Claude Max, GPT Pro, or Gemini Ultra, don't wait 60 seconds for browser OAuth—just swap to another account instantly.**
+> **A maintained CAAM fork focused on reliable account switching for AI coding tools, with Codex/GPT Pro as the primary target. When usage pressure hits, switch accounts instead of waiting for re-auth or accepting broken continuity.**
+
+This repository keeps the upstream-compatible `caam` binary name, but it is not the canonical upstream CAAM repository. This fork is tuned for agent-flywheel users who need deterministic Codex handoff, explicit audit artifacts, and safer behavior around rate-limit recovery.
+
+Use this repo if you want:
+
+- fast release-build account switching
+- Codex-specific config repair and prompt suppression
+- SmartRunner-based resume and handoff behavior
+- machine-readable status and audit outputs for agents
+
+If you are using Codex, read [`docs/AGENT_INSTALL.md`](docs/AGENT_INSTALL.md) before first use.
 
 ```bash
 curl -fsSL "https://raw.githubusercontent.com/uuuser-name/caam-account-switching/main/install.sh?$(date +%s)" | bash
@@ -187,6 +198,20 @@ Each profile gets its own `$HOME` and `$CODEX_HOME` with symlinks to your real `
 **Notes:** Respects `CODEX_HOME`. CAAM repairs Codex's managed config in `~/.codex/config.toml` by enforcing `cli_auth_credentials_store = "file"`, `[features] multi_agent = true`, and `[notice] hide_rate_limit_model_nudge = true` so the soft "Approaching rate limits" model-switch popup stays disabled at the config level.
 
 **Reliability:** The popup suppression lives in the user's Codex config, not in a binary patch, so normal Codex upgrades should keep it. If config drift reappears, run `caam doctor --fix` to repair the managed defaults. For pane-heavy workflows where preserving scrollback matters more than fullscreen TUI behavior, consider Codex's current TUI setting `[tui] alternate_screen = "never"` as an optional local preference.
+
+**Required for seamless switching:** keep the lower-model / cheaper-model nudge disabled. That interactive prompt interrupts wrapper-driven handoff and is one of the main ways Codex switching becomes unreliable. The exact managed config is:
+
+```toml
+cli_auth_credentials_store = "file"
+
+[features]
+multi_agent = true
+
+[notice]
+hide_rate_limit_model_nudge = true
+```
+
+Agent-oriented first-run guide: [`docs/AGENT_INSTALL.md`](docs/AGENT_INSTALL.md)
 
 ### Gemini CLI (Google One AI Premium)
 
@@ -698,6 +723,16 @@ Run `caam status`. It shows the active profile (email) for each tool based on co
 ---
 
 ## Installation
+
+### Agent-flywheel / Codex users: start here
+
+Before using this fork with Codex, follow [`docs/AGENT_INSTALL.md`](docs/AGENT_INSTALL.md). It covers:
+
+- release install commands
+- first-run verification
+- the required Codex TOML settings
+- why `hide_rate_limit_model_nudge = true` matters for automatic handoff
+- the quickest repair command when Codex config drifts: `caam doctor --fix`
 
 ### Recommended: Homebrew (macOS/Linux)
 
