@@ -96,7 +96,7 @@ jobs:
           	def find(name: str) -> str:
           	    for asset in assets:
           	        if asset.get("name") == name:
-          	            return asset.get("browser_download_url") or ""
+          	            return asset.get("url") or ""
           	    return ""
 
           	checksums_url = find("SHA256SUMS")
@@ -121,19 +121,19 @@ jobs:
           	print(checksums_url)
           	print(signature_url)
           	print(sample.get("name") or "")
-          	print(sample.get("browser_download_url") or "")
+          	print(sample.get("url") or "")
           	PY
           )
 
-          checksums_url=$(printf '%s' "$parsed" | sed -n '1p')
-          signature_url=$(printf '%s' "$parsed" | sed -n '2p')
+          checksums_api_url=$(printf '%s' "$parsed" | sed -n '1p')
+          signature_api_url=$(printf '%s' "$parsed" | sed -n '2p')
           sample_name=$(printf '%s' "$parsed" | sed -n '3p')
-          sample_url=$(printf '%s' "$parsed" | sed -n '4p')
+          sample_api_url=$(printf '%s' "$parsed" | sed -n '4p')
 
           tmpdir="$(mktemp -d)"
-          curl -fsSL "$checksums_url" -o "$tmpdir/SHA256SUMS"
-          curl -fsSL "$signature_url" -o "$tmpdir/SHA256SUMS.sig"
-          curl -fsSL "$sample_url" -o "$tmpdir/$sample_name"
+          curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" "$checksums_api_url" -o "$tmpdir/SHA256SUMS"
+          curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" "$signature_api_url" -o "$tmpdir/SHA256SUMS.sig"
+          curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" "$sample_api_url" -o "$tmpdir/$sample_name"
 
           cosign verify-blob \
             --bundle "$tmpdir/SHA256SUMS.sig" \
