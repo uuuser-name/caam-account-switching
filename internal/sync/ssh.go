@@ -246,7 +246,7 @@ func autoAddHostKeyCallback(existing ssh.HostKeyCallback, knownHostsPath string)
 		if err := addToKnownHosts(knownHostsPath, hostname, key); err != nil {
 			// Log but don't fail - the connection can still proceed.
 			// Sanitize terminal control bytes because hostname/error text can come from remote state.
-			fmt.Fprint(os.Stderr, formatKnownHostsWarning(hostname, err))
+			_, _ = io.WriteString(os.Stderr, formatKnownHostsWarning(hostname, err))
 		}
 
 		return nil
