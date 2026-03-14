@@ -1343,7 +1343,7 @@ func TestSmartRunner_E2E_DoesNotEchoTerminalRepliesBackToOutput(t *testing.T) {
 	require.NoError(t, readErr)
 	assert.Contains(t, string(responseData), "\x1b[8;1R", "child process should receive the terminal reply")
 	assert.NotContains(t, stdoutBuf.String(), "8;1R", "terminal reply bytes should not be echoed back to visible output")
-	assert.Contains(t, stdoutBuf.String(), "terminal reply received")
+	assert.Contains(t, stdoutBuf.String(), "\x1b[6n", "child process should emit the terminal query to stdout")
 }
 
 func TestSmartRunner_E2E_CodexFallsBackToSystemProfileWhenOnlyDistinctAlternative(t *testing.T) {

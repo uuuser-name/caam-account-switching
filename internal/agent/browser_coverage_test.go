@@ -24,6 +24,9 @@ func TestBrowserCoverageCompleteOAuthWithLocalFixture(t *testing.T) {
 		UserDataDir: t.TempDir(),
 		Headless:    true,
 	})
+	t.Cleanup(func() {
+		browser.Close()
+	})
 
 	code, account, err := browser.CompleteOAuth(context.Background(), fixture.URL, "")
 	if err != nil {
@@ -54,6 +57,9 @@ func TestBrowserCoverageCompleteOAuthCancelledContext(t *testing.T) {
 	browser := NewBrowser(BrowserConfig{
 		UserDataDir: t.TempDir(),
 		Headless:    true,
+	})
+	t.Cleanup(func() {
+		browser.Close()
 	})
 
 	_, _, err := browser.CompleteOAuth(ctx, fixture.URL, "")
@@ -86,6 +92,9 @@ func TestBrowserCoverageCompleteOAuthPreferredAccountFixture(t *testing.T) {
 	browser := NewBrowser(BrowserConfig{
 		UserDataDir: t.TempDir(),
 		Headless:    true,
+	})
+	t.Cleanup(func() {
+		browser.Close()
 	})
 
 	code, account, err := browser.CompleteOAuth(context.Background(), fixture.URL+"/accounts.google.com/select", "preferred@example.com")
@@ -121,6 +130,9 @@ func TestBrowserCoverageCompleteOAuthConsentFixture(t *testing.T) {
 	browser := NewBrowser(BrowserConfig{
 		UserDataDir: t.TempDir(),
 		Headless:    true,
+	})
+	t.Cleanup(func() {
+		browser.Close()
 	})
 
 	code, account, err := browser.CompleteOAuth(context.Background(), fixture.URL+"/consent", "")
