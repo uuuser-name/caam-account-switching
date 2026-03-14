@@ -176,6 +176,7 @@ func TestWorkflowSmartRunnerHelper(t *testing.T) {
 		fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
 		fmt.Println("at 3:05 PM.")
 		fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
+		time.Sleep(200 * time.Millisecond)
 		os.Exit(1)
 		return
 	}
