@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -323,22 +324,31 @@ func TestWatcherEventLoopDispatchesChangeAndErrorCallbacks(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(homeDir, ".claude"), 0700))
 	t.Setenv("HOME", homeDir)
 
-	var changes []string
-	var reported []error
+	var (
+		mu       sync.Mutex
+		changes  []string
+		reported []error
+	)
 	watcher, err := NewWatcher(authfile.NewVault(vaultDir), WatcherConfig{
 		Providers: []string{"claude"},
 		Logger:    slog.Default(),
 		OnChange: func(provider, path string) {
+			mu.Lock()
+			defer mu.Unlock()
 			changes = append(changes, provider+":"+path)
 		},
 		OnError: func(err error) {
+			mu.Lock()
+			defer mu.Unlock()
 			reported = append(reported, err)
 		},
 	})
 	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, watcher.Stop())
-	}()
+	require.NoError(t, watcher.watcher.Close())
+	watcher.watcher = &fsnotify.Watcher{
+		Events: make(chan fsnotify.Event, 1),
+		Errors: make(chan error, 1),
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -354,14 +364,23 @@ func TestWatcherEventLoopDispatchesChangeAndErrorCallbacks(t *testing.T) {
 	watcher.watcher.Errors <- expectedErr
 
 	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
 		return len(changes) == 1 && len(reported) == 1
 	}, time.Second, 10*time.Millisecond)
 
-	assert.Equal(t, "claude:"+claudePath, changes[0])
-	assert.ErrorIs(t, reported[0], expectedErr)
+	mu.Lock()
+	change := changes[0]
+	reportedErr := reported[0]
+	mu.Unlock()
+
+	assert.Equal(t, "claude:"+claudePath, change)
+	assert.ErrorIs(t, reportedErr, expectedErr)
 
 	cancel()
 	<-done
+	close(watcher.watcher.Events)
+	close(watcher.watcher.Errors)
 }
 
 func TestWatcherProcessChangeSkipsDuplicateAliasProfile(t *testing.T) {
