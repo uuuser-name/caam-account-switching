@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MATRIX_JSON="${1:-$ROOT_DIR/artifacts/cli-matrix/cli_workflow_matrix.json}"
+MATRIX_JSON="${1:-$ROOT_DIR/docs/testing/cli_workflow_matrix.json}"
 INVENTORY_JSON="${2:-$ROOT_DIR/artifacts/test-audit/e2e_inventory.json}"
 OUT_JSON="${3:-$ROOT_DIR/artifacts/cli-matrix/scenario_traceability.json}"
 OUT_MD="${4:-$ROOT_DIR/docs/testing/cli_scenario_traceability.md}"
-BINDINGS_JSON="${5:-$ROOT_DIR/artifacts/cli-matrix/scenario_test_bindings.json}"
+BINDINGS_JSON="${5:-$ROOT_DIR/docs/testing/scenario_test_bindings.json}"
 bindings_src="$BINDINGS_JSON"
 bindings_mode="explicit"
 tmp_bindings=""
@@ -22,7 +22,7 @@ mkdir -p "$(dirname "$OUT_JSON")" "$(dirname "$OUT_MD")"
 
 if [[ ! -f "$MATRIX_JSON" ]]; then
   echo "missing CLI workflow matrix artifact: $MATRIX_JSON" >&2
-  echo "provide MATRIX_JSON explicitly or generate artifacts/cli-matrix/cli_workflow_matrix.json first" >&2
+  echo "provide MATRIX_JSON explicitly or restore docs/testing/cli_workflow_matrix.json first" >&2
   exit 2
 fi
 
@@ -117,7 +117,7 @@ Source bead: bd-3fy.3.5.1
 - Covered: ${covered} (${explicit} explicit bindings, ${heuristic} heuristic matches)
 - Uncovered: ${uncovered}
 - Machine-readable map: artifacts/cli-matrix/scenario_traceability.json
-- Explicit bindings: artifacts/cli-matrix/scenario_test_bindings.json
+- Explicit bindings: docs/testing/scenario_test_bindings.json
 
 ## Uncovered Scenarios (Top 50)
 
@@ -129,7 +129,7 @@ EOM
   cat <<'EOM'
 
 ## Notes
-- Explicit bindings are declared in `artifacts/cli-matrix/scenario_test_bindings.json`.
+- Explicit bindings are declared in `docs/testing/scenario_test_bindings.json`.
 - Heuristic matching uses normalized string similarity between required scenario names and existing test scenario IDs.
 - Exact scenario-to-test bindings should be refined as C3.2 fills matrix deficits.
 EOM

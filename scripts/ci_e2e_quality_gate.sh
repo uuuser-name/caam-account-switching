@@ -6,7 +6,7 @@ cd "${repo_root}"
 
 max_uncovered="${MAX_UNCOVERED_SCENARIOS:-153}"
 min_covered="${MIN_COVERED_SCENARIOS:-74}"
-matrix_json="${E2E_QUALITY_GATE_MATRIX_JSON:-artifacts/cli-matrix/cli_workflow_matrix.json}"
+matrix_json="${E2E_QUALITY_GATE_MATRIX_JSON:-docs/testing/cli_workflow_matrix.json}"
 inventory_json="${E2E_QUALITY_GATE_INVENTORY_JSON:-artifacts/test-audit/e2e_inventory.json}"
 traceability_json="${E2E_QUALITY_GATE_TRACEABILITY_JSON:-artifacts/cli-matrix/scenario_traceability.json}"
 summary_json="${E2E_QUALITY_GATE_SUMMARY_JSON:-artifacts/test-audit/e2e_quality_gate.json}"
@@ -99,7 +99,7 @@ else
   append_stage_result "Scenario traceability generation" "skipped" 2 "missing CLI workflow matrix artifact"
   record_failure "missing_cli_matrix" "Scenario traceability generation"
   echo "missing CLI workflow matrix artifact: ${matrix_json}" >&2
-  echo "run ./scripts/build_cli_scenario_traceability.sh after generating the matrix artifact" >&2
+  echo "restore docs/testing/cli_workflow_matrix.json or pass E2E_QUALITY_GATE_MATRIX_JSON explicitly" >&2
 fi
 
 if [[ -z "${failure_reason}" && ! -f "${traceability_json}" ]]; then

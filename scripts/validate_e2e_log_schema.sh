@@ -88,21 +88,23 @@ if ! jq -s -e '
   def valid_decision: (. == "pass" or . == "continue" or . == "retry" or . == "abort");
   def step_base($suffix): sub(($suffix + "$"); "");
   def balanced_steps:
-    reduce .[] as $e ({ok:true, open:{}};
-      if .ok | not then .
-      elif ($e.step_id | endswith("-start")) then
-        ($e.step_id | step_base("-start")) as $base
-        | .open[$base] = ((.open[$base] // 0) + 1)
-      elif ($e.step_id | endswith("-end")) then
-        ($e.step_id | step_base("-end")) as $base
-        | if ((.open[$base] // 0) > 0)
-          then .open[$base] = (.open[$base] - 1)
-          else .ok = false
-          end
-      else .
-      end
-    ) as $state
-    | $state.ok and ([($state.open // {})[]?] | all(. == 0));
+    (
+      reduce .[] as $e ({ok:true, open:{}};
+        if .ok | not then .
+        elif ($e.step_id | endswith("-start")) then
+          ($e.step_id | step_base("-start")) as $base
+          | .open[$base] = ((.open[$base] // 0) + 1)
+        elif ($e.step_id | endswith("-end")) then
+          ($e.step_id | step_base("-end")) as $base
+          | if ((.open[$base] // 0) > 0)
+            then .open[$base] = (.open[$base] - 1)
+            else .ok = false
+            end
+        else .
+        end
+      )
+      | .ok and ([((.open // {})[]?)] | all(. == 0))
+    );
 
   # Decisions must be in allowlist
   ([.[].decision] | all(valid_decision))

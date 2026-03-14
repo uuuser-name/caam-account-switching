@@ -1,6 +1,6 @@
 # CLI Scenario Traceability Map
 
-Generated: 2026-03-14T19:33:16Z
+Generated: 2026-03-14T21:34:14Z
 Source bead: bd-3fy.3.5.1
 
 ## Summary
@@ -8,7 +8,7 @@ Source bead: bd-3fy.3.5.1
 - Covered: 74 (74 explicit bindings, 0 heuristic matches)
 - Uncovered: 153
 - Machine-readable map: artifacts/cli-matrix/scenario_traceability.json
-- Explicit bindings: artifacts/cli-matrix/scenario_test_bindings.json
+- Explicit bindings: docs/testing/scenario_test_bindings.json
 
 ## Uncovered Scenarios (Top 50)
 
@@ -66,6 +66,6 @@ Source bead: bd-3fy.3.5.1
 | `sync` | `happy` | `sync_enable_syncing` | `unassigned` |
 
 ## Notes
-- Explicit bindings are declared in `artifacts/cli-matrix/scenario_test_bindings.json`.
+- Explicit bindings are declared in `docs/testing/scenario_test_bindings.json`.
 - Heuristic matching uses normalized string similarity between required scenario names and existing test scenario IDs.
 - Exact scenario-to-test bindings should be refined as C3.2 fills matrix deficits.

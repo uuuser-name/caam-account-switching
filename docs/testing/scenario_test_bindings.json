@@ -1,0 +1,767 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:caam:scenario-test-bindings:1.0.0",
+  "title": "E2E Scenario to Test Binding Map",
+  "description": "Explicit bindings from CLI workflow matrix scenarios to existing E2E test functions",
+  "schema_version": "1.0.0",
+  "bindings": [
+    {
+      "required_scenario": "activate_auto_all_in_cooldown",
+      "family": "rotation_cooldown",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_CooldownBypass",
+      "test_file": "internal/e2e/workflows/rotation_cooldown_test.go",
+      "binding_confidence": "medium",
+      "notes": "Cooldown bypass covers all-in-cooldown scenario"
+    },
+    {
+      "required_scenario": "activate_auto_selects_best",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestSmartRunner_E2E",
+      "test_file": "internal/exec/smart_runner_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Smart runner auto-selection"
+    },
+    {
+      "required_scenario": "activate_auto_with_cooldown_profiles",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_FiveHourCreditExhaustionSwitch",
+      "test_file": "internal/e2e/workflows/rotation_exhaustion_test.go",
+      "binding_confidence": "high",
+      "notes": "Explicit five-hour exhaustion failover scenario"
+    },
+    {
+      "required_scenario": "activate_concurrent_access",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_ConcurrentBackups",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "medium",
+      "notes": "Concurrent backup handling tests concurrency"
+    },
+    {
+      "required_scenario": "activate_existing_profile",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_FullRestoreWorkflow",
+      "test_file": "internal/authfile/e2e_backup_restore_test.go",
+      "binding_confidence": "high",
+      "notes": "Full restore workflow covers profile activation"
+    },
+    {
+      "required_scenario": "activate_missing_auth_files",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_MissingRequiredFile",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "medium",
+      "notes": "Missing required file error handling"
+    },
+    {
+      "required_scenario": "activate_nonexistent_profile",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_RestoreNonExistentProfile",
+      "test_file": "internal/authfile/e2e_backup_restore_test.go",
+      "binding_confidence": "high",
+      "notes": "Restore non-existent profile error"
+    },
+    {
+      "required_scenario": "activate_same_profile_twice",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_RapidProfileSwitching",
+      "test_file": "internal/e2e/workflows/backup_activate_test.go",
+      "binding_confidence": "medium",
+      "notes": "Rapid switching includes repeated activation"
+    },
+    {
+      "required_scenario": "activate_with_backup_current",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_CompleteBackupActivateSwitchWorkflow",
+      "test_file": "internal/e2e/workflows/backup_activate_test.go",
+      "binding_confidence": "high",
+      "notes": "Complete workflow includes backup before switch"
+    },
+    {
+      "required_scenario": "backup_invalid_tool",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_InvalidToolError",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "high",
+      "notes": "Invalid tool error test"
+    },
+    {
+      "required_scenario": "backup_new_profile",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_FullBackupWorkflow",
+      "test_file": "internal/authfile/e2e_backup_restore_test.go",
+      "binding_confidence": "high",
+      "notes": "Full backup workflow covers new profile backup"
+    },
+    {
+      "required_scenario": "backup_no_auth_files",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_BackupMissingRequiredFile",
+      "test_file": "internal/authfile/e2e_backup_restore_test.go",
+      "binding_confidence": "high",
+      "notes": "Tests backup with missing files"
+    },
+    {
+      "required_scenario": "backup_overwrite_existing",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_BackupOverwriteProtection",
+      "test_file": "internal/authfile/e2e_backup_restore_test.go",
+      "binding_confidence": "high",
+      "notes": "Tests overwrite protection behavior"
+    },
+    {
+      "required_scenario": "backup_profile_with_special_chars",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_SpecialCharactersInProfileName",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "high",
+      "notes": "Special characters in profile name"
+    },
+    {
+      "required_scenario": "bundle_dry_run",
+      "family": "bundle",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_BundleDryRun",
+      "test_file": "internal/e2e/workflows/bundle_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Bundle dry run test"
+    },
+    {
+      "required_scenario": "bundle_export_creates",
+      "family": "bundle",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_BundleExportImportWorkflow",
+      "test_file": "internal/e2e/workflows/bundle_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Bundle export workflow"
+    },
+    {
+      "required_scenario": "bundle_import_restores",
+      "family": "bundle",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_BundleExportImportWorkflow",
+      "test_file": "internal/e2e/workflows/bundle_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Bundle import workflow"
+    },
+    {
+      "required_scenario": "bundle_round_trip",
+      "family": "bundle",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_BundleRoundTrip",
+      "test_file": "internal/e2e/workflows/bundle_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Bundle round trip test"
+    },
+    {
+      "required_scenario": "claude_auth_state",
+      "family": "monitoring_health",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ClaudeAuthState",
+      "test_file": "internal/provider/e2e_auth_state_test.go",
+      "binding_confidence": "high",
+      "notes": "Claude auth state test"
+    },
+    {
+      "required_scenario": "clear_no_auth_present",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_HasAuthFilesEmpty",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "high",
+      "notes": "Empty auth files check"
+    },
+    {
+      "required_scenario": "clear_removes_auth",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ClearAuthFiles",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "high",
+      "notes": "Clear auth files test"
+    },
+    {
+      "required_scenario": "codex_auth_state",
+      "family": "monitoring_health",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_CodexAuthState",
+      "test_file": "internal/provider/e2e_auth_state_test.go",
+      "binding_confidence": "high",
+      "notes": "Codex auth state test"
+    },
+    {
+      "required_scenario": "cooldown_clear_nonexistent",
+      "family": "rotation_cooldown",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_CooldownClearNonexistentProfile",
+      "test_file": "internal/e2e/workflows/rotation_exhaustion_test.go",
+      "binding_confidence": "high",
+      "notes": "Nonexistent profile clear returns zero rows without error"
+    },
+    {
+      "required_scenario": "cooldown_clear_removes",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_CooldownListAndClearAll",
+      "test_file": "internal/e2e/workflows/rotation_cooldown_test.go",
+      "binding_confidence": "high",
+      "notes": "Cooldown clear test"
+    },
+    {
+      "required_scenario": "cooldown_list_shows_active",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_CooldownListAndClearAll",
+      "test_file": "internal/e2e/workflows/rotation_cooldown_test.go",
+      "binding_confidence": "high",
+      "notes": "Cooldown list test"
+    },
+    {
+      "required_scenario": "cooldown_set_custom_duration",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_FiveHourCreditExhaustionSwitch",
+      "test_file": "internal/e2e/workflows/rotation_exhaustion_test.go",
+      "binding_confidence": "medium",
+      "notes": "Uses explicit five-hour custom cooldown duration"
+    },
+    {
+      "required_scenario": "cooldown_set_default",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_CooldownEnforcesDuringAutoRotation",
+      "test_file": "internal/e2e/workflows/rotation_cooldown_test.go",
+      "binding_confidence": "high",
+      "notes": "Cooldown enforcement test"
+    },
+    {
+      "required_scenario": "cross_provider_switching",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_CrossProviderSwitching",
+      "test_file": "internal/e2e/workflows/backup_activate_test.go",
+      "binding_confidence": "high",
+      "notes": "Cross provider switching test"
+    },
+    {
+      "required_scenario": "daemon_multi_instance_prevention",
+      "family": "daemon",
+      "scenario_type": "edge",
+      "bound_test": "TestDaemonMultiInstancePrevention",
+      "test_file": "internal/e2e/workflows/daemon_lifecycle_test.go",
+      "binding_confidence": "high",
+      "notes": "Multi-instance prevention test"
+    },
+    {
+      "required_scenario": "daemon_signal_handling",
+      "family": "daemon",
+      "scenario_type": "edge",
+      "bound_test": "TestDaemonSignals",
+      "test_file": "internal/e2e/workflows/daemon_signals_test.go",
+      "binding_confidence": "high",
+      "notes": "Daemon signals test"
+    },
+    {
+      "required_scenario": "daemon_start_new",
+      "family": "daemon",
+      "scenario_type": "happy",
+      "bound_test": "TestDaemonLifecycle",
+      "test_file": "internal/e2e/workflows/daemon_lifecycle_test.go",
+      "binding_confidence": "high",
+      "notes": "Daemon lifecycle test"
+    },
+    {
+      "required_scenario": "daemon_status_running",
+      "family": "daemon",
+      "scenario_type": "happy",
+      "bound_test": "TestDaemonLifecycle",
+      "test_file": "internal/e2e/workflows/daemon_lifecycle_test.go",
+      "binding_confidence": "high",
+      "notes": "Daemon status in lifecycle test"
+    },
+    {
+      "required_scenario": "daemon_stop_running",
+      "family": "daemon",
+      "scenario_type": "happy",
+      "bound_test": "TestDaemonLifecycle",
+      "test_file": "internal/e2e/workflows/daemon_lifecycle_test.go",
+      "binding_confidence": "high",
+      "notes": "Daemon stop in lifecycle test"
+    },
+    {
+      "required_scenario": "delete_nonexistent_profile",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_DeleteNonExistentProfile",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "high",
+      "notes": "Delete non-existent profile error"
+    },
+    {
+      "required_scenario": "delete_removes_profile",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_DeleteCommand",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "high",
+      "notes": "Delete command test"
+    },
+    {
+      "required_scenario": "exec_with_isolated_profile",
+      "family": "profile_isolation",
+      "scenario_type": "happy",
+      "bound_test": "TestSmartRunner_E2E",
+      "test_file": "internal/exec/smart_runner_e2e_test.go",
+      "binding_confidence": "medium",
+      "notes": "Smart runner executes with isolated profile"
+    },
+    {
+      "required_scenario": "export_round_trip",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_BundleRoundTrip",
+      "test_file": "internal/e2e/workflows/bundle_workflow_test.go",
+      "binding_confidence": "medium",
+      "notes": "Bundle round trip covers export/import cycle"
+    },
+    {
+      "required_scenario": "gemini_auth_state",
+      "family": "monitoring_health",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_GeminiAuthState",
+      "test_file": "internal/provider/e2e_auth_state_test.go",
+      "binding_confidence": "high",
+      "notes": "Gemini auth state test"
+    },
+    {
+      "required_scenario": "help_shows_usage",
+      "family": "misc_info",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_StatusCommand",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "low",
+      "notes": "Status command runs successfully; needs explicit help test"
+    },
+    {
+      "required_scenario": "import_conflicting_profile",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_MultipleProfilesSameProvider",
+      "test_file": "internal/authfile/e2e_backup_restore_test.go",
+      "binding_confidence": "medium",
+      "notes": "Multiple profiles handling covers conflicts"
+    },
+    {
+      "required_scenario": "import_corrupted_file",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_CorruptedProfileJSON",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "high",
+      "notes": "Corrupted JSON handling"
+    },
+    {
+      "required_scenario": "import_from_export",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_BundleExportImportWorkflow",
+      "test_file": "internal/e2e/workflows/bundle_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Bundle export/import workflow"
+    },
+    {
+      "required_scenario": "import_missing_file",
+      "family": "auth_management",
+      "scenario_type": "failure",
+      "bound_test": "TestE2E_MissingRequiredFile",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "medium",
+      "notes": "Missing file error"
+    },
+    {
+      "required_scenario": "ls_empty_vault",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_EmptyVaultList",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "high",
+      "notes": "Empty vault list test"
+    },
+    {
+      "required_scenario": "ls_lists_profiles",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ListCommand",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "high",
+      "notes": "List command test"
+    },
+    {
+      "required_scenario": "monitor_brief_format",
+      "family": "monitoring_health",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_MonitorBriefFormat",
+      "test_file": "cmd/caam/cmd/monitor_precheck_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Monitor brief format test"
+    },
+    {
+      "required_scenario": "monitor_json_output",
+      "family": "monitoring_health",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_MonitorJSONFormat",
+      "test_file": "cmd/caam/cmd/monitor_precheck_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Monitor JSON format test"
+    },
+    {
+      "required_scenario": "monitor_table_format",
+      "family": "monitoring_health",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_MonitorTableFormat",
+      "test_file": "cmd/caam/cmd/monitor_precheck_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Monitor table format test"
+    },
+    {
+      "required_scenario": "multi_profile_same_provider",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_MultipleProfilesSameProvider",
+      "test_file": "internal/authfile/e2e_backup_restore_test.go",
+      "binding_confidence": "high",
+      "notes": "Multiple profiles same provider test"
+    },
+    {
+      "required_scenario": "multi_provider_workflow",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_MultiProviderWorkflow",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "high",
+      "notes": "Multi-provider workflow test"
+    },
+    {
+      "required_scenario": "next_shows_recommendation",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_RotationAlgorithms",
+      "test_file": "internal/e2e/workflows/rotation_cooldown_test.go",
+      "binding_confidence": "medium",
+      "notes": "Rotation algorithms include recommendation logic"
+    },
+    {
+      "required_scenario": "next_with_all_cooldown",
+      "family": "rotation_cooldown",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_CooldownEnforcesDuringAutoRotation",
+      "test_file": "internal/e2e/workflows/rotation_cooldown_test.go",
+      "binding_confidence": "medium",
+      "notes": "All-cooldown branch validates deterministic failure behavior"
+    },
+    {
+      "required_scenario": "pick_selects_profile",
+      "family": "misc_info",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ProfileWorkflow",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "medium",
+      "notes": "Profile workflow includes selection"
+    },
+    {
+      "required_scenario": "precheck_no_profiles",
+      "family": "monitoring_health",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_PrecheckNoProfiles",
+      "test_file": "cmd/caam/cmd/monitor_precheck_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Precheck no profiles test"
+    },
+    {
+      "required_scenario": "precheck_unknown_provider",
+      "family": "monitoring_health",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_PrecheckUnknownProvider",
+      "test_file": "cmd/caam/cmd/monitor_precheck_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Precheck unknown provider test"
+    },
+    {
+      "required_scenario": "precheck_validates_auth",
+      "family": "monitoring_health",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_PrecheckTableFormat",
+      "test_file": "cmd/caam/cmd/monitor_precheck_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Precheck table format validates auth"
+    },
+    {
+      "required_scenario": "profile_add_new",
+      "family": "profile_isolation",
+      "scenario_type": "happy",
+      "bound_test": "TestProfileLifecycle",
+      "test_file": "internal/e2e/workflows/profile_lifecycle_test.go",
+      "binding_confidence": "high",
+      "notes": "Profile lifecycle includes add"
+    },
+    {
+      "required_scenario": "profile_delete_existing",
+      "family": "profile_isolation",
+      "scenario_type": "happy",
+      "bound_test": "TestProfileLifecycle",
+      "test_file": "internal/e2e/workflows/profile_lifecycle_test.go",
+      "binding_confidence": "high",
+      "notes": "Profile lifecycle includes delete"
+    },
+    {
+      "required_scenario": "profile_ls_shows_profiles",
+      "family": "profile_isolation",
+      "scenario_type": "happy",
+      "bound_test": "TestProfileLifecycle",
+      "test_file": "internal/e2e/workflows/profile_lifecycle_test.go",
+      "binding_confidence": "medium",
+      "notes": "Profile lifecycle includes list"
+    },
+    {
+      "required_scenario": "project_get_shows_association",
+      "family": "project_association",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ProjectAssociationWorkflow",
+      "test_file": "internal/e2e/workflows/project_association_test.go",
+      "binding_confidence": "high",
+      "notes": "Project get in association workflow"
+    },
+    {
+      "required_scenario": "project_list_shows_all",
+      "family": "project_association",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ProjectAssociationWorkflow",
+      "test_file": "internal/e2e/workflows/project_association_test.go",
+      "binding_confidence": "medium",
+      "notes": "Project list in association workflow"
+    },
+    {
+      "required_scenario": "project_remove_existing",
+      "family": "project_association",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ProjectAssociationWorkflow",
+      "test_file": "internal/e2e/workflows/project_association_test.go",
+      "binding_confidence": "medium",
+      "notes": "Project remove in association workflow"
+    },
+    {
+      "required_scenario": "project_set_new_association",
+      "family": "project_association",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ProjectAssociationWorkflow",
+      "test_file": "internal/e2e/workflows/project_association_test.go",
+      "binding_confidence": "high",
+      "notes": "Project association workflow"
+    },
+    {
+      "required_scenario": "provider_env_isolation",
+      "family": "monitoring_health",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_ProviderEnvIsolation",
+      "test_file": "internal/provider/e2e_auth_state_test.go",
+      "binding_confidence": "high",
+      "notes": "Provider env isolation test"
+    },
+    {
+      "required_scenario": "rate_limit_recovery",
+      "family": "daemon",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_RateLimitRecoveryWorkflow",
+      "test_file": "internal/e2e/workflows/ratelimit_recovery_test.go",
+      "binding_confidence": "high",
+      "notes": "Rate limit recovery workflow"
+    },
+    {
+      "required_scenario": "refresh_token_expired",
+      "family": "rotation_cooldown",
+      "scenario_type": "edge",
+      "bound_test": "TestSmartRunner_E2E_CodexRefreshTokenReusedTriggersSwitch",
+      "test_file": "internal/exec/smart_runner_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Refresh token expired triggers switch"
+    },
+    {
+      "required_scenario": "run_with_auto_failover",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestSmartRunner_E2E_MultiProfileChainUntilHealthy",
+      "test_file": "internal/exec/smart_runner_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Multi-profile failover"
+    },
+    {
+      "required_scenario": "run_with_successful_execution",
+      "family": "rotation_cooldown",
+      "scenario_type": "happy",
+      "bound_test": "TestSmartRunner_E2E",
+      "test_file": "internal/exec/smart_runner_e2e_test.go",
+      "binding_confidence": "high",
+      "notes": "Smart runner execution"
+    },
+    {
+      "required_scenario": "status_no_profiles",
+      "family": "auth_management",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_EmptyVaultList",
+      "test_file": "internal/authfile/e2e_error_handling_test.go",
+      "binding_confidence": "high",
+      "notes": "Empty vault handling"
+    },
+    {
+      "required_scenario": "status_shows_active",
+      "family": "auth_management",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_StatusCommand",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "high",
+      "notes": "Status command test"
+    },
+    {
+      "required_scenario": "sync_conflict_resolution",
+      "family": "sync",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_SyncHistoryTracking",
+      "test_file": "internal/e2e/workflows/sync_workflow_test.go",
+      "binding_confidence": "medium",
+      "notes": "Sync history tracks conflicts"
+    },
+    {
+      "required_scenario": "sync_init_new_config",
+      "family": "sync",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_MultiMachineSyncWorkflow",
+      "test_file": "internal/e2e/workflows/sync_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Multi-machine sync workflow"
+    },
+    {
+      "required_scenario": "sync_queue_shows_pending",
+      "family": "sync",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_SyncQueueManagement",
+      "test_file": "internal/e2e/workflows/sync_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Sync queue management test"
+    },
+    {
+      "required_scenario": "sync_status_shows_state",
+      "family": "sync",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_MultiMachineSyncWorkflow",
+      "test_file": "internal/e2e/workflows/sync_workflow_test.go",
+      "binding_confidence": "high",
+      "notes": "Sync status in workflow"
+    },
+    {
+      "required_scenario": "sync_test_connection",
+      "family": "sync",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_FreshnessComparison",
+      "test_file": "internal/e2e/workflows/sync_workflow_test.go",
+      "binding_confidence": "medium",
+      "notes": "Freshness comparison tests connection"
+    },
+    {
+      "required_scenario": "tui_key_bindings",
+      "family": "tui",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_KeyBindingsHelp",
+      "test_file": "internal/tui/e2e_interaction_test.go",
+      "binding_confidence": "high",
+      "notes": "TUI key bindings test"
+    },
+    {
+      "required_scenario": "tui_launches",
+      "family": "tui",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_ViewRendering",
+      "test_file": "internal/tui/e2e_interaction_test.go",
+      "binding_confidence": "high",
+      "notes": "TUI view rendering test"
+    },
+    {
+      "required_scenario": "tui_mouse_support",
+      "family": "tui",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_StateTransitions",
+      "test_file": "internal/tui/e2e_interaction_test.go",
+      "binding_confidence": "medium",
+      "notes": "State transitions cover mouse interactions"
+    },
+    {
+      "required_scenario": "tui_navigation",
+      "family": "tui",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_NavigationWithArrowKeys",
+      "test_file": "internal/tui/e2e_interaction_test.go",
+      "binding_confidence": "high",
+      "notes": "TUI navigation test"
+    },
+    {
+      "required_scenario": "tui_profile_selection",
+      "family": "tui",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_EnterKeyActivatesProfile",
+      "test_file": "internal/tui/e2e_interaction_test.go",
+      "binding_confidence": "high",
+      "notes": "TUI profile selection test"
+    },
+    {
+      "required_scenario": "tui_quit",
+      "family": "tui",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_QuitKeyBinding",
+      "test_file": "internal/tui/e2e_interaction_test.go",
+      "binding_confidence": "high",
+      "notes": "TUI quit key binding test"
+    },
+    {
+      "required_scenario": "tui_resize",
+      "family": "tui",
+      "scenario_type": "edge",
+      "bound_test": "TestE2E_WindowResizing",
+      "test_file": "internal/tui/e2e_interaction_test.go",
+      "binding_confidence": "high",
+      "notes": "TUI window resize test"
+    },
+    {
+      "required_scenario": "version_shows_info",
+      "family": "misc_info",
+      "scenario_type": "happy",
+      "bound_test": "TestE2E_StatusCommand",
+      "test_file": "cmd/caam/cmd/e2e_cli_test.go",
+      "binding_confidence": "low",
+      "notes": "Status command may include version; needs explicit test"
+    }
+  ],
+  "binding_metadata": {
+    "total_bindings": 78,
+    "binding_confidence_counts": {
+      "high": 58,
+      "medium": 17,
+      "low": 3
+    },
+    "generated_at": "2026-03-02T19:30:00Z",
+    "source_bead": "bd-1r67.3",
+    "notes": "Bindings are explicit declarations mapping matrix scenarios to existing E2E tests. Low confidence bindings indicate scenarios needing dedicated tests."
+  }
+}

@@ -1,0 +1,608 @@
+{
+  "matrix_version": "1.0.0",
+  "generated_at": "2026-03-02T00:00:00Z",
+  "source_bead": "bd-1r67.3.3.1",
+  "description": "CLI workflow matrix inventory: command families × risk levels × required scenarios",
+  "command_families": [
+    {
+      "family": "auth_management",
+      "description": "Core auth file backup/restore operations",
+      "commands": [
+        {"name": "backup", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "activate", "risk_level": "high", "modifies_state": true, "destructive": false, "aliases": ["switch", "use"]},
+        {"name": "export", "risk_level": "medium", "modifies_state": false, "destructive": false},
+        {"name": "import", "risk_level": "high", "modifies_state": true, "destructive": false},
+        {"name": "status", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "ls", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "clear", "risk_level": "high", "modifies_state": true, "destructive": true},
+        {"name": "paths", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "delete", "risk_level": "high", "modifies_state": true, "destructive": true}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "backup_new_profile",
+          "backup_overwrite_existing",
+          "activate_existing_profile",
+          "activate_with_backup_current",
+          "export_round_trip",
+          "import_from_export",
+          "status_shows_active",
+          "ls_lists_profiles",
+          "clear_removes_auth",
+          "delete_removes_profile"
+        ],
+        "failure": [
+          "backup_no_auth_files",
+          "backup_invalid_tool",
+          "activate_nonexistent_profile",
+          "activate_missing_auth_files",
+          "import_corrupted_file",
+          "import_missing_file",
+          "clear_no_auth_present",
+          "delete_nonexistent_profile"
+        ],
+        "edge": [
+          "backup_profile_with_special_chars",
+          "activate_concurrent_access",
+          "activate_same_profile_twice",
+          "status_no_profiles",
+          "ls_empty_vault",
+          "import_conflicting_profile"
+        ]
+      }
+    },
+    {
+      "family": "profile_isolation",
+      "description": "Isolated profile management for parallel sessions",
+      "commands": [
+        {"name": "profile add", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "profile delete", "risk_level": "high", "modifies_state": true, "destructive": true},
+        {"name": "profile ls", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "profile status", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "profile describe", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "profile clone", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "profile unlock", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "login", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "exec", "risk_level": "medium", "modifies_state": false, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "profile_add_new",
+          "profile_delete_existing",
+          "profile_ls_shows_profiles",
+          "login_isolated_profile",
+          "exec_with_isolated_profile"
+        ],
+        "failure": [
+          "profile_add_already_exists",
+          "profile_delete_nonexistent",
+          "profile_delete_in_use",
+          "login_browser_failure",
+          "exec_missing_profile"
+        ],
+        "edge": [
+          "profile_add_max_profiles",
+          "exec_concurrent_sessions",
+          "login_interrupted_flow",
+          "exec_with_invalid_args"
+        ]
+      }
+    },
+    {
+      "family": "rotation_cooldown",
+      "description": "Smart profile rotation and cooldown management",
+      "commands": [
+        {"name": "activate --auto", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "next", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "run", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "cooldown set", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "cooldown list", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "cooldown clear", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "refresh", "risk_level": "medium", "modifies_state": true, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "activate_auto_selects_best",
+          "activate_auto_with_cooldown_profiles",
+          "next_shows_recommendation",
+          "run_with_successful_execution",
+          "run_with_auto_failover",
+          "cooldown_set_default",
+          "cooldown_set_custom_duration",
+          "cooldown_list_shows_active",
+          "cooldown_clear_removes"
+        ],
+        "failure": [
+          "activate_auto_no_profiles",
+          "activate_auto_all_in_cooldown",
+          "run_command_failure",
+          "run_max_retries_exceeded",
+          "cooldown_clear_nonexistent"
+        ],
+        "edge": [
+          "activate_auto_single_profile",
+          "run_concurrent_executions",
+          "cooldown_set_expired_time",
+          "next_with_all_cooldown",
+          "refresh_token_expired"
+        ]
+      }
+    },
+    {
+      "family": "project_association",
+      "description": "Project-directory to profile linking",
+      "commands": [
+        {"name": "project set", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "project get", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "project show", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "project list", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "project remove", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "project clear", "risk_level": "medium", "modifies_state": true, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "project_set_new_association",
+          "project_get_shows_association",
+          "project_list_shows_all",
+          "project_remove_existing",
+          "project_clear_all"
+        ],
+        "failure": [
+          "project_set_invalid_profile",
+          "project_get_no_association",
+          "project_remove_nonexistent"
+        ],
+        "edge": [
+          "project_set_nested_directory",
+          "project_set_overwrites_existing",
+          "project_get_cascades_from_parent"
+        ]
+      }
+    },
+    {
+      "family": "monitoring_health",
+      "description": "Health monitoring and diagnostics",
+      "commands": [
+        {"name": "monitor", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "precheck", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "doctor", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "validate", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "verify", "risk_level": "low", "modifies_state": false, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "monitor_shows_all_tools",
+          "monitor_json_output",
+          "monitor_table_format",
+          "precheck_validates_auth",
+          "doctor_all_healthy",
+          "validate_auth_files",
+          "verify_profile_integrity"
+        ],
+        "failure": [
+          "monitor_no_auth",
+          "precheck_expired_token",
+          "precheck_invalid_auth",
+          "doctor_finds_issues",
+          "validate_missing_files",
+          "verify_corrupted_profile"
+        ],
+        "edge": [
+          "monitor_multiple_providers",
+          "monitor_brief_format",
+          "precheck_unknown_provider",
+          "doctor_quiet_mode"
+        ]
+      }
+    },
+    {
+      "family": "session_history",
+      "description": "Session tracking and usage history",
+      "commands": [
+        {"name": "sessions", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "history", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "usage", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "cost", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "cost tokens", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "cost sessions", "risk_level": "low", "modifies_state": false, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "sessions_list_active",
+          "history_shows_switches",
+          "usage_shows_totals",
+          "cost_shows_estimates",
+          "cost_tokens_breakdown"
+        ],
+        "failure": [
+          "sessions_no_data",
+          "history_empty",
+          "usage_no_activity",
+          "cost_no_rates_configured"
+        ],
+        "edge": [
+          "sessions_long_running",
+          "history_large_dataset",
+          "usage_filter_by_date",
+          "cost_custom_rates"
+        ]
+      }
+    },
+    {
+      "family": "sync",
+      "description": "Multi-machine synchronization",
+      "commands": [
+        {"name": "sync init", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "sync add", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "sync enable", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "sync disable", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "sync status", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "sync queue", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "sync test", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "sync log", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "sync remove", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "sync discover", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "sync edit", "risk_level": "medium", "modifies_state": true, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "sync_init_new_config",
+          "sync_add_machine",
+          "sync_enable_syncing",
+          "sync_status_shows_state",
+          "sync_queue_shows_pending",
+          "sync_test_connection",
+          "sync_remove_machine"
+        ],
+        "failure": [
+          "sync_init_already_initialized",
+          "sync_add_duplicate_machine",
+          "sync_test_connection_failed",
+          "sync_remove_nonexistent"
+        ],
+        "edge": [
+          "sync_conflict_resolution",
+          "sync_large_vault",
+          "sync_network_timeout",
+          "sync_concurrent_updates"
+        ]
+      }
+    },
+    {
+      "family": "daemon",
+      "description": "Background service management",
+      "commands": [
+        {"name": "daemon start", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "daemon stop", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "daemon status", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "daemon logs", "risk_level": "low", "modifies_state": false, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "daemon_start_new",
+          "daemon_stop_running",
+          "daemon_status_running",
+          "daemon_logs_shows_output"
+        ],
+        "failure": [
+          "daemon_start_already_running",
+          "daemon_stop_not_running",
+          "daemon_status_not_running",
+          "daemon_logs_empty"
+        ],
+        "edge": [
+          "daemon_multi_instance_prevention",
+          "daemon_signal_handling",
+          "daemon_restart",
+          "daemon_logs_rotation"
+        ]
+      }
+    },
+    {
+      "family": "configuration",
+      "description": "Configuration management",
+      "commands": [
+        {"name": "config get", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "config set", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "config show", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "config path", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "config reset", "risk_level": "high", "modifies_state": true, "destructive": true},
+        {"name": "config tui", "risk_level": "medium", "modifies_state": true, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "config_get_existing_key",
+          "config_set_new_value",
+          "config_set_update_value",
+          "config_show_all",
+          "config_path_shows_location",
+          "config_reset_defaults"
+        ],
+        "failure": [
+          "config_get_nonexistent_key",
+          "config_set_invalid_value",
+          "config_reset_no_config"
+        ],
+        "edge": [
+          "config_set_nested_key",
+          "config_show_json_output",
+          "config_tui_theme_change"
+        ]
+      }
+    },
+    {
+      "family": "pool_management",
+      "description": "Account pool operations",
+      "commands": [
+        {"name": "pool list", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "pool status", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "pool refresh", "risk_level": "medium", "modifies_state": true, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "pool_list_shows_pools",
+          "pool_status_healthy",
+          "pool_refresh_updates"
+        ],
+        "failure": [
+          "pool_list_empty",
+          "pool_status_unhealthy",
+          "pool_refresh_failure"
+        ],
+        "edge": [
+          "pool_list_multiple_providers",
+          "pool_refresh_partial_failure"
+        ]
+      }
+    },
+    {
+      "family": "robot_automated",
+      "description": "Automated/CI-friendly operations",
+      "commands": [
+        {"name": "robot act", "risk_level": "high", "modifies_state": true, "destructive": false},
+        {"name": "robot config", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "robot doctor", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot health", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot history", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot limits", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot next", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot paths", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot precheck", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot status", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot validate", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "robot watch", "risk_level": "medium", "modifies_state": false, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "robot_act_executes",
+          "robot_config_shows_config",
+          "robot_doctor_passes",
+          "robot_health_healthy",
+          "robot_history_shows_actions",
+          "robot_limits_shows_limits",
+          "robot_next_recommends",
+          "robot_status_shows_state",
+          "robot_validate_passes"
+        ],
+        "failure": [
+          "robot_act_failure",
+          "robot_doctor_finds_issues",
+          "robot_health_unhealthy",
+          "robot_validate_fails"
+        ],
+        "edge": [
+          "robot_act_dry_run",
+          "robot_watch_timeout",
+          "robot_json_output"
+        ]
+      }
+    },
+    {
+      "family": "setup_install",
+      "description": "Installation and setup operations",
+      "commands": [
+        {"name": "init", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "setup", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "setup --distributed", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "uninstall", "risk_level": "high", "modifies_state": true, "destructive": true}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "init_creates_config",
+          "setup_configures_all",
+          "setup_distributed",
+          "uninstall_removes_all"
+        ],
+        "failure": [
+          "init_already_initialized",
+          "setup_permission_denied",
+          "uninstall_no_original_backup"
+        ],
+        "edge": [
+          "init_interactive",
+          "setup_partial_failure",
+          "uninstall_dry_run",
+          "uninstall_keep_backups"
+        ]
+      }
+    },
+    {
+      "family": "workspace",
+      "description": "Workspace management",
+      "commands": [
+        {"name": "workspace create", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "workspace list", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "workspace delete", "risk_level": "high", "modifies_state": true, "destructive": true}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "workspace_create_new",
+          "workspace_list_shows_all",
+          "workspace_delete_existing"
+        ],
+        "failure": [
+          "workspace_create_already_exists",
+          "workspace_delete_nonexistent",
+          "workspace_delete_in_use"
+        ],
+        "edge": [
+          "workspace_create_nested",
+          "workspace_list_empty"
+        ]
+      }
+    },
+    {
+      "family": "bundle",
+      "description": "Profile bundle operations",
+      "commands": [
+        {"name": "bundle", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "bundle export", "risk_level": "medium", "modifies_state": false, "destructive": false},
+        {"name": "bundle import", "risk_level": "high", "modifies_state": true, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "bundle_shows_info",
+          "bundle_export_creates",
+          "bundle_import_restores",
+          "bundle_round_trip"
+        ],
+        "failure": [
+          "bundle_export_empty",
+          "bundle_import_corrupted",
+          "bundle_import_missing_file"
+        ],
+        "edge": [
+          "bundle_export_selective",
+          "bundle_import_conflict",
+          "bundle_dry_run"
+        ]
+      }
+    },
+    {
+      "family": "misc_info",
+      "description": "Miscellaneous informational commands",
+      "commands": [
+        {"name": "version", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "help", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "completion", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "shell init", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "pick", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "alias", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "tag", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "open", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "reload", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "resume", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "env", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "which", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "limits", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "favorite", "risk_level": "medium", "modifies_state": true, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "version_shows_info",
+          "help_shows_usage",
+          "completion_generates",
+          "shell_init_shows_script",
+          "pick_selects_profile",
+          "alias_sets_alias",
+          "tag_adds_tag",
+          "open_opens_browser",
+          "env_shows_env",
+          "which_shows_path",
+          "limits_shows_limits"
+        ],
+        "failure": [
+          "pick_no_profiles",
+          "alias_invalid_name",
+          "tag_invalid_profile",
+          "open_no_browser"
+        ],
+        "edge": [
+          "pick_with_fzf",
+          "pick_without_fzf",
+          "completion_bash_zsh_fish",
+          "tag_list_all",
+          "tag_clear_all"
+        ]
+      }
+    },
+    {
+      "family": "wezterm",
+      "description": "WezTerm integration",
+      "commands": [
+        {"name": "wezterm", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "wezterm login-all", "risk_level": "medium", "modifies_state": true, "destructive": false},
+        {"name": "wezterm oauth-report", "risk_level": "low", "modifies_state": false, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "wezterm_shows_status",
+          "wezterm_login_all",
+          "wezterm_oauth_report"
+        ],
+        "failure": [
+          "wezterm_not_installed",
+          "wezterm_login_failure"
+        ],
+        "edge": [
+          "wezterm_multiple_sessions"
+        ]
+      }
+    },
+    {
+      "family": "tui",
+      "description": "Terminal User Interface",
+      "commands": [
+        {"name": "tui", "risk_level": "low", "modifies_state": false, "destructive": false},
+        {"name": "caam (no args)", "risk_level": "low", "modifies_state": false, "destructive": false}
+      ],
+      "required_scenarios": {
+        "happy": [
+          "tui_launches",
+          "tui_navigation",
+          "tui_profile_selection",
+          "tui_key_bindings",
+          "tui_quit"
+        ],
+        "failure": [
+          "tui_no_profiles",
+          "tui_terminal_issues"
+        ],
+        "edge": [
+          "tui_resize",
+          "tui_mouse_support",
+          "tui_accessibility_mode",
+          "tui_no_tty"
+        ]
+      }
+    }
+  ],
+  "risk_level_definitions": {
+    "low": "Read-only operations with no state modification. Safe to run multiple times.",
+    "medium": "Operations that modify state but can be undone or reversed. User confirmation may be required.",
+    "high": "Destructive operations that permanently delete data or change state irreversibly. Requires confirmation."
+  },
+  "scenario_type_definitions": {
+    "happy": "Normal successful operation with valid inputs and expected outcomes.",
+    "failure": "Error conditions: invalid inputs, missing resources, permission issues, etc.",
+    "edge": "Boundary conditions: empty states, concurrent access, special characters, resource limits."
+  },
+  "e2e_coverage_summary": {
+    "total_command_families": 18,
+    "total_commands": 112,
+    "total_required_scenarios": {
+      "happy": 147,
+      "failure": 78,
+      "edge": 79
+    },
+    "existing_e2e_tests": 122,
+    "coverage_gap": {
+      "scenarios_without_tests": 182,
+      "note": "See e2e_inventory.json for existing test coverage"
+    }
+  },
+  "dependency_reference": {
+    "e2e_inventory": "artifacts/test-audit/e2e_inventory.json",
+    "source_bead": "bd-1r67.1.1.3"
+  }
+}
