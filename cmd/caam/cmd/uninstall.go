@@ -83,7 +83,10 @@ func runUninstall(cmd *cobra.Command, args []string) error {
 	if !force {
 		fmt.Printf("\nProceed? [y/N]: ")
 		var confirm string
-		fmt.Scanln(&confirm)
+		if _, err := fmt.Scanln(&confirm); err != nil {
+			fmt.Println("Cancelled")
+			return nil
+		}
 		if strings.ToLower(strings.TrimSpace(confirm)) != "y" {
 			fmt.Println("Cancelled")
 			return nil

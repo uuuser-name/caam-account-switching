@@ -1346,7 +1346,10 @@ Examples:
 		if !force {
 			fmt.Printf("Delete profile %s/%s? [y/N]: ", tool, profileName)
 			var confirm string
-			fmt.Scanln(&confirm)
+			if _, err := fmt.Scanln(&confirm); err != nil {
+				fmt.Println("Cancelled")
+				return nil
+			}
 			if strings.ToLower(confirm) != "y" {
 				fmt.Println("Cancelled")
 				return nil
@@ -1442,7 +1445,10 @@ Examples:
 		if !force {
 			fmt.Printf("Clear auth for %s? This will log you out. [y/N]: ", tool)
 			var confirm string
-			fmt.Scanln(&confirm)
+			if _, err := fmt.Scanln(&confirm); err != nil {
+				fmt.Println("Cancelled")
+				return nil
+			}
 			if strings.ToLower(confirm) != "y" {
 				fmt.Println("Cancelled")
 				return nil
@@ -1549,7 +1555,9 @@ Examples:
 
 		// Save updated profile with browser config
 		if err := prof.Save(); err != nil {
-			profileStore.Delete(tool, name)
+			if delErr := profileStore.Delete(tool, name); delErr != nil {
+				return fmt.Errorf("save profile: %w (cleanup delete failed: %v)", err, delErr)
+			}
 			return fmt.Errorf("save profile: %w", err)
 		}
 
@@ -1557,7 +1565,9 @@ Examples:
 		ctx := context.Background()
 		if err := prov.PrepareProfile(ctx, prof); err != nil {
 			// Clean up on failure
-			profileStore.Delete(tool, name)
+			if delErr := profileStore.Delete(tool, name); delErr != nil {
+				return fmt.Errorf("prepare profile: %w (cleanup delete failed: %v)", err, delErr)
+			}
 			return fmt.Errorf("prepare profile: %w", err)
 		}
 
@@ -1661,7 +1671,10 @@ var profileDeleteCmd = &cobra.Command{
 		if !force {
 			fmt.Printf("Delete isolated profile %s/%s? [y/N]: ", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 			var confirm string
-			fmt.Scanln(&confirm)
+			if _, err := fmt.Scanln(&confirm); err != nil {
+				fmt.Println("Cancelled")
+				return nil
+			}
 			if strings.ToLower(confirm) != "y" {
 				fmt.Println("Cancelled")
 				return nil
@@ -1794,7 +1807,10 @@ Examples:
 		fmt.Printf("WARNING: Force-unlocking profile locked by running process (PID %d)\n", lockInfo.PID)
 		fmt.Printf("Force unlock %s/%s? This may cause data corruption! [y/N]: ", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 		var confirm string
-		fmt.Scanln(&confirm)
+		if _, err := fmt.Scanln(&confirm); err != nil {
+			fmt.Println("Cancelled")
+			return nil
+		}
 		if strings.ToLower(confirm) != "y" {
 			fmt.Println("Cancelled")
 			return nil

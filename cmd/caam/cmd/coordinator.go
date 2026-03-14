@@ -306,11 +306,3 @@ var coordinatorStatusCmd = &cobra.Command{
 func init() {
 	coordinatorCmd.AddCommand(coordinatorStatusCmd)
 }
-
-// filterClaudePanes returns true for panes likely running Claude Code.
-func filterClaudePanes(pane coordinator.Pane) bool {
-	title := strings.ToLower(pane.Title)
-	return strings.Contains(title, "claude") ||
-		strings.Contains(title, "cc") ||
-		strings.Contains(title, "anthropic")
-}

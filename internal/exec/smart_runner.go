@@ -33,6 +33,18 @@ import (
 // ExecCommand allows mocking exec.CommandContext in tests
 var ExecCommand = exec.CommandContext
 
+var (
+	smartRunnerTerminalCandidates = func() []*os.File {
+		return []*os.File{os.Stdout, os.Stdin}
+	}
+	smartRunnerInputSource    = func() *os.File { return os.Stdin }
+	smartRunnerDuplicateInput = duplicateInputSource
+	smartRunnerIsTerminal     = term.IsTerminal
+	smartRunnerGetSize        = term.GetSize
+	smartRunnerMakeRaw        = term.MakeRaw
+	smartRunnerRestoreTerm    = term.Restore
+)
+
 // SmartRunner orchestrates the auto-handoff flow for seamless profile switching.
 // When a rate limit is detected in the CLI output, SmartRunner:
 // 1. Selects the best backup profile using the rotation algorithm
@@ -74,10 +86,12 @@ type SmartRunner struct {
 	// the just-interrupted session is still draining.
 	rateLimitDispatchPausedUntil time.Time
 	// Seamless resume state for codex auto-handoff.
-	seamlessResumePending bool
-	seamlessResumeHint    string
-	seamlessResumeArmedAt time.Time
-	seamlessResumeOutput  bool
+	seamlessResumePending   bool
+	seamlessResumeHint      string
+	seamlessResumeArmedAt   time.Time
+	seamlessResumeOutput    bool
+	seamlessResumeCanRerun  bool
+	seamlessResumeForceExit bool
 
 	// WaitGroup to track background goroutines (handleRateLimit)
 	wg sync.WaitGroup
@@ -96,6 +110,7 @@ const seamlessResumeDepthEnv = "CAAM_SEAMLESS_RESUME_DEPTH"
 const maxSeamlessResumeDepth = 1
 const seamlessResumeMaxDelay = 20 * time.Second
 const defaultPostStartDelay = 1200 * time.Millisecond
+const defaultSeamlessResumeExitDelay = 1200 * time.Millisecond
 const defaultSeamlessResumePrompt = "Continue exactly where you left off before the rate-limit interruption."
 
 // SmartRunnerOptions configures the SmartRunner.
@@ -171,6 +186,8 @@ func (r *SmartRunner) run(ctx context.Context, opts RunOptions, preserveHandoffS
 	r.seamlessResumeHint = ""
 	r.seamlessResumeArmedAt = time.Time{}
 	r.seamlessResumeOutput = false
+	r.seamlessResumeCanRerun = opts.Provider.ID() == "codex" && (len(opts.Args) > 0 || strings.TrimSpace(opts.PostStartCommand) != "")
+	r.seamlessResumeForceExit = false
 	r.maxHandoffs = configuredMaxHandoffs(r.handoffConfig)
 	r.lastSessionID = strings.TrimSpace(opts.Profile.LastSessionID)
 	if r.providerID == "codex" && r.lastSessionID != "" {
@@ -234,7 +251,15 @@ func (r *SmartRunner) run(ctx context.Context, opts RunOptions, preserveHandoffS
 		if err := opts.Profile.LockWithCleanup(); err != nil {
 			return fmt.Errorf("lock profile: %w", err)
 		}
-		defer opts.Profile.Unlock()
+		defer func() {
+			if unlockErr := opts.Profile.Unlock(); unlockErr != nil {
+				if err == nil {
+					err = fmt.Errorf("unlock profile: %w", unlockErr)
+					return
+				}
+				err = errors.Join(err, fmt.Errorf("unlock profile: %w", unlockErr))
+			}
+		}()
 	}
 
 	// Get env
@@ -385,12 +410,15 @@ func (r *SmartRunner) handleRateLimit(ctx context.Context) {
 			r.authPool.SetCooldown(r.loginHandler.Provider(), r.currentProfile, cooldownDuration)
 		}
 		if r.db != nil {
-			r.db.SetCooldown(r.loginHandler.Provider(), r.currentProfile, time.Now(), cooldownDuration, cooldownNote)
+			if _, err := r.db.SetCooldown(r.loginHandler.Provider(), r.currentProfile, time.Now(), cooldownDuration, cooldownNote); err != nil {
+				fmt.Fprintf(os.Stderr, "[caam] Warning: failed to record cooldown: %v\n", err)
+			}
 		}
 		cooldownApplied = true
 	}
 
 	r.mu.Lock()
+	activeProfile := r.currentProfile
 	if r.state != Running {
 		r.mu.Unlock()
 		return // Already handling or failed
@@ -404,13 +432,13 @@ func (r *SmartRunner) handleRateLimit(ctx context.Context) {
 	}
 	r.state = RateLimited
 	r.authSwapped = false
-	if profile := strings.TrimSpace(r.currentProfile); profile != "" {
+	if profile := strings.TrimSpace(activeProfile); profile != "" {
 		r.exhaustedProfiles[profile] = struct{}{}
 	}
 	r.mu.Unlock()
 
 	// Notify detection
-	r.notifyHandoff(r.currentProfile, "", "Rate limit detected, selecting backup profile...")
+	r.notifyHandoff(activeProfile, "", "Rate limit detected, selecting backup profile...")
 	if authRefreshFailure {
 		// Immediately quarantine auth-invalid profiles, even if no handoff is possible.
 		applyCurrentCooldown()
@@ -424,8 +452,8 @@ func (r *SmartRunner) handleRateLimit(ctx context.Context) {
 	}
 
 	// 1. Save current state for rollback
-	r.previousProfile = r.currentProfile
-	if err := r.vault.Backup(fileSet, r.currentProfile); err != nil {
+	r.previousProfile = activeProfile
+	if err := r.vault.Backup(fileSet, activeProfile); err != nil {
 		r.failWithManual("failed to backup current profile: %v", err)
 		return
 	}
@@ -552,6 +580,7 @@ func (r *SmartRunner) handleRateLimit(ctx context.Context) {
 	// re-login. Trigger login only when auth refresh is explicitly invalid.
 	if shouldSkipInteractiveLogin(r.loginHandler.Provider(), reason) {
 		r.completeHandoff(nextProfile, true)
+		r.maybeScheduleSeamlessResumeTermination(ctx)
 		return
 	}
 
@@ -635,11 +664,13 @@ func (r *SmartRunner) completeHandoff(nextProfile string, loginSkipped bool) {
 		successMsg = successMsg + " Resume hint: " + resumeHint
 	}
 
-	r.notifier.Notify(&notify.Alert{
+	if err := r.notifier.Notify(&notify.Alert{
 		Level:   notify.Info,
 		Title:   "Profile switched",
 		Message: successMsg,
-	})
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "[caam] Warning: failed to send notification: %v\n", err)
+	}
 	if resumeHint != "" {
 		fmt.Fprintf(os.Stderr, "[caam] Resume hint: %s\n", resumeHint)
 	}
@@ -669,7 +700,9 @@ func (r *SmartRunner) rollback(fileSet authfile.AuthFileSet) {
 	if err := r.vault.Restore(fileSet, r.previousProfile); err != nil {
 		fmt.Fprintf(os.Stderr, "Rollback failed: %v\n", err)
 	}
+	r.mu.Lock()
 	r.currentProfile = r.previousProfile
+	r.mu.Unlock()
 	r.detector.Reset()
 	r.setState(Running)
 }
@@ -699,12 +732,14 @@ func (r *SmartRunner) failWithManual(format string, args ...interface{}) {
 		action = strings.TrimSuffix(action, ".") + ". Resume with: " + resumeHint
 	}
 
-	r.notifier.Notify(&notify.Alert{
+	if err := r.notifier.Notify(&notify.Alert{
 		Level:   notify.Warning,
 		Title:   "Auto-handoff failed",
 		Message: msg,
 		Action:  action,
-	})
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "[caam] Warning: failed to send notification: %v\n", err)
+	}
 
 	fmt.Fprintf(os.Stderr, "\n[caam] Auto-handoff failed: %s\n", msg)
 	if swapped && currentProfile != "" {
@@ -724,11 +759,13 @@ func (r *SmartRunner) notifyHandoff(from, to string, msg ...string) {
 	if len(msg) > 0 {
 		message = msg[0]
 	}
-	r.notifier.Notify(&notify.Alert{
+	if err := r.notifier.Notify(&notify.Alert{
 		Level:   notify.Info,
 		Title:   "Switching profiles",
 		Message: message,
-	})
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "[caam] Warning: failed to send notification: %v\n", err)
+	}
 }
 
 func (r *SmartRunner) setState(s HandoffState) {
@@ -836,7 +873,9 @@ func (r *SmartRunner) monitorOutput(ctx context.Context, ctrl pty.Controller, do
 					dispatched = false
 				}
 
-				writer.Write([]byte(output))
+				if _, err := writer.Write([]byte(output)); err != nil {
+					fmt.Fprintf(os.Stderr, "[caam] Warning: failed to process rate-limit output: %v\n", err)
+				}
 			} else if state == LoggingIn {
 				// Check for login completion and signal handleRateLimit
 				if r.loginHandler.IsLoginComplete(output) {
@@ -884,15 +923,15 @@ func currentPTYOptions() *pty.Options {
 }
 
 func currentTerminalSize() (cols, rows int, ok bool) {
-	for _, file := range []*os.File{os.Stdout, os.Stdin} {
+	for _, file := range smartRunnerTerminalCandidates() {
 		if file == nil {
 			continue
 		}
 		fd := int(file.Fd())
-		if !term.IsTerminal(fd) {
+		if !smartRunnerIsTerminal(fd) {
 			continue
 		}
-		width, height, err := term.GetSize(fd)
+		width, height, err := smartRunnerGetSize(fd)
 		if err != nil || width <= 0 || height <= 0 {
 			continue
 		}
@@ -902,14 +941,14 @@ func currentTerminalSize() (cols, rows int, ok bool) {
 }
 
 func (r *SmartRunner) startInteractiveInputRelay(ctx context.Context) func() {
-	stdin := os.Stdin
+	stdin := smartRunnerInputSource()
 	if stdin == nil {
 		return nil
 	}
 
 	relayInput := stdin
 	closeRelayInput := func() {}
-	if duplicated, closeDup, err := duplicateInputSource(stdin); err != nil {
+	if duplicated, closeDup, err := smartRunnerDuplicateInput(stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "[caam] Warning: failed to duplicate terminal input source: %v\n", err)
 	} else if duplicated != nil {
 		relayInput = duplicated
@@ -918,13 +957,13 @@ func (r *SmartRunner) startInteractiveInputRelay(ctx context.Context) func() {
 
 	restoreTerminal := func() {}
 	fd := int(stdin.Fd())
-	if term.IsTerminal(fd) {
-		oldState, err := term.MakeRaw(fd)
+	if smartRunnerIsTerminal(fd) {
+		oldState, err := smartRunnerMakeRaw(fd)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[caam] Warning: failed to enable raw terminal input: %v\n", err)
 		} else {
 			restoreTerminal = func() {
-				_ = term.Restore(fd, oldState)
+				_ = smartRunnerRestoreTerm(fd, oldState)
 			}
 		}
 	}
@@ -932,10 +971,15 @@ func (r *SmartRunner) startInteractiveInputRelay(ctx context.Context) func() {
 	stopRelay := make(chan struct{})
 	done := make(chan struct{})
 	var cleanupOnce sync.Once
+	var closeRelayOnce sync.Once
+
+	closeRelay := func() {
+		closeRelayOnce.Do(closeRelayInput)
+	}
 
 	go func() {
 		defer close(done)
-		defer cleanupOnce.Do(closeRelayInput)
+		defer closeRelay()
 		buf := make([]byte, 4096)
 		for {
 			n, err := relayInput.Read(buf)
@@ -969,7 +1013,7 @@ func (r *SmartRunner) startInteractiveInputRelay(ctx context.Context) func() {
 	return func() {
 		cleanupOnce.Do(func() {
 			close(stopRelay)
-			closeRelayInput()
+			closeRelay()
 			restoreTerminal()
 		})
 		select {
@@ -1059,13 +1103,50 @@ func (r *SmartRunner) maybeMarkSeamlessResumePending(hint string) {
 	if strings.TrimSpace(r.providerID) != "codex" {
 		return
 	}
-	if hint == "" && strings.TrimSpace(r.lastSessionID) == "" {
+	if hint == "" && strings.TrimSpace(r.lastSessionID) == "" && !r.seamlessResumeCanRerun {
 		return
 	}
 	r.seamlessResumePending = true
 	r.seamlessResumeHint = hint
 	r.seamlessResumeArmedAt = time.Now()
 	r.seamlessResumeOutput = false
+}
+
+func (r *SmartRunner) maybeScheduleSeamlessResumeTermination(ctx context.Context) {
+	r.mu.Lock()
+	pending := r.seamlessResumePending
+	providerID := strings.TrimSpace(r.providerID)
+	alreadyRequested := r.seamlessResumeForceExit
+	r.mu.Unlock()
+
+	if providerID != "codex" || !pending || alreadyRequested {
+		return
+	}
+
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+
+		timer := time.NewTimer(defaultSeamlessResumeExitDelay)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+
+		r.mu.Lock()
+		if !r.seamlessResumePending || r.seamlessResumeForceExit || strings.TrimSpace(r.providerID) != "codex" {
+			r.mu.Unlock()
+			return
+		}
+		r.seamlessResumeForceExit = true
+		r.mu.Unlock()
+
+		fmt.Fprintf(os.Stderr, "[caam] Ending exhausted session so seamless resume can continue on the switched profile.\n")
+		r.terminateCurrentSession()
+	}()
 }
 
 func (r *SmartRunner) maybeSchedulePostStartCommand(ctx context.Context, ctrl pty.Controller, command string, delay time.Duration) {
@@ -1184,7 +1265,7 @@ func (r *SmartRunner) maybeRunSeamlessResume(ctx context.Context, opts RunOption
 	if waitErr != nil {
 		return false, nil
 	}
-	if isInterruptExitCode(exitCode) || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return false, nil
 	}
 	if r.getState() == HandoffFailed {
@@ -1202,13 +1283,19 @@ func (r *SmartRunner) maybeRunSeamlessResume(ctx context.Context, opts RunOption
 	lastSessionID := strings.TrimSpace(r.lastSessionID)
 	armedAt := r.seamlessResumeArmedAt
 	outputSeen := r.seamlessResumeOutput
+	canRerun := r.seamlessResumeCanRerun
+	forceExit := r.seamlessResumeForceExit
 	r.seamlessResumePending = false
 	r.seamlessResumeHint = ""
 	r.seamlessResumeArmedAt = time.Time{}
 	r.seamlessResumeOutput = false
+	r.seamlessResumeForceExit = false
 	r.mu.Unlock()
 
 	if !pending || providerID != "codex" {
+		return false, nil
+	}
+	if isInterruptExitCode(exitCode) && !forceExit {
 		return false, nil
 	}
 	if armedAt.IsZero() || time.Since(armedAt) > seamlessResumeMaxDelay {
@@ -1219,8 +1306,13 @@ func (r *SmartRunner) maybeRunSeamlessResume(ctx context.Context, opts RunOption
 	}
 
 	resumeArgs, ok := resumeArgsFromHint(providerID, hint, lastSessionID)
+	restartOriginal := false
 	if !ok {
-		return false, nil
+		if canRerun && (len(opts.Args) > 0 || strings.TrimSpace(opts.PostStartCommand) != "") {
+			restartOriginal = true
+		} else {
+			return false, nil
+		}
 	}
 
 	resumeProfile := cloneProfileForSwitch(opts.Profile, currentProfile)
@@ -1230,10 +1322,16 @@ func (r *SmartRunner) maybeRunSeamlessResume(ctx context.Context, opts RunOption
 
 	resumeOpts := opts
 	resumeOpts.Profile = resumeProfile
-	resumeOpts.Args = append([]string(nil), resumeArgs...)
-	if !resumeHasPrompt(resumeArgs, extractResumeSessionID(append([]string{providerID}, resumeArgs...))) {
-		resumeOpts.PostStartCommand = defaultSeamlessResumePrompt
-		resumeOpts.PostStartDelay = defaultPostStartDelay
+	if restartOriginal {
+		resumeOpts.Args = append([]string(nil), opts.Args...)
+		resumeOpts.PostStartCommand = opts.PostStartCommand
+		resumeOpts.PostStartDelay = opts.PostStartDelay
+	} else {
+		resumeOpts.Args = append([]string(nil), resumeArgs...)
+		if !resumeHasPrompt(resumeArgs, extractResumeSessionID(append([]string{providerID}, resumeArgs...))) {
+			resumeOpts.PostStartCommand = defaultSeamlessResumePrompt
+			resumeOpts.PostStartDelay = defaultPostStartDelay
+		}
 	}
 	resumeOpts.NoLock = true
 	if resumeOpts.Env == nil {
@@ -1241,7 +1339,11 @@ func (r *SmartRunner) maybeRunSeamlessResume(ctx context.Context, opts RunOption
 	}
 	resumeOpts.Env[seamlessResumeDepthEnv] = strconv.Itoa(seamlessResumeDepth(opts) + 1)
 
-	fmt.Fprintf(os.Stderr, "[caam] Session hit a hard rate-limit exit; auto-resuming on profile %s...\n", resumeProfile.Name)
+	if restartOriginal {
+		fmt.Fprintf(os.Stderr, "[caam] Session hit a hard rate-limit exit; restarting original command on profile %s...\n", resumeProfile.Name)
+	} else {
+		fmt.Fprintf(os.Stderr, "[caam] Session hit a hard rate-limit exit; auto-resuming on profile %s...\n", resumeProfile.Name)
+	}
 
 	return true, r.run(ctx, resumeOpts, true)
 }

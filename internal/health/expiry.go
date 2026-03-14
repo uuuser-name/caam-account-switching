@@ -592,8 +592,9 @@ func parseExpiresIn(v any) int64 {
 	case string:
 		// Sometimes expires_in is a string number
 		var n int64
-		fmt.Sscanf(val, "%d", &n)
-		return n
+		if _, err := fmt.Sscanf(val, "%d", &n); err == nil {
+			return n
+		}
 	}
 
 	return 0

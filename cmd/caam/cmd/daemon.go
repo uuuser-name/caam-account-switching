@@ -225,7 +225,9 @@ func runDaemonStop(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	daemon.RemovePIDFile()
+	if err := daemon.RemovePIDFile(); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove pid file: %w", err)
+	}
 	fmt.Println("Daemon stopped")
 	return nil
 }

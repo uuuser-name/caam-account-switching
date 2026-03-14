@@ -166,7 +166,10 @@ func runWeztermLoginAll(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Send /login to %d pane(s)? [y/N]: ", len(targets))
 		var resp string
-		fmt.Fscanln(os.Stdin, &resp)
+		if _, err := fmt.Fscanln(os.Stdin, &resp); err != nil {
+			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled")
+			return nil
+		}
 		resp = strings.TrimSpace(strings.ToLower(resp))
 		if resp != "y" && resp != "yes" {
 			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled")

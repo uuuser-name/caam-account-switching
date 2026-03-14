@@ -132,7 +132,6 @@ func runActivate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		// Invalid config should not crash activation; fall back to defaults.
 		spmCfg = config.DefaultSPMConfig()
-		err = nil
 	}
 
 	needDB := spmCfg.Analytics.Enabled || spmCfg.Stealth.Cooldown.Enabled || spmCfg.Stealth.Rotation.Enabled || autoSelect

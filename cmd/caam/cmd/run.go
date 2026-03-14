@@ -706,10 +706,7 @@ func isProviderSwitchCandidate(tool string, info *usage.UsageInfo, threshold flo
 	// For Codex, credits are the hard gate; near-limit windows are used for ranking,
 	// not hard exclusion, because profiles can still be usable above warning thresholds.
 	if tool == "codex" {
-		if info.HasExhaustedWindow() {
-			return false
-		}
-		return true
+		return !info.HasExhaustedWindow()
 	}
 	return !info.IsNearLimit(threshold)
 }

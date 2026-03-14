@@ -127,7 +127,10 @@ func runSetupDistributed(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\nReady to deploy coordinators to %d remote machine(s).\n", len(remoteMachines))
 		fmt.Print("Continue? [y/N]: ")
 		var confirm string
-		fmt.Scanln(&confirm)
+		if _, err := fmt.Scanln(&confirm); err != nil {
+			fmt.Println("Cancelled")
+			return nil
+		}
 		if confirm != "y" && confirm != "Y" {
 			fmt.Println("Cancelled")
 			return nil

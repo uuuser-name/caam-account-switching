@@ -8,6 +8,7 @@ package health
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -452,8 +453,11 @@ func (s *Storage) acquireFileLock() (*os.File, error) {
 
 func (s *Storage) releaseFileLock(f *os.File) {
 	if f != nil {
-		UnlockFile(f)
-		f.Close()
+		if err := UnlockFile(f); err != nil && !errors.Is(err, os.ErrClosed) {
+			_ = f.Close()
+			return
+		}
+		_ = f.Close()
 	}
 }
 

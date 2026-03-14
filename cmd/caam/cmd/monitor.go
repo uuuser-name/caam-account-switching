@@ -233,7 +233,11 @@ func setupKeyboardInput() <-chan byte {
 	}
 
 	go func() {
-		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		defer func() {
+			if restoreErr := term.Restore(int(os.Stdin.Fd()), oldState); restoreErr != nil {
+				return
+			}
+		}()
 		buf := make([]byte, 1)
 		for {
 			n, err := os.Stdin.Read(buf)

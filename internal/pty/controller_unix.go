@@ -24,9 +24,12 @@ type unixController struct {
 	ptmx *os.File // PTY master
 	opts *Options
 
-	mu      sync.Mutex
-	started bool
-	closed  bool
+	mu       sync.Mutex
+	started  bool
+	closed   bool
+	done     chan struct{}
+	waitErr  error
+	exitCode int
 }
 
 // NewController creates a new PTY controller wrapping the given command.
@@ -68,7 +71,11 @@ func (c *unixController) Start() error {
 		c.cmd.Dir = c.opts.Dir
 	}
 	if len(c.opts.Env) > 0 {
-		c.cmd.Env = append(os.Environ(), c.opts.Env...)
+		baseEnv := c.cmd.Env
+		if len(baseEnv) == 0 {
+			baseEnv = os.Environ()
+		}
+		c.cmd.Env = append(append([]string{}, baseEnv...), c.opts.Env...)
 	}
 
 	// Start the command with a PTY
@@ -117,8 +124,45 @@ func (c *unixController) Start() error {
 
 	c.ptmx = ptmx
 	c.started = true
+	c.done = make(chan struct{})
+
+	go c.waitForExit()
 
 	return nil
+}
+
+func (c *unixController) waitForExit() {
+	err := c.cmd.Wait()
+	var exitErr *exec.ExitError
+
+	c.mu.Lock()
+	switch {
+	case err == nil:
+		c.exitCode = 0
+		c.waitErr = nil
+	case errors.As(err, &exitErr):
+		c.exitCode = exitErr.ExitCode()
+		c.waitErr = nil
+	default:
+		c.exitCode = -1
+		c.waitErr = fmt.Errorf("wait: %w", err)
+	}
+	done := c.done
+	c.mu.Unlock()
+
+	close(done)
+}
+
+func waitDone(done chan struct{}) bool {
+	if done == nil {
+		return false
+	}
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
 }
 
 // InjectCommand types a command into the PTY followed by a newline.
@@ -135,6 +179,12 @@ func (c *unixController) InjectRaw(data []byte) error {
 		return fmt.Errorf("controller not started")
 	}
 	if c.closed {
+		return ErrClosed
+	}
+	if waitDone(c.done) {
+		return ErrClosed
+	}
+	if ptyPeerClosed(c.ptmx) {
 		return ErrClosed
 	}
 
@@ -164,6 +214,39 @@ func isClosedPTYWriteError(err error) bool {
 		return errno == syscall.EIO || errno == syscall.EBADF
 	}
 	return false
+}
+
+func isClosedPTYReadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, os.ErrClosed) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		err = pathErr.Err
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == syscall.EIO || errno == syscall.EBADF
+	}
+	return false
+}
+
+func ptyPeerClosed(ptmx *os.File) bool {
+	if ptmx == nil {
+		return true
+	}
+	pfds := []unix.PollFd{{
+		Fd:     int32(ptmx.Fd()),
+		Events: unix.POLLHUP | unix.POLLERR | unix.POLLNVAL,
+	}}
+	nready, err := unix.Poll(pfds, 0)
+	if err != nil || nready == 0 {
+		return false
+	}
+	return pfds[0].Revents&(unix.POLLHUP|unix.POLLERR|unix.POLLNVAL) != 0
 }
 
 // ReadOutput reads all available output from the PTY without blocking indefinitely.
@@ -307,33 +390,38 @@ func (c *unixController) WaitForPattern(ctx context.Context, pattern *regexp.Reg
 }
 
 func (c *unixController) readWithTimeout(ptmx *os.File, buf []byte, timeout time.Duration) (int, error) {
-	if err := ptmx.SetReadDeadline(time.Now().Add(timeout)); err == nil {
-		return ptmx.Read(buf)
-	} else if !errors.Is(err, os.ErrNoDeadline) {
-		return 0, fmt.Errorf("set read deadline: %w", err)
-	}
-
-	// Some PTY file types (notably on macOS) don't support deadlines.
-	// Fall back to polling readiness with the same timeout budget.
 	pollTimeoutMs := int(timeout / time.Millisecond)
 	if pollTimeoutMs < 1 {
 		pollTimeoutMs = 1
 	}
 	pfds := []unix.PollFd{{
 		Fd:     int32(ptmx.Fd()),
-		Events: unix.POLLIN,
+		Events: unix.POLLIN | unix.POLLHUP | unix.POLLERR | unix.POLLNVAL,
 	}}
-	nready, err := unix.Poll(pfds, pollTimeoutMs)
-	if err != nil {
-		if errors.Is(err, unix.EINTR) {
+	for {
+		nready, err := unix.Poll(pfds, pollTimeoutMs)
+		if err != nil {
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			return 0, fmt.Errorf("poll pty: %w", err)
+		}
+		if nready == 0 {
 			return 0, os.ErrDeadlineExceeded
 		}
-		return 0, fmt.Errorf("poll pty: %w", err)
+		revents := pfds[0].Revents
+		if revents&unix.POLLNVAL != 0 {
+			return 0, os.ErrClosed
+		}
+		if revents&(unix.POLLHUP|unix.POLLERR) != 0 && revents&unix.POLLIN == 0 {
+			return 0, io.EOF
+		}
+		nread, err := ptmx.Read(buf)
+		if err != nil && isClosedPTYReadError(err) {
+			return nread, io.EOF
+		}
+		return nread, err
 	}
-	if nready == 0 {
-		return 0, os.ErrDeadlineExceeded
-	}
-	return ptmx.Read(buf)
 }
 
 // Wait waits for the command to exit and returns its exit code.
@@ -343,17 +431,14 @@ func (c *unixController) Wait() (int, error) {
 		c.mu.Unlock()
 		return -1, fmt.Errorf("controller not started")
 	}
-	cmd := c.cmd
+	done := c.done
 	c.mu.Unlock()
 
-	err := cmd.Wait()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode(), nil
-		}
-		return -1, fmt.Errorf("wait: %w", err)
-	}
-	return 0, nil
+	<-done
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.exitCode, c.waitErr
 }
 
 // Signal sends a signal to the running process.
@@ -365,6 +450,9 @@ func (c *unixController) Signal(sig Signal) error {
 		return fmt.Errorf("controller not started")
 	}
 	if c.closed {
+		return ErrClosed
+	}
+	if waitDone(c.done) {
 		return ErrClosed
 	}
 	if c.cmd.Process == nil {
@@ -391,40 +479,52 @@ func (c *unixController) Signal(sig Signal) error {
 // Close terminates the PTY and cleans up resources.
 func (c *unixController) Close() error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.closed {
+		c.mu.Unlock()
 		return nil
 	}
 	c.closed = true
+	ptmx := c.ptmx
+	c.ptmx = nil
+	cmd := c.cmd
+	done := c.done
+	c.mu.Unlock()
 
 	var firstErr error
 
 	// Close the PTY master (this will cause the child to receive SIGHUP)
-	if c.ptmx != nil {
-		if err := c.ptmx.Close(); err != nil && firstErr == nil {
+	if ptmx != nil {
+		if err := ptmx.Close(); err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("close pty: %w", err)
 		}
 	}
 
 	// Kill the process if still running
-	if c.cmd != nil && c.cmd.Process != nil {
+	if cmd != nil && cmd.Process != nil {
+		select {
+		case <-done:
+			return firstErr
+		default:
+		}
+
 		// Try graceful termination first
-		c.cmd.Process.Signal(syscall.SIGTERM)
+		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil && firstErr == nil && !errors.Is(err, os.ErrProcessDone) {
+			firstErr = fmt.Errorf("signal term: %w", err)
+		}
 
 		// Give it a moment to exit
-		done := make(chan struct{})
-		go func() {
-			c.cmd.Wait()
-			close(done)
-		}()
-
 		select {
 		case <-done:
 			// Process exited
 		case <-time.After(100 * time.Millisecond):
 			// Force kill
-			c.cmd.Process.Kill()
+			if err := cmd.Process.Kill(); err != nil && firstErr == nil && !errors.Is(err, os.ErrProcessDone) {
+				firstErr = fmt.Errorf("kill process: %w", err)
+			}
+			select {
+			case <-done:
+			case <-time.After(100 * time.Millisecond):
+			}
 		}
 	}
 

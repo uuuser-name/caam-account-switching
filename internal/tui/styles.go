@@ -401,10 +401,6 @@ func spinnerStyle(theme Theme) lipgloss.Style {
 	return style.Foreground(theme.Palette.Accent)
 }
 
-func spinnerEnabled(theme Theme) bool {
-	return !theme.ReducedMotion
-}
-
 func spinnerMessageStyle(theme Theme) lipgloss.Style {
 	style := lipgloss.NewStyle()
 	if theme.NoColor {

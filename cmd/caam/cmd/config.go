@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/config"
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
@@ -158,7 +158,10 @@ Examples:
 		if !force {
 			fmt.Printf("Reset configuration to defaults? [y/N]: ")
 			var confirm string
-			fmt.Scanln(&confirm)
+			if _, err := fmt.Scanln(&confirm); err != nil {
+				fmt.Println("Cancelled")
+				return nil
+			}
 			if strings.ToLower(confirm) != "y" {
 				fmt.Println("Cancelled")
 				return nil
@@ -858,4 +861,3 @@ Examples:
 		return nil
 	},
 }
-

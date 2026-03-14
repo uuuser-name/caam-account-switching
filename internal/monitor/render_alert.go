@@ -37,7 +37,7 @@ func (r *AlertRenderer) Render(state *MonitorState) string {
 			continue
 		}
 
-		alertLevel := AlertNone
+		var alertLevel AlertType
 		switch {
 		case percent >= exhaustedThreshold:
 			alertLevel = AlertExhausted

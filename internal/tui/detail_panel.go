@@ -388,11 +388,9 @@ func (p *DetailPanel) renderUsageRow() string {
 	bar := renderUsageBar(used, barWidth)
 	remain := 100 - used
 	resetIn := formatRemainingTime(window.ResetsAt)
-	resetText := "unknown"
-	if resetIn == "" {
+	resetText := resetIn
+	if resetText == "" {
 		resetText = "n/a"
-	} else {
-		resetText = resetIn
 	}
 
 	style := p.styles.StatusOK

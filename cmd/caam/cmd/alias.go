@@ -98,7 +98,7 @@ func runAlias(cmd *cobra.Command, args []string) error {
 }
 
 func listAliases(cfg *config.Config, jsonOutput bool) error {
-	if cfg.Aliases == nil || len(cfg.Aliases) == 0 {
+	if len(cfg.Aliases) == 0 {
 		if jsonOutput {
 			fmt.Println("{}")
 			return nil
@@ -293,7 +293,7 @@ func runFavorite(cmd *cobra.Command, args []string) error {
 }
 
 func listFavorites(cfg *config.Config, jsonOutput bool) error {
-	if cfg.Favorites == nil || len(cfg.Favorites) == 0 {
+	if len(cfg.Favorites) == 0 {
 		if jsonOutput {
 			fmt.Println("{}")
 			return nil

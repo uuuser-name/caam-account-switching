@@ -32,7 +32,6 @@ type BrowserConfig struct {
 type Browser struct {
 	config     BrowserConfig
 	logger     *slog.Logger
-	allocCtx   context.Context
 	cancelFunc context.CancelFunc
 }
 

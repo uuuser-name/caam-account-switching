@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"errors"
 	"sync"
 )
 
@@ -31,7 +32,7 @@ func (p *ConnectionPool) Get(machine *Machine) (*SSHClient, error) {
 			return client, nil
 		}
 		// Connection exists but is dead - clean it up before creating new one
-		client.Disconnect()
+		_ = client.Disconnect()
 		delete(p.clients, machine.ID)
 	}
 
@@ -51,7 +52,7 @@ func (p *ConnectionPool) Release(machineID string) {
 	defer p.mu.Unlock()
 
 	if client, exists := p.clients[machineID]; exists {
-		client.Disconnect()
+		_ = client.Disconnect()
 		delete(p.clients, machineID)
 	}
 }
@@ -62,7 +63,7 @@ func (p *ConnectionPool) CloseAll() {
 	defer p.mu.Unlock()
 
 	for id, client := range p.clients {
-		client.Disconnect()
+		_ = client.Disconnect()
 		delete(p.clients, id)
 	}
 }
@@ -91,9 +92,11 @@ func (p *ConnectionPool) Refresh() error {
 
 	var lastErr error
 	for _, client := range p.clients {
-		client.Disconnect()
+		if err := client.Disconnect(); err != nil {
+			lastErr = errors.Join(lastErr, err)
+		}
 		if err := client.Connect(p.opts); err != nil {
-			lastErr = err
+			lastErr = errors.Join(lastErr, err)
 		}
 	}
 

@@ -499,7 +499,11 @@ func (o *Orchestrator) deployCoordinator(ctx context.Context, m *DiscoveredMachi
 	if err := deployer.Connect(); err != nil {
 		return nil, fmt.Errorf("connect failed: %w", err)
 	}
-	defer deployer.Disconnect()
+	defer func() {
+		if err := deployer.Disconnect(); err != nil {
+			o.logger.Debug("failed to disconnect deployer", "machine", m.Name, "error", err)
+		}
+	}()
 
 	config := deploy.DefaultCoordinatorConfig()
 	config.Port = o.opts.RemotePort

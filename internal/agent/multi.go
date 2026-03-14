@@ -501,12 +501,18 @@ func (a *MultiAgent) saveUsage() {
 
 	data, err := json.MarshalIndent(usages, "", "  ")
 	if err != nil {
+		a.logger.Warn("failed to marshal usage data", "error", err)
 		return
 	}
 
 	dir := filepath.Dir(a.usagePath)
-	os.MkdirAll(dir, 0700)
-	os.WriteFile(a.usagePath, data, 0600)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		a.logger.Warn("failed to create usage directory", "path", dir, "error", err)
+		return
+	}
+	if err := os.WriteFile(a.usagePath, data, 0600); err != nil {
+		a.logger.Warn("failed to write usage data", "path", a.usagePath, "error", err)
+	}
 }
 
 func (a *MultiAgent) withLogging(next http.Handler) http.Handler {

@@ -281,7 +281,9 @@ func robotError(cmd *cobra.Command, command string, code, message string, detail
 		},
 		Suggestions: suggestions,
 	}
-	robotOutput(cmd, output)
+	if err := robotOutput(cmd, output); err != nil {
+		return fmt.Errorf("%s: %s (output error: %w)", code, message, err)
+	}
 	return fmt.Errorf("%s: %s", code, message)
 }
 
@@ -625,7 +627,12 @@ func checkCoordinators() []RobotCoordinator {
 			// Try to get pending count
 			if pendResp, err := client.Get(ep.url + "/auth/pending"); err == nil {
 				var pending []interface{}
-				json.NewDecoder(pendResp.Body).Decode(&pending)
+				if decodeErr := json.NewDecoder(pendResp.Body).Decode(&pending); decodeErr != nil {
+					_ = pendResp.Body.Close()
+					coord.Pending = 0
+					coords = append(coords, coord)
+					continue
+				}
 				pendResp.Body.Close()
 				coord.Pending = len(pending)
 			}
@@ -1923,7 +1930,7 @@ func runRobotHistory(cmd *cobra.Command, args []string) error {
 
 	// Query activity log
 	if db.Conn() != nil {
-		query := `SELECT timestamp, provider, profile_name, event_type, COALESCE(duration_seconds, 0), COALESCE(notes, '')
+		query := `SELECT timestamp, provider, profile_name, event_type, COALESCE(duration_seconds, 0), COALESCE(details, '')
 			FROM activity_log
 			WHERE datetime(timestamp) >= datetime(?)
 			ORDER BY datetime(timestamp) DESC

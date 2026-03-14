@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,16 +20,17 @@ import (
 
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/sync"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // Deployer handles deployment of caam to remote machines.
 type Deployer struct {
-	machine      *sync.Machine
-	sshClient    deploySSHClient
-	client       *ssh.Client // For command execution
-	logger       *slog.Logger
-	localVersion string
-	localBinary  string
+	machine       *sync.Machine
+	sshClient     deploySSHClient
+	client        *ssh.Client // For command execution
+	logger        *slog.Logger
+	localVersion  string
+	localBinary   string
 	commandRunner func(context.Context, string) (string, error)
 }
 
@@ -108,10 +111,16 @@ func (d *Deployer) getSSHClient() *ssh.Client {
 		user = os.Getenv("USER")
 	}
 
+	hostKeyCallback, err := d.hostKeyCallback()
+	if err != nil {
+		d.logger.Debug("failed to initialize host key callback", "error", err)
+		return nil
+	}
+
 	config := &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // Simplified for deploy
+		HostKeyCallback: hostKeyCallback,
 		Timeout:         10 * time.Second,
 	}
 
@@ -122,6 +131,62 @@ func (d *Deployer) getSSHClient() *ssh.Client {
 	}
 
 	return client
+}
+
+func (d *Deployer) hostKeyCallback() (ssh.HostKeyCallback, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("cannot determine home directory for known_hosts: %w", err)
+	}
+
+	knownHostsPath := filepath.Join(homeDir, ".ssh", "known_hosts")
+	callback, err := knownhosts.New(knownHostsPath)
+	if err == nil {
+		return deployAutoAddHostKeyCallback(callback, knownHostsPath), nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load known_hosts: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(knownHostsPath), 0700); err != nil {
+		return nil, fmt.Errorf("cannot create .ssh directory for known_hosts: %w", err)
+	}
+
+	return deployAutoAddHostKeyCallback(nil, knownHostsPath), nil
+}
+
+func deployAutoAddHostKeyCallback(existing ssh.HostKeyCallback, knownHostsPath string) ssh.HostKeyCallback {
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if existing != nil {
+			err := existing(hostname, remote, key)
+			if err == nil {
+				return nil
+			}
+
+			var keyErr *knownhosts.KeyError
+			if errors.As(err, &keyErr) && len(keyErr.Want) > 0 {
+				return fmt.Errorf("host key changed for %s", hostname)
+			}
+		}
+
+		_ = deployAddToKnownHosts(knownHostsPath, hostname, key)
+		return nil
+	}
+}
+
+func deployAddToKnownHosts(path, hostname string, key ssh.PublicKey) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = fmt.Fprintln(f, knownhosts.Line([]string{hostname}, key))
+	return err
 }
 
 // Disconnect closes the SSH connection.
@@ -159,7 +224,7 @@ func (d *Deployer) RunCommand(ctx context.Context, cmd string) (string, error) {
 
 	select {
 	case <-ctx.Done():
-		session.Signal(ssh.SIGTERM)
+		_ = session.Signal(ssh.SIGTERM)
 		return "", ctx.Err()
 	case err := <-done:
 		if err != nil {
@@ -349,30 +414,30 @@ func (d *Deployer) findBinaryPath(ctx context.Context) string {
 
 // DeployConfig represents the generated configuration for a machine.
 type DeployConfig struct {
-	Type     string `json:"type"`      // "coordinator" or "agent"
+	Type     string `json:"type"` // "coordinator" or "agent"
 	Port     int    `json:"port"`
 	Settings any    `json:"settings"`
 }
 
 // CoordinatorConfig is the configuration for a coordinator daemon.
 type CoordinatorConfig struct {
-	Port          int    `json:"port"`
-	PollInterval  string `json:"poll_interval"`
-	AuthTimeout   string `json:"auth_timeout"`
-	StateTimeout  string `json:"state_timeout"`
-	ResumePrompt  string `json:"resume_prompt"`
-	OutputLines   int    `json:"output_lines"`
+	Port         int    `json:"port"`
+	PollInterval string `json:"poll_interval"`
+	AuthTimeout  string `json:"auth_timeout"`
+	StateTimeout string `json:"state_timeout"`
+	ResumePrompt string `json:"resume_prompt"`
+	OutputLines  int    `json:"output_lines"`
 }
 
 // DefaultCoordinatorConfig returns the default coordinator configuration.
 func DefaultCoordinatorConfig() CoordinatorConfig {
 	return CoordinatorConfig{
-		Port:          7890,
-		PollInterval:  "500ms",
-		AuthTimeout:   "60s",
-		StateTimeout:  "30s",
-		ResumePrompt:  "proceed. Reread AGENTS.md so it's still fresh in your mind. Use ultrathink.\n",
-		OutputLines:   100,
+		Port:         7890,
+		PollInterval: "500ms",
+		AuthTimeout:  "60s",
+		StateTimeout: "30s",
+		ResumePrompt: "proceed. Reread AGENTS.md so it's still fresh in your mind. Use ultrathink.\n",
+		OutputLines:  100,
 	}
 }
 

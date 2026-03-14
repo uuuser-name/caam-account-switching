@@ -61,8 +61,8 @@ const (
 // NewEngine creates a new merge engine with default settings.
 func NewEngine() *Engine {
 	return &Engine{
-		DedupeStrategy:      DedupeByFullKey,
-		SortStrategy:        SortByTimestampThenSource,
+		DedupeStrategy:     DedupeByFullKey,
+		SortStrategy:       SortByTimestampThenSource,
 		ClockSkewTolerance: time.Second,
 	}
 }
@@ -123,13 +123,13 @@ func (e *Engine) MergeReaders(name string, readers []io.Reader) *MergeResult {
 // DeterministicMerger provides guaranteed deterministic merge output.
 // Same inputs always produce identical outputs, bit-for-bit.
 type DeterministicMerger struct {
-	events          []*Event
-	keyFunc         func(*Event) string
-	lessFunc        func(a, b *Event) bool
-	seen            map[string]int // key -> index in events
-	duplicateCount  int            // count of duplicate events
-	sources         map[string]int // source name -> count
-	startTime       time.Time
+	events         []*Event
+	keyFunc        func(*Event) string
+	lessFunc       func(a, b *Event) bool
+	seen           map[string]int // key -> index in events
+	duplicateCount int            // count of duplicate events
+	sources        map[string]int // source name -> count
+	startTime      time.Time
 }
 
 // NewDeterministicMerger creates a merger with guaranteed determinism.
@@ -219,11 +219,7 @@ func shouldReplace(existing, newEvent *Event) bool {
 	// Prefer event with more input/output data
 	existingFields := len(existing.InputRedacted) + len(existing.Output)
 	newFields := len(newEvent.InputRedacted) + len(newEvent.Output)
-	if newFields > existingFields {
-		return true
-	}
-
-	return false
+	return newFields > existingFields
 }
 
 // Merge returns the merged result.

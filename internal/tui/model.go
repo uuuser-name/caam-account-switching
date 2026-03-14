@@ -19,8 +19,8 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/health"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/identity"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
-	codexprovider "github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider/codex"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/project"
+	codexprovider "github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider/codex"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/refresh"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/signals"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/sync"
@@ -460,17 +460,6 @@ func (m *Model) setProfileUsageResult(provider, profile string, ui *usage.UsageI
 		state.err = ""
 	}
 	m.profileUsage[key] = state
-}
-
-func (m *Model) clearProfileUsageForProvider(provider string) {
-	if m.profileUsage == nil {
-		return
-	}
-	for key := range m.profileUsage {
-		if strings.HasPrefix(key, provider+"\x00") {
-			delete(m.profileUsage, key)
-		}
-	}
 }
 
 func (m *Model) pruneProfileUsageState() {
@@ -2736,7 +2725,7 @@ func (m Model) fullLayoutSpec(contentHeight int) layoutSpec {
 
 	spec.ProviderWidth = provider
 	spec.DetailWidth = detail
-	spec.ProfilesWidth = max(0, available-provider-detail)
+	spec.ProfilesWidth = max(0, profiles)
 	return spec
 }
 
@@ -3291,18 +3280,6 @@ func (m Model) refreshProfiles(ctx refreshContext) tea.Cmd {
 	}
 }
 
-// refreshProfilesSimple returns a tea.Cmd that reloads profiles preserving
-// current selection by profile name.
-func (m Model) refreshProfilesSimple() tea.Cmd {
-	ctx := refreshContext{
-		provider: m.currentProvider(),
-	}
-	if name := m.selectedProfileNameValue(); name != "" {
-		ctx.selectedProfile = name
-	}
-	return m.refreshProfiles(ctx)
-}
-
 // restoreSelection finds the appropriate selection index after a refresh.
 // It tries to maintain selection on the same profile, or adjusts intelligently
 // if the profile was deleted.
@@ -3449,55 +3426,4 @@ func (m Model) formatError(err error) string {
 	}
 
 	return msg
-}
-
-// refreshProfilesWithIndex returns a tea.Cmd that reloads profiles and
-// sets the selection to the specified index after refresh.
-func (m Model) refreshProfilesWithIndex(provider string, index int) tea.Cmd {
-	return func() tea.Msg {
-		vault := authfile.NewVault(m.vaultPath)
-		profiles := make(map[string][]Profile)
-
-		for _, name := range m.providers {
-			names, err := vault.List(name)
-			if err != nil {
-				return profilesRefreshedMsg{
-					err: fmt.Errorf("list vault profiles for %s: %w", name, err),
-					ctx: refreshContext{provider: provider},
-				}
-			}
-
-			active := ""
-			if len(names) > 0 {
-				if fileSet, ok := authFileSetForProvider(name); ok {
-					if ap, err := vault.ActiveProfile(fileSet); err == nil {
-						active = ap
-					}
-				}
-			}
-
-			sort.Strings(names)
-			ps := make([]Profile, 0, len(names))
-			for _, prof := range names {
-				ps = append(ps, Profile{
-					Name:     prof,
-					Provider: name,
-					IsActive: prof == active,
-				})
-			}
-			profiles[name] = ps
-		}
-
-		// Create context that will set the selection index after refresh
-		ctx := refreshContext{
-			provider: provider,
-		}
-
-		// Set the selected profile name based on the index
-		if providerProfiles := profiles[provider]; index >= 0 && index < len(providerProfiles) {
-			ctx.selectedProfile = providerProfiles[index].Name
-		}
-
-		return profilesRefreshedMsg{profiles: profiles, ctx: ctx}
-	}
 }

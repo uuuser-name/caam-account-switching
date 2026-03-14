@@ -20,8 +20,10 @@
 package gemini
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -220,8 +222,11 @@ func (p *Provider) loginWithAPIKey(ctx context.Context, prof *profile.Profile) e
 
 	// Prompt for key
 	fmt.Print("\nEnter Gemini API key (or press Enter to skip): ")
-	var apiKey string
-	fmt.Scanln(&apiKey)
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("read api key: %w", err)
+	}
+	apiKey := strings.TrimSpace(line)
 
 	if apiKey != "" {
 		// Write to .gemini/.env atomically
@@ -313,7 +318,9 @@ func (p *Provider) Logout(ctx context.Context, prof *profile.Profile) error {
 		for k, v := range env {
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}
-		cmd.Run() // Ignore errors
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to revoke ADC; local Gemini cleanup already completed: %v\n", err)
+		}
 	}
 
 	return nil

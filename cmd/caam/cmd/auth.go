@@ -179,6 +179,7 @@ func runAuthDetection(providers []provider.Provider) *AuthDetectReport {
 		if err != nil {
 			result.Error = err.Error()
 			report.Results = append(report.Results, result)
+			report.Summary.NotFoundCount++
 			continue
 		}
 
@@ -419,6 +420,13 @@ func runAuthImport(cmd *cobra.Command, args []string) error {
 		ProfileName: name,
 		SourceFile:  sourcePath,
 	}
+	cleanupImportProfile := func(stage string, cause error) error {
+		wrapped := fmt.Errorf("%s: %w", stage, cause)
+		if delErr := profileStore.Delete(tool, name); delErr != nil {
+			return fmt.Errorf("%w (cleanup delete failed: %v)", wrapped, delErr)
+		}
+		return wrapped
+	}
 
 	// Delete existing profile if force is set
 	if profileStore.Exists(tool, name) && force {
@@ -449,34 +457,34 @@ func runAuthImport(cmd *cobra.Command, args []string) error {
 
 	// Save profile
 	if err := prof.Save(); err != nil {
-		profileStore.Delete(tool, name)
-		result.Error = fmt.Sprintf("save profile: %v", err)
+		cleanupErr := cleanupImportProfile("save profile", err)
+		result.Error = cleanupErr.Error()
 		if jsonOutput {
 			return outputImportResult(result)
 		}
-		return fmt.Errorf("save profile: %w", err)
+		return cleanupErr
 	}
 
 	// Prepare profile directory structure
 	ctx := context.Background()
 	if err := prov.PrepareProfile(ctx, prof); err != nil {
-		profileStore.Delete(tool, name)
-		result.Error = fmt.Sprintf("prepare profile: %v", err)
+		cleanupErr := cleanupImportProfile("prepare profile", err)
+		result.Error = cleanupErr.Error()
 		if jsonOutput {
 			return outputImportResult(result)
 		}
-		return fmt.Errorf("prepare profile: %w", err)
+		return cleanupErr
 	}
 
 	// Import auth files
 	copiedFiles, err := prov.ImportAuth(ctx, sourcePath, prof)
 	if err != nil {
-		profileStore.Delete(tool, name)
-		result.Error = fmt.Sprintf("import auth: %v", err)
+		cleanupErr := cleanupImportProfile("import auth", err)
+		result.Error = cleanupErr.Error()
 		if jsonOutput {
 			return outputImportResult(result)
 		}
-		return fmt.Errorf("import auth: %w", err)
+		return cleanupErr
 	}
 
 	result.Success = true

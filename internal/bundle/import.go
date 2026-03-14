@@ -117,10 +117,10 @@ type ImportResult struct {
 
 // ProfileAction describes what happened to a single profile during import.
 type ProfileAction struct {
-	Provider string
-	Profile  string
-	Action   string // "add", "update", "skip", "error"
-	Reason   string
+	Provider     string
+	Profile      string
+	Action       string // "add", "update", "skip", "error"
+	Reason       string
 	LocalExpiry  *time.Time
 	BundleExpiry *time.Time
 }
@@ -684,7 +684,9 @@ func copyProfileDirectory(src, dst string) error {
 	if err := os.Rename(tmpDir, dst); err != nil {
 		// Restore backup if rename failed
 		if dstExists {
-			os.Rename(backupPath, dst)
+			if restoreErr := os.Rename(backupPath, dst); restoreErr != nil {
+				return fmt.Errorf("rename to destination: %w (restore backup: %v)", err, restoreErr)
+			}
 		}
 		return fmt.Errorf("rename to destination: %w", err)
 	}

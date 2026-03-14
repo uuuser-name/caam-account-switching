@@ -3,6 +3,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -84,14 +85,22 @@ func (e *ExitCodeError) Error() string {
 }
 
 // Run executes the AI CLI tool with profile isolation.
-func (r *Runner) Run(ctx context.Context, opts RunOptions) error {
+func (r *Runner) Run(ctx context.Context, opts RunOptions) (retErr error) {
 	// Lock profile if not disabled
 	if !opts.NoLock {
 		// Use LockWithCleanup to handle stale locks from dead processes
 		if err := opts.Profile.LockWithCleanup(); err != nil {
 			return fmt.Errorf("lock profile: %w", err)
 		}
-		defer opts.Profile.Unlock()
+		defer func() {
+			if unlockErr := opts.Profile.Unlock(); unlockErr != nil {
+				if retErr == nil {
+					retErr = fmt.Errorf("unlock profile: %w", unlockErr)
+					return
+				}
+				retErr = errors.Join(retErr, fmt.Errorf("unlock profile: %w", unlockErr))
+			}
+		}()
 	}
 
 	// Get provider environment
@@ -230,7 +239,9 @@ func (r *Runner) Run(ctx context.Context, opts RunOptions) error {
 			select {
 			case sig := <-sigChan:
 				if cmd.Process != nil {
-					cmd.Process.Signal(sig)
+					if err := cmd.Process.Signal(sig); err != nil && !errors.Is(err, os.ErrProcessDone) {
+						fmt.Fprintf(os.Stderr, "[caam] Warning: failed to forward signal %v: %v\n", sig, err)
+					}
 				}
 			case <-done:
 				return

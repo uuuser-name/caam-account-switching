@@ -263,6 +263,12 @@ func (d *Daemon) Start() error {
 
 	d.logger.Printf("Starting daemon (check interval: %v, refresh threshold: %v)",
 		d.config.CheckInterval, d.config.RefreshThreshold)
+	if err := clearReady(); err != nil {
+		d.logger.Printf("Warning: failed to clear stale ready marker: %v", err)
+	}
+	if err := clearShutdown(); err != nil {
+		d.logger.Printf("Warning: failed to clear stale shutdown marker: %v", err)
+	}
 
 	// Start pool monitor if enabled
 	if d.poolMonitor != nil {
@@ -374,6 +380,12 @@ func (d *Daemon) Stop() error {
 		}
 	}
 
+	if err := signalShutdown(); err != nil {
+		d.logger.Printf("Warning: failed to signal shutdown: %v", err)
+	}
+	if err := clearReady(); err != nil {
+		d.logger.Printf("Warning: failed to clear ready marker: %v", err)
+	}
 	if d.cancel != nil {
 		d.cancel()
 	}
@@ -401,12 +413,18 @@ func (d *Daemon) Stop() error {
 	// Release PID lock
 	d.mu.Lock()
 	if d.pidFile != nil {
-		health.UnlockFile(d.pidFile)
-		d.pidFile.Close()
-		os.Remove(d.pidFile.Name()) // Clean up file
+		if err := releasePIDLockFile(d.pidFile); err != nil {
+			d.logger.Printf("Warning: failed to release pid lock: %v", err)
+		}
+		if err := os.Remove(d.pidFile.Name()); err != nil && !os.IsNotExist(err) {
+			d.logger.Printf("Warning: failed to remove pid file: %v", err)
+		}
 		d.pidFile = nil
 	}
 	d.mu.Unlock()
+	if err := clearShutdown(); err != nil {
+		d.logger.Printf("Warning: failed to clear shutdown marker: %v", err)
+	}
 
 	return nil
 }
@@ -533,8 +551,9 @@ func (d *Daemon) acquirePIDLock() error {
 		var pid int
 		if _, err := fmt.Sscanf(string(data), "%d", &pid); err == nil {
 			if IsProcessRunning(pid) && pid != os.Getpid() {
-				health.UnlockFile(f)
-				f.Close()
+				if releaseErr := releasePIDLockFile(f); releaseErr != nil {
+					return fmt.Errorf("daemon already running (pid %d): release pid lock: %w", pid, releaseErr)
+				}
 				return fmt.Errorf("daemon already running (pid %d)", pid)
 			}
 		}
@@ -542,32 +561,50 @@ func (d *Daemon) acquirePIDLock() error {
 
 	// Truncate and write our PID
 	if err := f.Truncate(0); err != nil {
-		health.UnlockFile(f)
-		f.Close()
+		if releaseErr := releasePIDLockFile(f); releaseErr != nil {
+			return fmt.Errorf("truncate pid file: %w (release pid lock: %v)", err, releaseErr)
+		}
 		return fmt.Errorf("truncate pid file: %w", err)
 	}
 	if _, err := f.Seek(0, 0); err != nil {
-		health.UnlockFile(f)
-		f.Close()
+		if releaseErr := releasePIDLockFile(f); releaseErr != nil {
+			return fmt.Errorf("seek pid file: %w (release pid lock: %v)", err, releaseErr)
+		}
 		return fmt.Errorf("seek pid file: %w", err)
 	}
 
 	if _, err := fmt.Fprintf(f, "%d\n", os.Getpid()); err != nil {
-		health.UnlockFile(f)
-		f.Close()
+		if releaseErr := releasePIDLockFile(f); releaseErr != nil {
+			return fmt.Errorf("write pid file: %w (release pid lock: %v)", err, releaseErr)
+		}
 		return fmt.Errorf("write pid file: %w", err)
 	}
 
 	// Sync to disk to ensure PID is visible to other processes
 	if err := f.Sync(); err != nil {
-		health.UnlockFile(f)
-		f.Close()
+		if releaseErr := releasePIDLockFile(f); releaseErr != nil {
+			return fmt.Errorf("sync pid file: %w (release pid lock: %v)", err, releaseErr)
+		}
 		return fmt.Errorf("sync pid file: %w", err)
 	}
 
 	// Important: Do NOT close f here. We hold the lock as long as f is open.
 	d.pidFile = f
 	return nil
+}
+
+func releasePIDLockFile(f *os.File) error {
+	if f == nil {
+		return nil
+	}
+	var errs []error
+	if err := health.UnlockFile(f); err != nil {
+		errs = append(errs, fmt.Errorf("unlock pid file: %w", err))
+	}
+	if err := f.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("close pid file: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 // checkAndBackup creates a backup if one is due.
@@ -815,8 +852,11 @@ func signalReady() error {
 }
 
 // clearReady removes the readiness marker file.
-func clearReady() {
-	os.Remove(ReadyFilePath())
+func clearReady() error {
+	if err := os.Remove(ReadyFilePath()); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // signalShutdown creates the shutdown marker file to indicate the daemon
@@ -828,8 +868,11 @@ func signalShutdown() error {
 }
 
 // clearShutdown removes the shutdown marker file.
-func clearShutdown() {
-	os.Remove(ShutdownFilePath())
+func clearShutdown() error {
+	if err := os.Remove(ShutdownFilePath()); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // WaitForReady blocks until the daemon signals readiness or the context is done.

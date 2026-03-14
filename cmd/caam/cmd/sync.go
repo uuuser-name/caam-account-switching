@@ -534,7 +534,10 @@ func runSyncRemove(cmd *cobra.Command, args []string) error {
 	if !force {
 		fmt.Fprintf(cmd.OutOrStdout(), "Remove machine %q from sync pool? (y/N): ", sanitizeTerminalText(name))
 		var response string
-		fmt.Scanln(&response)
+		if _, err := fmt.Scanln(&response); err != nil {
+			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled")
+			return nil
+		}
 		if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
 			fmt.Fprintln(cmd.OutOrStdout(), "Cancelled")
 			return nil

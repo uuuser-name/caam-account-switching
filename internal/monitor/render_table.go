@@ -23,7 +23,6 @@ func (r *TableRenderer) Render(state *MonitorState) string {
 	innerWidth := width - 2
 	if innerWidth < 1 {
 		innerWidth = 1
-		width = innerWidth + 2
 	}
 
 	var b strings.Builder

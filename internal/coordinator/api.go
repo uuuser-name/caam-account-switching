@@ -147,12 +147,7 @@ func (a *APIServer) handleComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := AuthResponse{
-		RequestID: req.RequestID,
-		Code:      req.Code,
-		Account:   req.Account,
-		Error:     req.Error,
-	}
+	resp := AuthResponse(req)
 
 	if err := a.coordinator.ReceiveAuthResponse(resp); err != nil {
 		a.logger.Error("failed to process auth response",

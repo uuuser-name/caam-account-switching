@@ -376,12 +376,9 @@ func (p *Profile) CleanStaleLock() (bool, error) {
 // This is the recommended method for acquiring locks.
 func (p *Profile) LockWithCleanup() error {
 	// Try to clean any stale locks first
-	cleaned, err := p.CleanStaleLock()
+	_, err := p.CleanStaleLock()
 	if err != nil {
 		return fmt.Errorf("check stale lock: %w", err)
-	}
-	if cleaned {
-		// Log that we cleaned a stale lock (caller can check this if needed)
 	}
 
 	// Now try to acquire the lock

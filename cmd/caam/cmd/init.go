@@ -550,7 +550,7 @@ func printSetupSummaryV2(detections []ProviderAuthDetection, savedCount int, bro
 	// Show providers without auth
 	missingAuth := []string{}
 	for _, d := range detections {
-		if d.Error != nil || !d.Detection.Found {
+		if d.Error != nil || d.Detection == nil || !d.Detection.Found {
 			missingAuth = append(missingAuth, d.DisplayName)
 		}
 	}
@@ -811,14 +811,18 @@ func importDetectedAuth(detections []ProviderAuthDetection, autoSave bool) int {
 
 		// Save profile
 		if err := prof.Save(); err != nil {
-			profileStore.Delete(d.ProviderID, profileName)
+			if delErr := profileStore.Delete(d.ProviderID, profileName); delErr != nil {
+				fmt.Printf("  [!] Error cleaning up profile after save failure: %v\n", delErr)
+			}
 			fmt.Printf("  [!] Error saving profile: %v\n", err)
 			continue
 		}
 
 		// Prepare profile directory
 		if err := prov.PrepareProfile(ctx, prof); err != nil {
-			profileStore.Delete(d.ProviderID, profileName)
+			if delErr := profileStore.Delete(d.ProviderID, profileName); delErr != nil {
+				fmt.Printf("  [!] Error cleaning up profile after prepare failure: %v\n", delErr)
+			}
 			fmt.Printf("  [!] Error preparing profile: %v\n", err)
 			continue
 		}
@@ -826,7 +830,9 @@ func importDetectedAuth(detections []ProviderAuthDetection, autoSave bool) int {
 		// Import auth
 		_, err = prov.ImportAuth(ctx, loc.Path, prof)
 		if err != nil {
-			profileStore.Delete(d.ProviderID, profileName)
+			if delErr := profileStore.Delete(d.ProviderID, profileName); delErr != nil {
+				fmt.Printf("  [!] Error cleaning up profile after import failure: %v\n", delErr)
+			}
 			fmt.Printf("  [!] Error importing auth: %v\n", err)
 			continue
 		}

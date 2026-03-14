@@ -200,7 +200,9 @@ func runBackgroundSync(provider, profile string, state *SyncState, config AutoSy
 			errMsg := getErrorForMachine(results, machineID)
 			state.AddToQueue(provider, profile, machineID, errMsg)
 		}
-		state.Save()
+		if err := state.Save(); err != nil {
+			logSyncError("save sync state", err, config.Verbose)
+		}
 	}
 }
 

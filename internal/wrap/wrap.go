@@ -7,6 +7,7 @@ package wrap
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -269,13 +270,15 @@ func (w *Wrapper) Run(ctx context.Context) *Result {
 
 			// Record cooldown
 			if w.db != nil {
-				w.db.SetCooldown(
+				if _, err := w.db.SetCooldown(
 					w.config.Provider,
 					currentProfile,
 					time.Now(),
 					w.config.CooldownDuration,
 					"auto-detected via caam wrap",
-				)
+				); err != nil {
+					fmt.Fprintf(w.config.Stderr, "[caam] Warning: failed to record cooldown: %v\n", err)
+				}
 			}
 
 			// Check if we can retry
@@ -383,7 +386,9 @@ func (w *Wrapper) runOnce(ctx context.Context, profile string) (int, bool, error
 			select {
 			case sig := <-sigChan:
 				if cmd.Process != nil {
-					cmd.Process.Signal(sig)
+					if err := cmd.Process.Signal(sig); err != nil && !errors.Is(err, os.ErrProcessDone) {
+						fmt.Fprintf(w.config.Stderr, "[caam] Warning: failed to forward signal %v: %v\n", sig, err)
+					}
 				}
 			case <-done:
 				return
@@ -413,7 +418,7 @@ func (w *Wrapper) runOnce(ctx context.Context, profile string) (int, bool, error
 		}
 	}
 
-	return exitCode, rateLimitHit, nil
+	return exitCode, rateLimitHit, err
 }
 
 // maxBufferSize is the maximum buffer size before forcing a flush (64KB).

@@ -139,21 +139,28 @@ func (c *SSHClient) Connect(opts ConnectOptions) error {
 
 // Disconnect closes the SSH connection.
 func (c *SSHClient) Disconnect() error {
+	var disconnectErr error
+
 	if c.sftp != nil {
-		c.sftp.Close()
+		if err := c.sftp.Close(); err != nil {
+			disconnectErr = errors.Join(disconnectErr, err)
+		}
 		c.sftp = nil
 	}
 	if c.agentConn != nil {
-		c.agentConn.Close()
+		if err := c.agentConn.Close(); err != nil {
+			disconnectErr = errors.Join(disconnectErr, err)
+		}
 		c.agentConn = nil
 	}
 	if c.client != nil {
 		err := c.client.Close()
 		c.client = nil
 		c.connected = false
-		return err
+		return errors.Join(disconnectErr, err)
 	}
-	return nil
+	c.connected = false
+	return disconnectErr
 }
 
 // IsConnected returns true if the connection is established.
@@ -264,11 +271,11 @@ func addToKnownHosts(path, hostname string, key ssh.PublicKey) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	line := knownhosts.Line([]string{hostname}, key)
-	_, err = fmt.Fprintln(f, line)
-	return err
+	_, writeErr := fmt.Fprintln(f, line)
+	closeErr := f.Close()
+	return errors.Join(writeErr, closeErr)
 }
 
 func formatKnownHostsWarning(hostname string, err error) string {
@@ -385,9 +392,17 @@ func (c *SSHClient) ReadFile(remotePath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
-	return io.ReadAll(f)
+	data, readErr := io.ReadAll(f)
+	closeErr := f.Close()
+	if readErr != nil {
+		return nil, errors.Join(readErr, closeErr)
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+
+	return data, nil
 }
 
 // WriteFile writes a file to the remote machine atomically.
@@ -403,7 +418,7 @@ func (c *SSHClient) WriteFile(remotePath string, data []byte, mode os.FileMode) 
 
 	// Ensure directory exists
 	if err := c.MkdirAll(dir); err != nil {
-		// Directory might already exist, continue
+		return err
 	}
 
 	f, err := c.sftp.Create(tmpPath)
@@ -412,25 +427,25 @@ func (c *SSHClient) WriteFile(remotePath string, data []byte, mode os.FileMode) 
 	}
 
 	if _, err := f.Write(data); err != nil {
-		f.Close()
-		c.sftp.Remove(tmpPath)
-		return err
+		closeErr := f.Close()
+		removeErr := c.sftp.Remove(tmpPath)
+		return errors.Join(err, closeErr, removeErr)
 	}
 
 	if err := f.Close(); err != nil {
-		c.sftp.Remove(tmpPath)
-		return err
+		removeErr := c.sftp.Remove(tmpPath)
+		return errors.Join(err, removeErr)
 	}
 
 	if err := c.sftp.Chmod(tmpPath, mode); err != nil {
-		c.sftp.Remove(tmpPath)
-		return err
+		removeErr := c.sftp.Remove(tmpPath)
+		return errors.Join(err, removeErr)
 	}
 
 	// Rename to final path (atomic on POSIX)
 	if err := c.sftp.Rename(tmpPath, remotePath); err != nil {
-		c.sftp.Remove(tmpPath)
-		return err
+		removeErr := c.sftp.Remove(tmpPath)
+		return errors.Join(err, removeErr)
 	}
 
 	return nil
@@ -680,7 +695,6 @@ func TestMachineConnectivity(m *Machine, opts ConnectOptions) *ConnectivityResul
 
 		return result
 	}
-	defer client.Disconnect()
 
 	result.Latency = time.Since(start)
 	result.Success = true
@@ -722,6 +736,13 @@ func TestMachineConnectivity(m *Machine, opts ConnectOptions) *ConnectivityResul
 					}
 				}
 			}
+		}
+	}
+
+	if err := client.Disconnect(); err != nil {
+		result.Error = errors.Join(result.Error, err)
+		if result.ErrorType == "" {
+			result.ErrorType = "unknown"
 		}
 	}
 
