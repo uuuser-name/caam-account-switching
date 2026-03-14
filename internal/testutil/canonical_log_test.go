@@ -76,3 +76,10 @@ func TestNewCanonicalLoggerHonorsConfiguredOutputPath(t *testing.T) {
 		t.Fatalf("expected configured output path to receive events, got %q", string(data))
 	}
 }
+
+func TestContainsRawTokenStillDetectsLeakAlongsideRedactedFields(t *testing.T) {
+	payload := `{"safe":"[REDACTED]","leak":"access_token=abcdef1234567890"}`
+	if !containsRawToken(payload) {
+		t.Fatalf("expected raw token detection to remain active when other fields are redacted")
+	}
+}

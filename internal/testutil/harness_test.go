@@ -556,7 +556,9 @@ func TestHarness_FilePermissions(t *testing.T) {
 	mockH := &TestHarness{T: mockT, TempDir: h.TempDir, Log: h.Log}
 
 	path := h.WriteFile("perms.txt", "content")
-	os.Chmod(path, 0644)
+	if err := os.Chmod(path, 0644); err != nil {
+		t.Fatalf("Chmod(%s) error = %v", path, err)
+	}
 
 	// Should match correct permissions
 	if !mockH.FilePermissions(path, 0644) {

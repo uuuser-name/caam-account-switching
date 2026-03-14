@@ -33,7 +33,7 @@ This policy defines compatibility rules for `docs/testing/e2e_log_schema.json`.
 2. Decision allowlist validation (`pass|continue|retry|abort`).
 3. Single-run/single-scenario consistency per JSONL file.
 4. Timestamp monotonicity (non-decreasing event order).
-5. Step correlation: each `*-start` event must have a matching `*-end` event at same or later timestamp.
+5. Step accounting: `*-start` / `*-end` pairs must stay balanced across the run; stray ends and duplicated starts that reuse one end are invalid.
 
 ## Forensics Packet Contract
 

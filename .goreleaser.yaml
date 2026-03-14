@@ -90,11 +90,11 @@ brews:
       bin.install "caam"
       generate_completions_from_executable(bin/"caam", "completion")
     test: |
-      system "#{bin}/caam", "--version"
+      system "#{bin}/caam", "version"
     caveats: |
       To get started with caam:
-        caam list              # List configured accounts
-        caam switch <account>  # Switch to an account
+        caam ls                # List configured profiles
+        caam activate claude <profile>  # Switch to a profile
         caam add               # Add a new account
 
 # Scoop bucket publishing

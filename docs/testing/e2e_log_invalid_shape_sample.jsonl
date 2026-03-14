@@ -1,0 +1,1 @@
+{"run_id":"","scenario_id":"switch-rate-limit-recovery","step_id":"auth-swap-start","timestamp":"2026-03-02T13:30:59Z","actor":"ci","component":"authpool","input_redacted":{"profile":"primary"},"output":["swapped"],"decision":"continue","duration_ms":101,"error":{"present":false,"code":"","message":"","details":{}}}

@@ -508,13 +508,7 @@ func validateCanonicalRunIntegrity(events []CanonicalLogEvent) error {
 	runID := events[0].RunID
 	scenarioID := events[0].ScenarioID
 	timestamps := make([]time.Time, len(events))
-
-	type stepStamp struct {
-		base string
-		ts   time.Time
-	}
-	var starts []stepStamp
-	var ends []stepStamp
+	openStarts := make(map[string]int)
 
 	for i, event := range events {
 		if event.RunID != runID {
@@ -535,28 +529,20 @@ func validateCanonicalRunIntegrity(events []CanonicalLogEvent) error {
 
 		switch {
 		case strings.HasSuffix(event.StepID, "-start"):
-			starts = append(starts, stepStamp{
-				base: strings.TrimSuffix(event.StepID, "-start"),
-				ts:   ts,
-			})
+			base := strings.TrimSuffix(event.StepID, "-start")
+			openStarts[base]++
 		case strings.HasSuffix(event.StepID, "-end"):
-			ends = append(ends, stepStamp{
-				base: strings.TrimSuffix(event.StepID, "-end"),
-				ts:   ts,
-			})
+			base := strings.TrimSuffix(event.StepID, "-end")
+			if openStarts[base] == 0 {
+				return fmt.Errorf("event %d: step %q ended without matching start", i+1, base)
+			}
+			openStarts[base]--
 		}
 	}
 
-	for _, start := range starts {
-		matched := false
-		for _, end := range ends {
-			if end.base == start.base && !end.ts.Before(start.ts) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return fmt.Errorf("step %q missing matching end event", start.base)
+	for base, count := range openStarts {
+		if count > 0 {
+			return fmt.Errorf("step %q missing %d matching end event(s)", base, count)
 		}
 	}
 
@@ -565,9 +551,6 @@ func validateCanonicalRunIntegrity(events []CanonicalLogEvent) error {
 
 // containsRawToken checks if a string contains raw token patterns.
 func containsRawToken(s string) bool {
-	if strings.Contains(s, "[REDACTED]") {
-		return false
-	}
 	for _, re := range canonicalRawTokenPatterns {
 		if re.MatchString(s) {
 			return true

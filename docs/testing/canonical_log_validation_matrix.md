@@ -12,6 +12,8 @@ This matrix enumerates the current test workflows that must validate canonical l
 | `internal/testutil/extended_harness_test.go` | `TestExtendedHarness_ValidateCanonicalLogsRejectsDenyPatternInOutput` |
 | `internal/testutil/extended_harness_test.go` | `TestExtendedHarness_ValidateCanonicalLogsAllowsDiagnosticTokenPhrase` |
 | `internal/testutil/extended_harness_test.go` | `TestExtendedHarness_ValidateCanonicalLogsRejectsRunIntegrityDrift` |
+| `internal/testutil/extended_harness_test.go` | `TestExtendedHarness_ValidateCanonicalLogsRejectsDuplicateStartsReusingOneEnd` |
+| `internal/testutil/extended_harness_test.go` | `TestExtendedHarness_ValidateCanonicalLogsRejectsEndWithoutStart` |
 | `internal/e2e/workflows/ratelimit_recovery_test.go` | `TestE2E_RateLimitRecoveryWorkflow` |
 | `internal/e2e/workflows/rotation_exhaustion_test.go` | `TestE2E_FiveHourCreditExhaustionSwitch` |
 | `internal/e2e/workflows/rotation_exhaustion_test.go` | `TestE2E_WeeklyCreditExhaustionSwitch` |

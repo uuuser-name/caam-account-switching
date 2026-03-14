@@ -65,6 +65,19 @@ jobs:
           # Set this as a repository secret with repo scope
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
+      - name: Validate installed-binary parity from release archive
+        run: |
+          archive_path="$(find dist -maxdepth 1 -type f -name 'caam_*_linux_amd64.tar.gz' | head -n 1)"
+          if [[ -z "${archive_path}" ]]; then
+            echo "missing linux amd64 release archive in dist/" >&2
+            find dist -maxdepth 2 -type f >&2 || true
+            exit 1
+          fi
+
+          ./scripts/validate_release_archive.sh "${archive_path}"
+          RELEASE_INSTALLED_VALIDATION_JSON=artifacts/test-audit/installed_validation_summary.json \
+            ./scripts/release_readiness_attestation.sh
+
       - name: Verify release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

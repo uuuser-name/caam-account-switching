@@ -185,8 +185,12 @@ func TestWezTermMockHarness_Assertions(t *testing.T) {
 	h.AddPaneSimple(2, "pane two")
 
 	ctx := context.Background()
-	h.SendText(ctx, 1, "/login\n", true)
-	h.SendText(ctx, 1, "1\n", true)
+	if err := h.SendText(ctx, 1, "/login\n", true); err != nil {
+		t.Fatalf("SendText() error = %v", err)
+	}
+	if err := h.SendText(ctx, 1, "1\n", true); err != nil {
+		t.Fatalf("SendText() error = %v", err)
+	}
 
 	// AssertSendTextCount
 	if !h.AssertSendTextCount(2) {
@@ -217,9 +221,15 @@ func TestWezTermMockHarness_ClearCalls(t *testing.T) {
 	h.SetPaneText(1, "text")
 
 	ctx := context.Background()
-	h.ListPanes(ctx)
-	h.GetText(ctx, 1, 0)
-	h.SendText(ctx, 1, "test", false)
+	if _, err := h.ListPanes(ctx); err != nil {
+		t.Fatalf("ListPanes() error = %v", err)
+	}
+	if _, err := h.GetText(ctx, 1, 0); err != nil {
+		t.Fatalf("GetText() error = %v", err)
+	}
+	if err := h.SendText(ctx, 1, "test", false); err != nil {
+		t.Fatalf("SendText() error = %v", err)
+	}
 
 	h.ClearCalls()
 

@@ -812,12 +812,12 @@ func TestExtendedHarness_ValidateCanonicalLogsAllowsDiagnosticTokenPhrase(t *tes
 	defer h.Close()
 
 	event := CanonicalLogEvent{
-		RunID:      "run-1",
-		ScenarioID: "scenario-1",
-		StepID:     "step-1",
-		Timestamp:  time.Now().UTC().Format(time.RFC3339),
-		Actor:      ActorCI,
-		Component:  ComponentTest,
+		RunID:         "run-1",
+		ScenarioID:    "scenario-1",
+		StepID:        "step-1",
+		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		Actor:         ActorCI,
+		Component:     ComponentTest,
 		InputRedacted: map[string]interface{}{},
 		Output: map[string]interface{}{
 			"message": "refresh-token reuse triggered profile switch",
@@ -889,5 +889,103 @@ func TestExtendedHarness_ValidateCanonicalLogsRejectsRunIntegrityDrift(t *testin
 
 	if err := h.ValidateCanonicalLogs(); err == nil {
 		t.Fatal("expected validation to fail for run_id drift")
+	}
+}
+
+func TestExtendedHarness_ValidateCanonicalLogsRejectsDuplicateStartsReusingOneEnd(t *testing.T) {
+	h := NewExtendedHarness(t)
+	defer h.Close()
+
+	events := []CanonicalLogEvent{
+		{
+			RunID:         "run-1",
+			ScenarioID:    "scenario-1",
+			StepID:        "step-start",
+			Timestamp:     time.Now().UTC().Format(time.RFC3339),
+			Actor:         ActorCI,
+			Component:     ComponentTest,
+			InputRedacted: map[string]interface{}{},
+			Output:        map[string]interface{}{},
+			Decision:      DecisionContinue,
+			DurationMs:    0,
+			Error:         ErrorEnvelope{Details: map[string]interface{}{}},
+		},
+		{
+			RunID:         "run-1",
+			ScenarioID:    "scenario-1",
+			StepID:        "step-start",
+			Timestamp:     time.Now().UTC().Add(time.Second).Format(time.RFC3339),
+			Actor:         ActorCI,
+			Component:     ComponentTest,
+			InputRedacted: map[string]interface{}{},
+			Output:        map[string]interface{}{},
+			Decision:      DecisionContinue,
+			DurationMs:    0,
+			Error:         ErrorEnvelope{Details: map[string]interface{}{}},
+		},
+		{
+			RunID:         "run-1",
+			ScenarioID:    "scenario-1",
+			StepID:        "step-end",
+			Timestamp:     time.Now().UTC().Add(2 * time.Second).Format(time.RFC3339),
+			Actor:         ActorCI,
+			Component:     ComponentTest,
+			InputRedacted: map[string]interface{}{},
+			Output:        map[string]interface{}{},
+			Decision:      DecisionPass,
+			DurationMs:    1,
+			Error:         ErrorEnvelope{Details: map[string]interface{}{}},
+		},
+	}
+
+	for _, event := range events {
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("Marshal(event): %v", err)
+		}
+		_, _ = h.canonicalBuffer.Write(raw)
+		_, _ = h.canonicalBuffer.WriteString("\n")
+	}
+
+	err := h.ValidateCanonicalLogs()
+	if err == nil {
+		t.Fatal("expected validation to fail for duplicate starts reusing one end")
+	}
+	if !strings.Contains(err.Error(), "missing 1 matching end event") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExtendedHarness_ValidateCanonicalLogsRejectsEndWithoutStart(t *testing.T) {
+	h := NewExtendedHarness(t)
+	defer h.Close()
+
+	event := CanonicalLogEvent{
+		RunID:         "run-1",
+		ScenarioID:    "scenario-1",
+		StepID:        "step-end",
+		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		Actor:         ActorCI,
+		Component:     ComponentTest,
+		InputRedacted: map[string]interface{}{},
+		Output:        map[string]interface{}{},
+		Decision:      DecisionAbort,
+		DurationMs:    1,
+		Error:         ErrorEnvelope{Details: map[string]interface{}{}},
+	}
+
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("Marshal(event): %v", err)
+	}
+	_, _ = h.canonicalBuffer.Write(raw)
+	_, _ = h.canonicalBuffer.WriteString("\n")
+
+	err = h.ValidateCanonicalLogs()
+	if err == nil {
+		t.Fatal("expected validation to fail for end without start")
+	}
+	if !strings.Contains(err.Error(), "ended without matching start") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

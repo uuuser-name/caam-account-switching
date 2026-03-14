@@ -8,6 +8,7 @@ The same attestation must also report separate truth labels for deterministic lo
 
 - `artifacts/test-audit/test_audit.json`
 - `artifacts/test-audit/e2e_quality_gate.json`
+  - This summary artifact must be emitted on both pass and fail paths so downstream attestation can fail closed with a concrete `failure_reason` and `stage_results` record.
 - `artifacts/test-audit/quality_trend_diff.json`
 
 ## Optional Explicit Inputs

@@ -24,6 +24,8 @@ cli_matrix_json="${TEST_AUDIT_CLI_MATRIX_FILE:-$repo_root/artifacts/cli-matrix/c
 traceability_json_path="${TEST_AUDIT_TRACEABILITY_FILE:-$repo_root/artifacts/cli-matrix/scenario_traceability.json}"
 traceability_md_path="${TEST_AUDIT_TRACEABILITY_MD_FILE:-$repo_root/docs/testing/cli_scenario_traceability.md}"
 traceability_bindings_path="${TEST_AUDIT_TRACEABILITY_BINDINGS_FILE:-$repo_root/artifacts/cli-matrix/scenario_test_bindings.json}"
+release_attestation_json_path="${TEST_AUDIT_RELEASE_ATTESTATION_FILE:-$repo_root/artifacts/test-audit/release_attestation.json}"
+release_attestation_md_path="${TEST_AUDIT_RELEASE_ATTESTATION_MD_FILE:-$repo_root/artifacts/test-audit/release_attestation.md}"
 timestamp_utc="$(date -u +"%Y%m%dT%H%M%SZ")"
 snapshot_dir="$snapshot_root/$timestamp_utc"
 
@@ -34,13 +36,28 @@ tmp_pkg_cov="$(mktemp)"
 tmp_double_events="$(mktemp)"
 tmp_realism_invalid="$(mktemp)"
 tmp_scenarios="$(mktemp)"
+tmp_pkg_cov_risk="$(mktemp)"
+tmp_pkg_cov_json="$(mktemp)"
+tmp_pkg_cover_dir="$(mktemp -d)"
 go_test_failure_log="$artifact_dir/go_test_failures.log"
 suite_failed="false"
 audit_failed="false"
 first_failure_stage=""
 first_failure_package=""
 first_failure_message=""
-trap 'rm -f "$tmp_cov" "$tmp_pkgs" "$tmp_pkg_cov" "$tmp_double_events" "$tmp_realism_invalid" "$tmp_scenarios"' EXIT
+cleanup() {
+  rm -f \
+    "$tmp_cov" \
+    "$tmp_pkgs" \
+    "$tmp_pkg_cov" \
+    "$tmp_double_events" \
+    "$tmp_realism_invalid" \
+    "$tmp_scenarios" \
+    "$tmp_pkg_cov_risk" \
+    "$tmp_pkg_cov_json"
+  rm -rf "$tmp_pkg_cover_dir"
+}
+trap cleanup EXIT
 
 : >"$go_test_failure_log"
 
@@ -94,24 +111,53 @@ normalize_pkg_path() {
 
 go list ./... >"$tmp_pkgs"
 while IFS= read -r pkg; do
-  # Single-package run makes per-package coverage explicit and scriptable.
-  if ! pkg_test_output="$(go test -cover "$pkg" 2>&1)"; then
+  pkg_test_target="$(normalize_pkg_path "$pkg")"
+  pkg_cov_profile="$tmp_pkg_cover_dir/$(tr '/.' '__' <<<"$pkg").cover"
+  # Use coverprofiles instead of parsing `go test -cover` output so helper
+  # subprocess coverage is included for command-heavy packages.
+  if ! pkg_test_output="$(go test -coverprofile="$pkg_cov_profile" "$pkg_test_target" 2>&1)"; then
     suite_failed="true"
-    record_failure "per_package" "$pkg" "go test -cover failed for package: $pkg"
+    record_failure "per_package" "$pkg" "go test -coverprofile failed for package: $pkg"
     append_failure_log "package $pkg failure" "$pkg_test_output"
-    echo "test audit: go test -cover failed for package: $pkg; recording 0.0% and continuing" >&2
-    printf '%s\t%s\n' "$pkg" "0.0" >>"$tmp_pkg_cov"
+    echo "test audit: go test -coverprofile failed for package: $pkg; recording 0.0% and continuing" >&2
+    printf '%s\t%s\t%s\n' "$pkg" "0.0" "true" >>"$tmp_pkg_cov"
     continue
   fi
-  line="$(printf '%s\n' "$pkg_test_output" | awk '/coverage:/{print $0}' | tail -n1 || true)"
-  pct="$(awk '{for(i=1;i<=NF;i++) if ($i ~ /[0-9]+\.[0-9]+%|[0-9]+%/) {gsub("%","",$i); print $i; exit}}' <<<"$line")"
+  has_statements="true"
+  if grep -Fq 'coverage: [no statements]' <<<"$pkg_test_output"; then
+    has_statements="false"
+  fi
+  pct=""
+  if [[ -s "$pkg_cov_profile" ]]; then
+    pct="$(go tool cover -func="$pkg_cov_profile" 2>/dev/null | awk '/^total:/{gsub("%","",$3); print $3}' | tail -n1)"
+  fi
+  if [[ -z "$pct" ]]; then
+    line="$(printf '%s\n' "$pkg_test_output" | awk '/coverage:/{print $0}' | tail -n1 || true)"
+    pct="$(awk '{for(i=1;i<=NF;i++) if ($i ~ /[0-9]+\.[0-9]+%|[0-9]+%/) {gsub("%","",$i); print $i; exit}}' <<<"$line")"
+  fi
   if [[ -z "$pct" ]]; then
     pct="0.0"
   fi
-  printf '%s\t%s\n' "$pkg" "$pct" >>"$tmp_pkg_cov"
+  printf '%s\t%s\t%s\n' "$pkg" "$pct" "$has_statements" >>"$tmp_pkg_cov"
 done <"$tmp_pkgs"
 
-awk -F '\t' 'BEGIN{print "["} {printf "%s{\"package\":\"%s\",\"coverage\":%s}", (NR==1?"":","), $1, $2} END{print "]"}' "$tmp_pkg_cov" >"$coverage_json"
+while IFS=$'\t' read -r pkg pct has_statements; do
+  jq -cn \
+    --arg package "$pkg" \
+    --argjson coverage "$pct" \
+    --arg has_statements "$has_statements" \
+    '{
+      package:$package,
+      coverage:$coverage,
+      has_statements:($has_statements=="true")
+    }' >>"$tmp_pkg_cov_json"
+done <"$tmp_pkg_cov"
+
+if [[ -s "$tmp_pkg_cov_json" ]]; then
+  jq -s '.' "$tmp_pkg_cov_json" >"$coverage_json"
+else
+  echo "[]" >"$coverage_json"
+fi
 
 get_risk_tier() {
   case "$1" in
@@ -176,20 +222,24 @@ is_critical_path_package() {
   esac
 }
 
-tmp_pkg_cov_risk="$(mktemp)"
-trap 'rm -f "$tmp_cov" "$tmp_pkgs" "$tmp_pkg_cov" "$tmp_double_events" "$tmp_scenarios" "$tmp_pkg_cov_risk"' EXIT
-
-while IFS=$'\t' read -r pkg pct; do
+while IFS=$'\t' read -r pkg pct has_statements; do
   normalized_pkg="$(normalize_pkg_path "$pkg")"
   tier="$(get_risk_tier "$normalized_pkg")"
   floor="$(get_risk_floor "$tier")"
   owner="$(get_owner_hint "$normalized_pkg")"
   critical_path="$(is_critical_path_package "$normalized_pkg")"
   status="on_track"
-  if awk "BEGIN {exit !($pct < $floor)}"; then
+  if [[ "$has_statements" != "true" ]]; then
+    status="not_applicable"
+  elif [[ "$pct" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    if awk -v pct="$pct" -v floor="$floor" 'BEGIN { exit !(pct < floor) }'; then
+      status="below_floor"
+    elif awk -v pct="$pct" -v floor="$floor" 'BEGIN { exit !(pct >= (floor + 10)) }'; then
+      status="above_floor"
+    fi
+  else
+    pct="0"
     status="below_floor"
-  elif awk "BEGIN {exit !($pct >= ($floor + 10))}"; then
-    status="above_floor"
   fi
   jq -cn \
     --arg package "$normalized_pkg" \
@@ -198,12 +248,14 @@ while IFS=$'\t' read -r pkg pct; do
     --arg owner "$owner" \
     --arg status "$status" \
     --arg critical_path "$critical_path" \
+    --arg has_statements "$has_statements" \
     --argjson coverage "$pct" \
     --argjson floor "$floor" \
     '{
       package:$package,
       import_path:$import_path,
       coverage:$coverage,
+      has_statements:($has_statements=="true"),
       risk_tier:$tier,
       floor:$floor,
       owner:$owner,
@@ -236,7 +288,7 @@ if [[ -z "$baseline_cov" ]]; then
 fi
 coverage_delta="$(awk -v cur="$total_cov" -v base="$baseline_cov" 'BEGIN{printf "%.1f", cur-base}')"
 
-below_threshold="$(awk -F '\t' -v t="$threshold" '$2+0 < t {print $1}' "$tmp_pkg_cov" | jq -R -s -c 'split("\n") | map(select(length>0))')"
+below_threshold="$(awk -F '\t' -v t="$threshold" '$3=="true" && $2+0 < t {print $1}' "$tmp_pkg_cov" | jq -R -s -c 'split("\n") | map(select(length>0))')"
 critical_path_below_floor="$(jq -c '[.[] | select(.critical_path == true and .status == "below_floor")]' "$coverage_risk_json")"
 critical_path_below_floor_count="$(jq 'length' <<<"$critical_path_below_floor")"
 
@@ -463,6 +515,15 @@ if [[ -f "$traceability_json_path" ]]; then
   }' "$traceability_json_path" 2>/dev/null || printf 'null')"
 fi
 
+release_attestation_json_present="false"
+release_attestation_md_present="false"
+if [[ -f "$release_attestation_json_path" ]]; then
+  release_attestation_json_present="true"
+fi
+if [[ -f "$release_attestation_md_path" ]]; then
+  release_attestation_md_present="true"
+fi
+
 logging_baseline_json="$(
   while IFS= read -r rel_file; do
     [[ -z "$rel_file" ]] && continue
@@ -503,13 +564,13 @@ cat >"$e2e_json" <<EOF
   },
   "traceability_matrix": {
     "status": "$traceability_status",
-    "cli_matrix_path": "${cli_matrix_json#$repo_root/}",
+    "cli_matrix_path": "${cli_matrix_json#"$repo_root"/}",
     "cli_matrix_present": $traceability_matrix_present,
-    "bindings_path": "${traceability_bindings_path#$repo_root/}",
+    "bindings_path": "${traceability_bindings_path#"$repo_root"/}",
     "bindings_present": $traceability_bindings_present,
-    "traceability_json_path": "${traceability_json_path#$repo_root/}",
+    "traceability_json_path": "${traceability_json_path#"$repo_root"/}",
     "traceability_json_present": $traceability_artifact_present,
-    "traceability_md_path": "${traceability_md_path#$repo_root/}",
+    "traceability_md_path": "${traceability_md_path#"$repo_root"/}",
     "traceability_md_present": $traceability_markdown_present,
     "summary": $traceability_summary_json
   },
@@ -534,10 +595,10 @@ cat >"$summary_json" <<EOF
   "below_threshold_packages": $below_threshold,
   "mock_fake_stub_matches": $mock_count,
   "mock_fake_stub_violations": $double_violation_count,
-  "realism_allowlist_path": "${realism_allowlist_path#$repo_root/}",
+  "realism_allowlist_path": "${realism_allowlist_path#"$repo_root"/}",
   "realism_allowlist_invalid_rules_path": "artifacts/test-audit/realism_allowlist_invalid_rules.json",
   "realism_allowlist_invalid_rule_count": $(jq 'length' "$realism_allowlist_invalid_json"),
-  "baseline_reference_path": "${baseline_ref_path#$repo_root/}",
+  "baseline_reference_path": "${baseline_ref_path#"$repo_root"/}",
   "baseline_snapshot_path": "artifacts/test-audit/baseline_snapshot.json",
   "mock_fake_stub_by_package_path": "artifacts/test-audit/mock_fake_stub_by_package.json",
   "mock_fake_stub_by_file_path": "artifacts/test-audit/mock_fake_stub_by_file.json",
@@ -546,6 +607,17 @@ cat >"$summary_json" <<EOF
   "critical_path_below_floor_count": $critical_path_below_floor_count,
   "critical_path_below_floor": $critical_path_below_floor,
   "e2e_inventory_path": "artifacts/test-audit/e2e_inventory.json",
+  "traceability_json_path": "${traceability_json_path#"$repo_root"/}",
+  "traceability_json_present": $traceability_artifact_present,
+  "traceability_md_path": "${traceability_md_path#"$repo_root"/}",
+  "traceability_md_present": $traceability_markdown_present,
+  "traceability_bindings_path": "${traceability_bindings_path#"$repo_root"/}",
+  "traceability_bindings_present": $traceability_bindings_present,
+  "traceability_status": "$traceability_status",
+  "release_attestation_path": "${release_attestation_json_path#"$repo_root"/}",
+  "release_attestation_present": $release_attestation_json_present,
+  "release_attestation_md_path": "${release_attestation_md_path#"$repo_root"/}",
+  "release_attestation_md_present": $release_attestation_md_present,
   "audit_pass": $( [[ "$audit_failed" == "true" ]] && echo "false" || echo "true" ),
   "go_test_pass": $( [[ "$suite_failed" == "true" ]] && echo "false" || echo "true" ),
   "first_failure_stage": $( if [[ -n "$first_failure_stage" ]]; then printf '"%s"' "$first_failure_stage"; else printf 'null'; fi ),
@@ -559,7 +631,7 @@ EOF
 cat >"$baseline_snapshot_json" <<EOF
 {
   "generated_at_utc": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-  "baseline_reference_path": "${baseline_ref_path#$repo_root/}",
+  "baseline_reference_path": "${baseline_ref_path#"$repo_root"/}",
   "baseline_total_coverage": $baseline_cov,
   "current_total_coverage": $total_cov,
   "coverage_delta_from_baseline": $coverage_delta
@@ -593,16 +665,18 @@ cat >"$coverage_md" <<EOF
 
 - JSON summary: \`artifacts/test-audit/test_audit.json\`
 - Baseline snapshot: \`artifacts/test-audit/baseline_snapshot.json\`
-- Baseline reference: \`${baseline_ref_path#$repo_root/}\`
-- Realism allowlist: \`${realism_allowlist_path#$repo_root/}\`
+- Baseline reference: \`${baseline_ref_path#"$repo_root"/}\`
+- Realism allowlist: \`${realism_allowlist_path#"$repo_root"/}\`
 - Package coverage: \`artifacts/test-audit/coverage_by_package.json\`
 - Package coverage with risk tiers: \`artifacts/test-audit/coverage_by_package_with_risk.json\`
 - Mock/fake/stub by package: \`artifacts/test-audit/mock_fake_stub_by_package.json\`
 - Mock/fake/stub by file: \`artifacts/test-audit/mock_fake_stub_by_file.json\`
 - Invalid realism allowlist rules: \`artifacts/test-audit/realism_allowlist_invalid_rules.json\`
 - E2E inventory: \`artifacts/test-audit/e2e_inventory.json\`
-- CLI traceability JSON: \`${traceability_json_path#$repo_root/}\`
-- CLI traceability markdown: \`${traceability_md_path#$repo_root/}\`
+- CLI traceability JSON: \`${traceability_json_path#"$repo_root"/}\`
+- CLI traceability markdown: \`${traceability_md_path#"$repo_root"/}\`
+- Release attestation JSON: \`${release_attestation_json_path#"$repo_root"/}\`
+- Release attestation markdown: \`${release_attestation_md_path#"$repo_root"/}\`
 
 ## Packages Below Threshold (${threshold}%)
 

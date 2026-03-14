@@ -271,7 +271,8 @@ func TestTempDirUsage(t *testing.T) {
 			strings.Contains(contentStr, "testutil.NewExtendedHarness") ||
 			strings.Contains(contentStr, "NewHarness(t)") ||
 			strings.Contains(contentStr, "NewExtendedHarness(t)") ||
-			strings.Contains(contentStr, "newStartupLayout(t)")
+			strings.Contains(contentStr, "newStartupLayout(t)") ||
+			strings.Contains(contentStr, "setupPoolAgentTestEnv(t)")
 		hasHomeOverride := (strings.Contains(contentStr, `os.Setenv("HOME"`) ||
 			strings.Contains(contentStr, `t.Setenv("HOME"`)) &&
 			(strings.Contains(contentStr, "tmpDir") || strings.Contains(contentStr, "TempDir"))

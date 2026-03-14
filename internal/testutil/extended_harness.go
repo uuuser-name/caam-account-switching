@@ -81,7 +81,9 @@ func NewExtendedHarness(t *testing.T) *ExtendedHarness {
 // generateRunID creates a unique run identifier.
 func generateRunID() string {
 	b := make([]byte, 4)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("generateRunID: %v", err))
+	}
 	return fmt.Sprintf("run-%s-%s", time.Now().Format("20060102"), hex.EncodeToString(b))
 }
 

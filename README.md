@@ -26,7 +26,7 @@ caam activate claude bob@gmail.com      # Switch instantly
 
 ```bash
 # List available profiles (machine-readable)
-caam list --json
+caam ls --json
 
 # Show current status for all tools
 caam status --json

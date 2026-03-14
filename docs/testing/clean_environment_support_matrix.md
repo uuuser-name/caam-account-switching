@@ -43,8 +43,8 @@ An installed-binary check is valid only if it runs without the source tree on th
 Minimum expected checks:
 
 ```bash
-caam --version
-caam list --json
+caam version
+caam ls --json
 caam doctor --json
 ```
 
@@ -52,6 +52,7 @@ The installed-binary lane must verify that:
 - the binary starts cleanly
 - machine-readable commands still emit valid JSON on stdout
 - missing local provider state is reported as diagnostics, not as crashes
+- `installed_binary_green` is used only for a real extracted archive or package-manager install, not a direct source-tree binary path
 
 ## Bounded Live Lane Contract
 

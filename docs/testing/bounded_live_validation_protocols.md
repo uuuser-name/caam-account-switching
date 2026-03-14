@@ -4,6 +4,23 @@ This runbook defines the live-account procedures that must exist before CAAM can
 
 Use this document together with [`clean_environment_support_matrix.md`](clean_environment_support_matrix.md). These procedures define how to run the live lane safely; they do not imply that the live lane has already passed.
 
+## Automation Entry Point
+
+Use the repo-owned runner for Codex bounded-live proofs so the run emits transcript, canonical JSONL, and summary artifacts in one place:
+
+```bash
+./scripts/run_bounded_live_codex_validation.sh --start-profile leothehumanbeing
+```
+
+The script will:
+
+- require a concrete exhausted start profile
+- derive the expected fallback from `caam next codex --dry-run` if one is not supplied
+- force-activate the exhausted profile
+- run a bounded `caam run codex` prompt
+- capture raw transcript plus canonical log events
+- emit `bounded_live_validation_summary.json` and markdown in `artifacts/bounded-live/...`
+
 ## Shared Rules for All Live Runs
 
 Every bounded-live run must:

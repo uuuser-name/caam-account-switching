@@ -143,7 +143,9 @@ func TestTimelineMerger_DeterministicOutput(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		merger := NewTimelineMerger()
 		merger.AddEvents("test-source", events)
-		merger.MergeWithOptions(opts)
+		if err := merger.MergeWithOptions(opts); err != nil {
+			t.Fatalf("MergeWithOptions() error = %v", err)
+		}
 
 		output := merger.DumpJSONL()
 		if i == 0 {
@@ -177,7 +179,9 @@ func TestTimelineMerger_DeterministicWithShuffledInput(t *testing.T) {
 	// Get reference output
 	merger1 := NewTimelineMerger()
 	merger1.AddEvents("test-source", events)
-	merger1.MergeWithOptions(opts)
+	if err := merger1.MergeWithOptions(opts); err != nil {
+		t.Fatalf("MergeWithOptions() error = %v", err)
+	}
 	referenceOutput := merger1.DumpJSONL()
 
 	// Shuffle and merge multiple times
@@ -192,7 +196,9 @@ func TestTimelineMerger_DeterministicWithShuffledInput(t *testing.T) {
 
 		merger := NewTimelineMerger()
 		merger.AddEvents("test-source", shuffled)
-		merger.MergeWithOptions(opts)
+		if err := merger.MergeWithOptions(opts); err != nil {
+			t.Fatalf("MergeWithOptions() error = %v", err)
+		}
 		output := merger.DumpJSONL()
 
 		if output != referenceOutput {
@@ -312,7 +318,9 @@ func TestTimelineMerger_Deduplication(t *testing.T) {
 		createTestEvent("run-001", "scenario-1", "step-2", "2024-01-01T10:00:01Z", "ci", ComponentTest, DecisionPass, 100),
 	})
 
-	merger.MergeWithOptions(opts)
+	if err := merger.MergeWithOptions(opts); err != nil {
+		t.Fatalf("MergeWithOptions() error = %v", err)
+	}
 
 	// Should have 2 events (duplicates removed)
 	if len(merger.Events()) != 2 {
@@ -332,7 +340,9 @@ func TestTimelineMerger_DeduplicationDisabled(t *testing.T) {
 		createTestEvent("run-001", "scenario-1", "step-1", ts, "ci", ComponentTest, DecisionPass, 100), // Duplicate
 	})
 
-	merger.MergeWithOptions(opts)
+	if err := merger.MergeWithOptions(opts); err != nil {
+		t.Fatalf("MergeWithOptions() error = %v", err)
+	}
 
 	// Should have 2 events (dedup disabled)
 	if len(merger.Events()) != 2 {

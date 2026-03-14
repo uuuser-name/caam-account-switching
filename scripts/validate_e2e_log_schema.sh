@@ -50,7 +50,15 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   if ! jq -e --argjson req "$required_fields" --argjson denies "$deny_patterns" '
     (. | type) == "object"
     and (. as $obj | reduce $req[] as $k (true; . and ($obj | has($k))))
-    and (.timestamp | fromdateiso8601? != null)
+    and (.run_id | type == "string" and length > 0)
+    and (.scenario_id | type == "string" and length > 0)
+    and (.step_id | type == "string" and length > 0)
+    and (.timestamp | type == "string" and fromdateiso8601? != null)
+    and (.actor | type == "string" and length > 0)
+    and (.component | type == "string" and length > 0)
+    and (.input_redacted | type == "object")
+    and (.output | type == "object")
+    and (.decision | type == "string" and (. == "pass" or . == "continue" or . == "retry" or . == "abort"))
     and (.duration_ms | type == "number" and . >= 0 and (floor == .))
     and (.error | type == "object" and has("present") and has("code") and has("message") and has("details"))
     and ((.error.present | type) == "boolean")
@@ -78,6 +86,23 @@ fi
 if ! jq -s -e '
   def ts: (.timestamp | fromdateiso8601);
   def valid_decision: (. == "pass" or . == "continue" or . == "retry" or . == "abort");
+  def step_base($suffix): sub(($suffix + "$"); "");
+  def balanced_steps:
+    reduce .[] as $e ({ok:true, open:{}};
+      if .ok | not then .
+      elif ($e.step_id | endswith("-start")) then
+        ($e.step_id | step_base("-start")) as $base
+        | .open[$base] = ((.open[$base] // 0) + 1)
+      elif ($e.step_id | endswith("-end")) then
+        ($e.step_id | step_base("-end")) as $base
+        | if ((.open[$base] // 0) > 0)
+          then .open[$base] = (.open[$base] - 1)
+          else .ok = false
+          end
+      else .
+      end
+    ) as $state
+    | $state.ok and ([($state.open // {})[]?] | all(. == 0));
 
   # Decisions must be in allowlist
   ([.[].decision] | all(valid_decision))
@@ -104,25 +129,30 @@ if ! jq -s -e '
   )
   and
 
-  # Every "*-start" step event must have a matching "*-end" event at same/after timestamp
-  (
-    [ .[] | select(.step_id | endswith("-start"))
-      | {base: (.step_id | sub("-start$"; "")), ts: (.timestamp | fromdateiso8601)} ] as $starts
-    |
-    [ .[] | select(.step_id | endswith("-end"))
-      | {base: (.step_id | sub("-end$"; "")), ts: (.timestamp | fromdateiso8601)} ] as $ends
-    |
-    ($starts | all(. as $s | any($ends[]?; .base == $s.base and .ts >= $s.ts)))
-  )
+  # Step accounting must stay balanced across the run.
+  balanced_steps
 ' "$tmp_events" >/dev/null; then
   echo "correlation/timeline integrity validation failed: $jsonl_path" >&2
   jq -s '
+    def step_base($suffix): sub(($suffix + "$"); "");
     {
       run_ids: ([.[].run_id] | unique),
       scenario_ids: ([.[].scenario_id] | unique),
       decisions: ([.[].decision] | unique),
       start_events: ([.[] | select(.step_id|endswith("-start")) | .step_id] | length),
-      end_events: ([.[] | select(.step_id|endswith("-end")) | .step_id] | length)
+      end_events: ([.[] | select(.step_id|endswith("-end")) | .step_id] | length),
+      step_balance: (
+        reduce .[] as $e ({};
+          if ($e.step_id | endswith("-start")) then
+            ($e.step_id | step_base("-start")) as $base
+            | .[$base] = ((.[$base] // 0) + 1)
+          elif ($e.step_id | endswith("-end")) then
+            ($e.step_id | step_base("-end")) as $base
+            | .[$base] = ((.[$base] // 0) - 1)
+          else .
+          end
+        )
+      )
     }
   ' "$tmp_events" >&2 || true
   exit 1
