@@ -1,15 +1,3 @@
-# .github/workflows/notify-acfs.yml
-#
-# Notifies ACFS when installer scripts change, triggering checksum updates.
-# Use this template for repos with install.sh at the repository root.
-#
-# Setup:
-#   1. Create a PAT with 'contents:read' on agentic_coding_flywheel_setup
-#   2. Add it as a secret named ACFS_REPO_DISPATCH_TOKEN in this repo
-#   3. Copy this file to .github/workflows/notify-acfs.yml
-#
-# Related: agentic_coding_flywheel_setup-b04c
-#
 name: Notify ACFS of Installer Changes
 
 on:

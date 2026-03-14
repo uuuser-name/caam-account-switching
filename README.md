@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="coding_agent_account_manager_illustration.webp" alt="caam - Coding Agent Account Manager" width="600">
-</p>
-
 # caam - Coding Agent Account Manager
 
 ![Release](https://img.shields.io/github/v/release/Dicklesworthstone/coding_agent_account_manager?style=for-the-badge&color=bd93f9)
@@ -53,6 +49,8 @@ caam activate claude alice@gmail.com --json
 - Core architecture and profile management: [`docs/SMART_PROFILE_MANAGEMENT.md`](docs/SMART_PROFILE_MANAGEMENT.md)
 - Distributed recovery and auth sync: [`docs/DISTRIBUTED_AUTH_RECOVERY.md`](docs/DISTRIBUTED_AUTH_RECOVERY.md)
 - Interface roadmap and feature planning: [`docs/AIM_UNIFIED_INTERFACE_PLAN.md`](docs/AIM_UNIFIED_INTERFACE_PLAN.md), [`docs/FEATURE_PLAN_2025Q1.md`](docs/FEATURE_PLAN_2025Q1.md)
+- Supported environments and bootstrap contract: [`docs/testing/clean_environment_support_matrix.md`](docs/testing/clean_environment_support_matrix.md)
+- Bounded live switching and resume validation runbook: [`docs/testing/bounded_live_validation_protocols.md`](docs/testing/bounded_live_validation_protocols.md)
 - Testing governance, e2e contracts, and traceability: [`docs/testing/`](docs/testing/)
 - Full docs index and authoring conventions: [`docs/README.md`](docs/README.md)
 
@@ -186,7 +184,9 @@ Each profile gets its own `$HOME` and `$CODEX_HOME` with symlinks to your real `
 
 **Login Command:** `codex login` (or `codex login --device-auth` for headless)
 
-**Notes:** Respects `CODEX_HOME`. CAAM enforces file-based auth storage by writing `cli_auth_credentials_store = "file"` to `~/.codex/config.toml` inside the profile.
+**Notes:** Respects `CODEX_HOME`. CAAM repairs Codex's managed config in `~/.codex/config.toml` by enforcing `cli_auth_credentials_store = "file"`, `[features] multi_agent = true`, and `[notice] hide_rate_limit_model_nudge = true` so the soft "Approaching rate limits" model-switch popup stays disabled at the config level.
+
+**Reliability:** The popup suppression lives in the user's Codex config, not in a binary patch, so normal Codex upgrades should keep it. If config drift reappears, run `caam doctor --fix` to repair the managed defaults. For pane-heavy workflows where preserving scrollback matters more than fullscreen TUI behavior, consider Codex's current TUI setting `[tui] alternate_screen = "never"` as an optional local preference.
 
 ### Gemini CLI (Google One AI Premium)
 
@@ -719,11 +719,12 @@ scoop install dicklesworthstone/caam
 
 ### Alternative: Direct Download
 
-Download the latest release for your platform:
-- [Linux x86_64](https://github.com/Dicklesworthstone/coding_agent_account_manager/releases/latest/download/caam-linux-amd64)
-- [macOS Intel](https://github.com/Dicklesworthstone/coding_agent_account_manager/releases/latest/download/caam-darwin-amd64)
-- [macOS ARM](https://github.com/Dicklesworthstone/coding_agent_account_manager/releases/latest/download/caam-darwin-arm64)
-- [Windows](https://github.com/Dicklesworthstone/coding_agent_account_manager/releases/latest/download/caam-windows-amd64.exe)
+Download from the [latest release page](https://github.com/Dicklesworthstone/coding_agent_account_manager/releases/latest) and choose the archive that matches your platform:
+- Linux x86_64: `caam_<version>_linux_amd64.tar.gz`
+- Linux ARM64: `caam_<version>_linux_arm64.tar.gz`
+- macOS Intel: `caam_<version>_darwin_amd64.tar.gz`
+- macOS ARM: `caam_<version>_darwin_arm64.tar.gz`
+- Windows x86_64: `caam_<version>_windows_amd64.zip`
 
 ### Verify Release Artifacts
 
@@ -794,7 +795,14 @@ See [`docs/SMART_PROFILE_MANAGEMENT.md`](docs/SMART_PROFILE_MANAGEMENT.md) for t
 
 ## Contributions
 
-> *About Contributions:* Please don't take this the wrong way, but I do not accept outside contributions for any of my projects. I simply don't have the mental bandwidth to review anything, and it's my name on the thing, so I'm responsible for any problems it causes; thus, the risk-reward is highly asymmetric from my perspective. I'd also have to worry about other "stakeholders," which seems unwise for tools I mostly make for myself for free. Feel free to submit issues, and even PRs if you want to illustrate a proposed fix, but know I won't merge them directly. Instead, I'll have Claude or Codex review submissions via `gh` and independently decide whether and how to address them. Bug reports in particular are welcome. Sorry if this offends, but I want to avoid wasted time and hurt feelings. I understand this isn't in sync with the prevailing open-source ethos that seeks community contributions, but it's the only way I can move at this velocity and keep my sanity.
+Issues and focused pull requests are welcome, especially for reproducible bugs, docs fixes, and narrowly scoped test improvements.
+
+CAAM is still maintained in a maintainer-driven style:
+- I may rework or re-implement proposed changes instead of merging patches as-is.
+- Reviews are prioritized for bugs, reliability fixes, and release blockers.
+- If you want the fastest path to a fix, open an issue with a clear reproduction and validation notes.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the practical contribution workflow.
 
 ---
 

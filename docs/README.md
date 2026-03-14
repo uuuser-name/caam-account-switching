@@ -15,6 +15,8 @@ This repository follows the same documentation style used across Jeffrey Emanuel
 - Unified interface plan: [`AIM_UNIFIED_INTERFACE_PLAN.md`](AIM_UNIFIED_INTERFACE_PLAN.md)
 - Feature plan: [`FEATURE_PLAN_2025Q1.md`](FEATURE_PLAN_2025Q1.md)
 - Claude auth inventory: [`CLAUDE_AUTH_INVENTORY.md`](CLAUDE_AUTH_INVENTORY.md), [`CLAUDE_AUTH_INVENTORY.json`](CLAUDE_AUTH_INVENTORY.json)
+- Clean environment support matrix: [`testing/clean_environment_support_matrix.md`](testing/clean_environment_support_matrix.md)
+- Bounded live validation protocols: [`testing/bounded_live_validation_protocols.md`](testing/bounded_live_validation_protocols.md)
 - Testing docs: [`testing/`](testing/)
 
 ## Authoring Template
