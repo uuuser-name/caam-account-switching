@@ -401,7 +401,7 @@ func runSyncStatus(cmd *cobra.Command, args []string) error {
 
 	// Local machine
 	if state.Identity != nil {
-		fmt.Fprintf(out, "Local Machine: %s\n", state.Identity.Hostname)
+		fmt.Fprintf(out, "Local Machine: %s\n", sanitizeTerminalText(state.Identity.Hostname))
 	}
 
 	// Auto-sync status
@@ -437,7 +437,14 @@ func runSyncStatus(cmd *cobra.Command, args []string) error {
 			if !m.LastSync.IsZero() {
 				lastSync = formatTimeAgo(m.LastSync)
 			}
-			fmt.Fprintf(out, "  %-15s %-20s %-10s %s\n", m.Name, m.Address, status, lastSync)
+			fmt.Fprintf(
+				out,
+				"  %-15s %-20s %-10s %s\n",
+				sanitizeTerminalText(m.Name),
+				sanitizeTerminalText(m.Address),
+				sanitizeTerminalText(status),
+				sanitizeTerminalText(lastSync),
+			)
 		}
 	}
 
@@ -514,11 +521,16 @@ func runSyncAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("save state: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Added machine %q (%s) to sync pool\n", name, address)
+	fmt.Fprintf(
+		cmd.OutOrStdout(),
+		"Added machine %q (%s) to sync pool\n",
+		sanitizeTerminalText(name),
+		sanitizeTerminalText(address),
+	)
 
 	if testAfter {
 		fmt.Fprintln(cmd.OutOrStdout(), "")
-		fmt.Fprintf(cmd.OutOrStdout(), "Testing connectivity to %s...\n", name)
+		fmt.Fprintf(cmd.OutOrStdout(), "Testing connectivity to %s...\n", sanitizeTerminalText(name))
 		pool := sync.NewConnectionPool(sync.DefaultConnectOptions())
 		defer pool.CloseAll()
 		testSyncMachine(cmd.OutOrStdout(), pool, machine)
@@ -543,7 +555,7 @@ func runSyncRemove(cmd *cobra.Command, args []string) error {
 
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		fmt.Fprintf(cmd.OutOrStdout(), "Remove machine %q from sync pool? (y/N): ", name)
+		fmt.Fprintf(cmd.OutOrStdout(), "Remove machine %q from sync pool? (y/N): ", sanitizeTerminalText(name))
 		var response string
 		fmt.Scanln(&response)
 		if strings.ToLower(response) != "y" && strings.ToLower(response) != "yes" {
@@ -560,7 +572,7 @@ func runSyncRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("save state: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Removed machine %q from sync pool\n", name)
+	fmt.Fprintf(cmd.OutOrStdout(), "Removed machine %q from sync pool\n", sanitizeTerminalText(name))
 	return nil
 }
 
@@ -947,10 +959,10 @@ func runSyncInit(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("create CSV: %w", err)
 		}
 		if created {
-			fmt.Fprintf(out, "Created %s\n", csvPath)
+			fmt.Fprintf(out, "Created %s\n", sanitizeTerminalText(csvPath))
 			fmt.Fprintln(out, "Edit this file to add your machines, then run 'caam sync init' again.")
 		} else {
-			fmt.Fprintf(out, "CSV file already exists: %s\n", csvPath)
+			fmt.Fprintf(out, "CSV file already exists: %s\n", sanitizeTerminalText(csvPath))
 		}
 		return nil
 	}
@@ -982,7 +994,7 @@ func runSyncInit(cmd *cobra.Command, args []string) error {
 	if len(discovered) > 0 {
 		fmt.Fprintln(out, "  Discovered hosts from ~/.ssh/config:")
 		for i, m := range discovered {
-			fmt.Fprintf(out, "    [%d] %s (%s)\n", i+1, m.Name, m.Address)
+			fmt.Fprintf(out, "    [%d] %s (%s)\n", i+1, sanitizeTerminalText(m.Name), sanitizeTerminalText(m.Address))
 		}
 		fmt.Fprintln(out, "    [a] Add all discovered hosts")
 		fmt.Fprintln(out, "    [m] Manually add a machine")
@@ -1003,7 +1015,7 @@ func runSyncInit(cmd *cobra.Command, args []string) error {
 			case "m":
 				m, err := promptForMachine(reader, out)
 				if err != nil {
-					fmt.Fprintf(out, "  Error: %v\n", err)
+					fmt.Fprintf(out, "  Error: %s\n", sanitizeTerminalText(err.Error()))
 				} else if m != nil {
 					selectedMachines = append(selectedMachines, m)
 				}
@@ -1025,7 +1037,7 @@ func runSyncInit(cmd *cobra.Command, args []string) error {
 		if strings.TrimSpace(strings.ToLower(choice)) == "y" {
 			m, err := promptForMachine(reader, out)
 			if err != nil {
-				fmt.Fprintf(out, "  Error: %v\n", err)
+				fmt.Fprintf(out, "  Error: %s\n", sanitizeTerminalText(err.Error()))
 			} else if m != nil {
 				selectedMachines = append(selectedMachines, m)
 			}
@@ -1037,7 +1049,12 @@ func runSyncInit(cmd *cobra.Command, args []string) error {
 		if err := state.Pool.AddMachine(m); err != nil {
 			// Ignore duplicate errors
 			if !strings.Contains(err.Error(), "already exists") {
-				fmt.Fprintf(out, "  Warning: could not add %s: %v\n", m.Name, err)
+				fmt.Fprintf(
+					out,
+					"  Warning: could not add %s: %s\n",
+					sanitizeTerminalText(m.Name),
+					sanitizeTerminalText(err.Error()),
+				)
 			}
 		}
 	}
@@ -1054,14 +1071,14 @@ func runSyncInit(cmd *cobra.Command, args []string) error {
 
 		var online, offline int
 		for _, m := range selectedMachines {
-			fmt.Fprintf(out, "  Testing %s...", m.Name)
+			fmt.Fprintf(out, "  Testing %s...", sanitizeTerminalText(m.Name))
 			start := time.Now()
 
 			client, err := pool.Get(m)
 			latency := time.Since(start)
 
 			if err != nil {
-				fmt.Fprintf(out, " ✗ Failed: %v\n", err)
+				fmt.Fprintf(out, " ✗ Failed: %s\n", sanitizeTerminalText(err.Error()))
 				m.SetError(err.Error())
 				offline++
 			} else {
@@ -1104,7 +1121,7 @@ func runSyncInit(cmd *cobra.Command, args []string) error {
 	machines := state.Pool.ListMachines()
 	if len(machines) > 0 {
 		if err := sync.SaveToCSV(machines); err != nil {
-			fmt.Fprintf(out, "Warning: could not save to CSV: %v\n", err)
+			fmt.Fprintf(out, "Warning: could not save to CSV: %s\n", sanitizeTerminalText(err.Error()))
 		}
 	}
 
@@ -1264,7 +1281,12 @@ func runSyncQueueProcess(state *sync.SyncState, out io.Writer) error {
 	total := len(state.Queue.Entries)
 	for _, entry := range state.Queue.Entries {
 		profile := fmt.Sprintf("%s/%s", entry.Provider, entry.Profile)
-		fmt.Fprintf(out, "  Retrying %s on %s...", profile, entry.Machine)
+		fmt.Fprintf(
+			out,
+			"  Retrying %s on %s...",
+			sanitizeTerminalText(profile),
+			sanitizeTerminalText(entry.Machine),
+		)
 
 		// Find the specific machine that failed
 		machine := state.Pool.GetMachine(entry.Machine)
@@ -1278,7 +1300,7 @@ func runSyncQueueProcess(state *sync.SyncState, out io.Writer) error {
 		// Sync only with the specific machine that failed, not all machines
 		result, err := syncer.SyncProfileWithMachine(ctx, entry.Provider, entry.Profile, machine)
 		if err != nil {
-			fmt.Fprintf(out, " ✗ %v\n", err)
+			fmt.Fprintf(out, " ✗ %s\n", sanitizeTerminalText(err.Error()))
 			state.AddToQueue(entry.Provider, entry.Profile, entry.Machine, err.Error())
 			continue
 		}
@@ -1292,7 +1314,7 @@ func runSyncQueueProcess(state *sync.SyncState, out io.Writer) error {
 			if result.Error != nil {
 				errMsg = result.Error.Error()
 			}
-			fmt.Fprintf(out, " ✗ %s\n", errMsg)
+			fmt.Fprintf(out, " ✗ %s\n", sanitizeTerminalText(errMsg))
 			state.AddToQueue(entry.Provider, entry.Profile, entry.Machine, errMsg)
 		}
 	}
