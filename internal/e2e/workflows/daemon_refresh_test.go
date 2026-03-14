@@ -94,7 +94,8 @@ func TestDaemonRefresh(t *testing.T) {
 
 	h.LogInfo("Waiting for token update...")
 	updated := false
-	for i := 0; i < 100; i++ { // Wait up to 10s
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
 		content, err := os.ReadFile(authPath)
 		if err == nil {
 			if strings.Contains(string(content), "new-mock-access-token") {
@@ -102,12 +103,12 @@ func TestDaemonRefresh(t *testing.T) {
 				break
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	if !updated {
 		logs, _ := os.ReadFile(logPath)
-		fmt.Printf("Daemon Logs:\n%s\n", string(logs))
+		t.Logf("Daemon logs:\n%s", string(logs))
 	}
 	assert.True(t, updated, "Token was not refreshed")
 

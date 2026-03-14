@@ -2,8 +2,10 @@ package exec
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/notify"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider"
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/pty"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/ratelimit"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/rotation"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/usage"
@@ -189,6 +192,44 @@ func TestSmartRunner_DrainLoginDone(t *testing.T) {
 	sr.drainLoginDone()
 }
 
+func TestSmartRunner_MonitorOutputCapturesResumeHintOutsideRunningState(t *testing.T) {
+	registry := provider.NewRegistry()
+	runner := NewRunner(registry)
+	sr := NewSmartRunner(runner, SmartRunnerOptions{})
+
+	detector, err := ratelimit.NewDetector(ratelimit.ProviderFromString("codex"), nil)
+	if err != nil {
+		t.Fatalf("NewDetector() error = %v", err)
+	}
+	sr.detector = detector
+	sr.providerID = "codex"
+	sr.state = RateLimited
+
+	capture := &codexSessionCapture{provider: "codex"}
+	ctrl := &scriptedController{
+		outputs: []string{"To continue this session, run codex resume session-123\n"},
+	}
+
+	done := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go sr.monitorOutput(ctx, ctrl, done, func(line string) {
+		capture.ObserveLine(line)
+		sr.updateResumeHint(capture.Command(), capture.ID())
+	})
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("monitorOutput did not finish")
+	}
+
+	if got := sr.resumeHint(""); got != "codex resume session-123" {
+		t.Fatalf("resumeHint() = %q, want %q", got, "codex resume session-123")
+	}
+}
+
 // =============================================================================
 // Mock Notifier for Testing
 // =============================================================================
@@ -212,6 +253,42 @@ func (m *mockNotifier) Name() string {
 func (m *mockNotifier) Available() bool {
 	return true
 }
+
+type scriptedController struct {
+	outputs []string
+	index   int
+}
+
+func (c *scriptedController) Start() error { return nil }
+
+func (c *scriptedController) InjectCommand(string) error { return nil }
+
+func (c *scriptedController) InjectRaw([]byte) error { return nil }
+
+func (c *scriptedController) ReadOutput() (string, error) {
+	if c.index >= len(c.outputs) {
+		return "", io.EOF
+	}
+	out := c.outputs[c.index]
+	c.index++
+	return out, nil
+}
+
+func (c *scriptedController) ReadLine(context.Context) (string, error) {
+	return "", io.EOF
+}
+
+func (c *scriptedController) WaitForPattern(context.Context, *regexp.Regexp, time.Duration) (string, error) {
+	return "", io.EOF
+}
+
+func (c *scriptedController) Wait() (int, error) { return 0, nil }
+
+func (c *scriptedController) Signal(pty.Signal) error { return nil }
+
+func (c *scriptedController) Close() error { return nil }
+
+func (c *scriptedController) Fd() int { return -1 }
 
 func writeSmartRunnerFixtureFile(t *testing.T, path, content string) {
 	t.Helper()

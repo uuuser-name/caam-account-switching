@@ -777,10 +777,13 @@ func (r *SmartRunner) monitorOutput(ctx context.Context, ctrl pty.Controller, do
 	pollTicker := time.NewTicker(10 * time.Millisecond)
 	defer pollTicker.Stop()
 
+	var lineObserver *lineObserverWriter
+	if observer != nil {
+		lineObserver = newLineObserverWriter(io.Discard, observer)
+		defer lineObserver.Flush()
+	}
+
 	writer := ratelimit.NewObservingWriter(r.detector, func(line string) {
-		if observer != nil {
-			observer(line)
-		}
 		// This callback is triggered when a complete line is processed
 		if !dispatched && r.detector.Detected() {
 			if r.rateLimitDispatchPaused() {
@@ -818,6 +821,9 @@ func (r *SmartRunner) monitorOutput(ctx context.Context, ctrl pty.Controller, do
 
 		if output != "" {
 			os.Stdout.Write([]byte(output))
+			if lineObserver != nil {
+				_, _ = lineObserver.Write([]byte(output))
+			}
 
 			r.mu.Lock()
 			state := r.state

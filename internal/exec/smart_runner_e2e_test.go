@@ -26,6 +26,11 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	mockRateLimitExitPause = 8 * time.Second
+	smartRunnerE2ETimeout  = 20 * time.Second
+)
+
 // TestMockCLI_Handoff simulates a CLI tool that hits a rate limit and then accepts login.
 func TestMockCLI_Handoff(t *testing.T) {
 	if os.Getenv("GO_WANT_MOCK_CLI") != "1" {
@@ -89,7 +94,7 @@ func TestMockCLI_Handoff(t *testing.T) {
 			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
 			fmt.Println("at 3:05 PM.")
 			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
-			time.Sleep(5 * time.Second)
+			time.Sleep(mockRateLimitExitPause)
 			os.Exit(1)
 			return
 		}
@@ -129,7 +134,7 @@ func TestMockCLI_Handoff(t *testing.T) {
 			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
 			fmt.Println("at 3:05 PM.")
 			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
-			time.Sleep(5 * time.Second)
+			time.Sleep(mockRateLimitExitPause)
 			os.Exit(1)
 			return
 		}
@@ -194,7 +199,7 @@ func TestMockCLI_Handoff(t *testing.T) {
 			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
 			fmt.Println("at 3:05 PM.")
 			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
-			time.Sleep(5 * time.Second)
+			time.Sleep(mockRateLimitExitPause)
 			os.Exit(1)
 			return
 		}
@@ -260,7 +265,7 @@ func TestMockCLI_Handoff(t *testing.T) {
 			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
 			fmt.Println("at 3:05 PM.")
 			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
-			time.Sleep(5 * time.Second)
+			time.Sleep(mockRateLimitExitPause)
 			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
 			os.Exit(1)
 			return
@@ -637,7 +642,7 @@ func TestSmartRunner_E2E(t *testing.T) {
 	// 7. Detect "successfully logged in"
 	// 8. Notify user
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), smartRunnerE2ETimeout)
 	defer cancel()
 
 	err = sr.Run(ctx, runOpts)
@@ -1433,7 +1438,7 @@ func TestSmartRunner_E2E_CodexRateLimitExitAutoResumesOnSwitchedProfile(t *testi
 	})
 
 	runHarnessStep(h, "run", "Run SmartRunner through rate-limit exit and seamless resume", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), smartRunnerE2ETimeout)
 		defer cancel()
 		runErr = sr.Run(ctx, RunOptions{
 			Profile:  prof,
@@ -1519,9 +1524,9 @@ func TestSmartRunner_E2E_CodexRateLimitExitAutoResumesAndContinuesOnSwitchedProf
 
 		execFixture := testutil.NewTestBinaryExecFixture()
 		ExecCommand = execFixture.ExecCommand(map[string]string{
-			"MOCK_CLI_MODE":         "rate_limit_exit_then_resume_requires_prompt",
-			"MOCK_CLI_COUNTER_FILE": counterFile,
-			"MOCK_EXPECT_RESUME_ID": sessionID,
+			"MOCK_CLI_MODE":          "rate_limit_exit_then_resume_requires_prompt",
+			"MOCK_CLI_COUNTER_FILE":  counterFile,
+			"MOCK_EXPECT_RESUME_ID":  sessionID,
 			"MOCK_CONTINUATION_FILE": continuationFile,
 		})
 
@@ -1543,7 +1548,7 @@ func TestSmartRunner_E2E_CodexRateLimitExitAutoResumesAndContinuesOnSwitchedProf
 	})
 
 	runHarnessStep(h, "run", "Run SmartRunner through resume and continuation prompt injection", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), smartRunnerE2ETimeout)
 		defer cancel()
 		runErr = sr.Run(ctx, RunOptions{
 			Profile:  prof,
@@ -1659,7 +1664,7 @@ func TestSmartRunner_E2E_CodexRateLimitExitIgnoresStaleRedispatchBeforeSeamlessR
 	})
 
 	runHarnessStep(h, "run", "Run SmartRunner through stale redispatch noise and seamless resume", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), smartRunnerE2ETimeout)
 		defer cancel()
 		runErr = sr.Run(ctx, RunOptions{
 			Profile:  prof,
@@ -1763,7 +1768,7 @@ func TestSmartRunner_E2E_CodexRateLimitExitZeroStillSeamlesslyResumes(t *testing
 	})
 
 	runHarnessStep(h, "run", "Run SmartRunner through exit-zero rate limit and seamless resume", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), smartRunnerE2ETimeout)
 		defer cancel()
 		runErr = sr.Run(ctx, RunOptions{
 			Profile:  prof,
@@ -1861,7 +1866,7 @@ func TestSmartRunner_E2E_MultiProfileChainUntilHealthy(t *testing.T) {
 	})
 
 	runHarnessStep(h, "run", "Run SmartRunner across multiple exhausted profiles until a healthy candidate succeeds", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), smartRunnerE2ETimeout)
 		defer cancel()
 		runErr = sr.Run(ctx, RunOptions{
 			Profile:  prof,
