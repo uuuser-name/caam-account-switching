@@ -850,6 +850,13 @@ func runRobotAct(cmd *cobra.Command, args []string) error {
 			result.OldProfile = oldProfile
 		}
 
+		if err := prepareToolActivation(provider); err != nil {
+			return robotError(cmd, "act", "CONFIGURE_FAILED",
+				fmt.Sprintf("failed to prepare %s/%s for activation", provider, profile),
+				err.Error(),
+				[]string{"caam doctor --fix", fmt.Sprintf("caam activate %s %s", provider, profile)})
+		}
+
 		// Activate the profile
 		if err := vault.Restore(fileSet, profile); err != nil {
 			return robotError(cmd, "act", "ACTIVATE_FAILED",

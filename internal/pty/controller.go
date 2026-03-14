@@ -88,6 +88,11 @@ type Options struct {
 	Dir string
 	// Env is additional environment variables for the command.
 	Env []string
+	// DisableEcho turns off the slave TTY's local echo. This is required when
+	// the PTY is acting as a bridge to a real outer terminal, otherwise terminal
+	// reply sequences injected as input can be echoed back out and create output
+	// storms in the outer terminal.
+	DisableEcho bool
 }
 
 // DefaultOptions returns sensible default options.

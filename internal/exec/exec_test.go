@@ -278,6 +278,38 @@ func TestRunInteractive(t *testing.T) {
 		// Verify method exists and has correct signature
 		var _ func(context.Context, RunOptions) error = runner.RunInteractive
 	})
+
+	t.Run("executes the same happy path as Run", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		prof := &profile.Profile{
+			Name:     "test",
+			Provider: "test",
+			BasePath: tmpDir,
+		}
+		if err := os.MkdirAll(prof.BasePath, 0o700); err != nil {
+			t.Fatalf("mkdir profile dir: %v", err)
+		}
+
+		mock := &mockProvider{
+			id:         "test",
+			defaultBin: "true",
+			envVars:    map[string]string{"TEST_EXEC": "1"},
+		}
+
+		registry := provider.NewRegistry()
+		runner := NewRunner(registry)
+
+		if err := runner.RunInteractive(context.Background(), RunOptions{
+			Profile:  prof,
+			Provider: mock,
+			NoLock:   true,
+		}); err != nil {
+			t.Fatalf("RunInteractive() error = %v", err)
+		}
+		if prof.LastUsedAt.IsZero() {
+			t.Fatal("expected RunInteractive to persist profile metadata like Run")
+		}
+	})
 }
 
 // =============================================================================
@@ -516,6 +548,13 @@ func TestRun_CommandNotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "run command") {
 		t.Errorf("Error should mention 'run command', got: %v", err)
+	}
+}
+
+func TestExitCodeError_Error(t *testing.T) {
+	err := (&ExitCodeError{Code: 23}).Error()
+	if err != "exit code 23" {
+		t.Fatalf("ExitCodeError.Error() = %q, want %q", err, "exit code 23")
 	}
 }
 

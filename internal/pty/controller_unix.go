@@ -77,8 +77,41 @@ func (c *unixController) Start() error {
 		Cols: c.opts.Cols,
 	}
 
-	ptmx, err := pty.StartWithSize(c.cmd, winSize)
+	ptmx, tty, err := pty.Open()
 	if err != nil {
+		return fmt.Errorf("open pty: %w", err)
+	}
+	defer func() { _ = tty.Close() }()
+
+	if err := pty.Setsize(ptmx, winSize); err != nil {
+		_ = ptmx.Close()
+		return fmt.Errorf("set pty size: %w", err)
+	}
+
+	if c.opts.DisableEcho {
+		if err := disableTTYEcho(tty); err != nil {
+			_ = ptmx.Close()
+			return fmt.Errorf("disable tty echo: %w", err)
+		}
+	}
+
+	if c.cmd.Stdout == nil {
+		c.cmd.Stdout = tty
+	}
+	if c.cmd.Stderr == nil {
+		c.cmd.Stderr = tty
+	}
+	if c.cmd.Stdin == nil {
+		c.cmd.Stdin = tty
+	}
+	if c.cmd.SysProcAttr == nil {
+		c.cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	c.cmd.SysProcAttr.Setsid = true
+	c.cmd.SysProcAttr.Setctty = true
+
+	if err := c.cmd.Start(); err != nil {
+		_ = ptmx.Close()
 		return fmt.Errorf("start pty: %w", err)
 	}
 
@@ -107,9 +140,30 @@ func (c *unixController) InjectRaw(data []byte) error {
 
 	_, err := c.ptmx.Write(data)
 	if err != nil {
+		if isClosedPTYWriteError(err) {
+			return ErrClosed
+		}
 		return fmt.Errorf("write to pty: %w", err)
 	}
 	return nil
+}
+
+func isClosedPTYWriteError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrClosed) || errors.Is(err, os.ErrClosed) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		err = pathErr.Err
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == syscall.EIO || errno == syscall.EBADF
+	}
+	return false
 }
 
 // ReadOutput reads all available output from the PTY without blocking indefinitely.

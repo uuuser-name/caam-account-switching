@@ -110,7 +110,7 @@ func runDoctorChecks(fix bool, validate bool) *DoctorReport {
 	report.Directories = checkDirectories(fix)
 
 	// Check config
-	report.Config = checkConfig()
+	report.Config = checkConfig(fix)
 
 	// Check profiles
 	report.Profiles = checkProfiles(fix)
@@ -270,7 +270,7 @@ func checkDirectories(fix bool) []CheckResult {
 	return results
 }
 
-func checkConfig() []CheckResult {
+func checkConfig(fix bool) []CheckResult {
 	var results []CheckResult
 
 	homeDir, _ := os.UserHomeDir()
@@ -314,7 +314,67 @@ func checkConfig() []CheckResult {
 		}
 	}
 
+	results = append(results, checkCodexManagedConfig(fix))
+
 	return results
+}
+
+func checkCodexManagedConfig(fix bool) CheckResult {
+	codexHome := codex.ResolveHome()
+	problems, err := codex.ManagedConfigProblems(codexHome)
+	if err != nil {
+		return CheckResult{
+			Name:    "codex config.toml",
+			Status:  "fail",
+			Message: "error checking Codex managed config",
+			Details: err.Error(),
+		}
+	}
+	if len(problems) == 0 {
+		return CheckResult{
+			Name:    "codex config.toml",
+			Status:  "pass",
+			Message: fmt.Sprintf("managed defaults healthy at %s", filepath.Join(codexHome, "config.toml")),
+		}
+	}
+	if !fix {
+		return CheckResult{
+			Name:    "codex config.toml",
+			Status:  "warn",
+			Message: "Codex managed defaults drifted",
+			Details: strings.Join(problems, "; "),
+		}
+	}
+	if err := codex.EnsureFileCredentialStore(codexHome); err != nil {
+		return CheckResult{
+			Name:    "codex config.toml",
+			Status:  "fail",
+			Message: "failed to repair Codex managed config",
+			Details: err.Error(),
+		}
+	}
+	problems, err = codex.ManagedConfigProblems(codexHome)
+	if err != nil {
+		return CheckResult{
+			Name:    "codex config.toml",
+			Status:  "fail",
+			Message: "repaired Codex config but could not verify it",
+			Details: err.Error(),
+		}
+	}
+	if len(problems) == 0 {
+		return CheckResult{
+			Name:    "codex config.toml",
+			Status:  "fixed",
+			Message: fmt.Sprintf("repaired Codex managed defaults at %s", filepath.Join(codexHome, "config.toml")),
+		}
+	}
+	return CheckResult{
+		Name:    "codex config.toml",
+		Status:  "fail",
+		Message: "Codex managed config still has drift after repair",
+		Details: strings.Join(problems, "; "),
+	}
 }
 
 func checkProfiles(fix bool) []CheckResult {

@@ -163,9 +163,7 @@ func TestSwitchWorkspace(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.json")
 
 	// Set up environment
-	oldXDGConfig := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
-	defer os.Setenv("XDG_CONFIG_HOME", oldXDGConfig)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Create vault with test profiles
 	testVault := authfile.NewVault(vaultPath)

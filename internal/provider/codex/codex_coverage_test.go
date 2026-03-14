@@ -38,6 +38,26 @@ func TestResolveHome(t *testing.T) {
 }
 
 func TestEnsureFileCredentialStore(t *testing.T) {
+	assertManagedDefaults := func(t *testing.T, data []byte) {
+		t.Helper()
+		text := string(data)
+		if !strings.Contains(text, `cli_auth_credentials_store = "file"`) {
+			t.Fatalf("config.toml missing file credential store:\n%s", text)
+		}
+		if !strings.Contains(text, "[features]") {
+			t.Fatalf("config.toml missing [features] table:\n%s", text)
+		}
+		if !strings.Contains(text, `multi_agent = true`) {
+			t.Fatalf("config.toml missing multi_agent default:\n%s", text)
+		}
+		if !strings.Contains(text, "[notice]") {
+			t.Fatalf("config.toml missing [notice] table:\n%s", text)
+		}
+		if !strings.Contains(text, `hide_rate_limit_model_nudge = true`) {
+			t.Fatalf("config.toml missing rate-limit nudge suppression:\n%s", text)
+		}
+	}
+
 	t.Run("rejects empty home", func(t *testing.T) {
 		if err := EnsureFileCredentialStore("   "); err == nil {
 			t.Fatal("expected error for empty codex home")
@@ -53,9 +73,7 @@ func TestEnsureFileCredentialStore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Read config.toml: %v", err)
 		}
-		if !strings.Contains(string(data), `cli_auth_credentials_store = "file"`) {
-			t.Fatalf("config.toml missing file credential store:\n%s", string(data))
-		}
+		assertManagedDefaults(t, data)
 	})
 
 	t.Run("replaces existing non-file store", func(t *testing.T) {
@@ -71,9 +89,7 @@ func TestEnsureFileCredentialStore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Read config.toml: %v", err)
 		}
-		if !strings.Contains(string(data), `cli_auth_credentials_store = "file"`) {
-			t.Fatalf("config.toml did not switch to file store:\n%s", string(data))
-		}
+		assertManagedDefaults(t, data)
 	})
 
 	t.Run("appends setting when absent", func(t *testing.T) {
@@ -89,10 +105,351 @@ func TestEnsureFileCredentialStore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Read config.toml: %v", err)
 		}
-		if !strings.Contains(string(data), `cli_auth_credentials_store = "file"`) {
-			t.Fatalf("config.toml missing appended setting:\n%s", string(data))
+		assertManagedDefaults(t, data)
+	})
+
+	t.Run("reuses existing features table and flips false to true", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			"[defaults]",
+			`model = "gpt-5"`,
+			"",
+			"[features]",
+			"experimental_resume = true",
+			"multi_agent = false",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+		if err := EnsureFileCredentialStore(home); err != nil {
+			t.Fatalf("EnsureFileCredentialStore() error = %v", err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Read config.toml: %v", err)
+		}
+		assertManagedDefaults(t, data)
+		if strings.Count(string(data), "[features]") != 1 {
+			t.Fatalf("expected a single [features] table:\n%s", string(data))
 		}
 	})
+
+	t.Run("reuses existing notice table and flips false to true", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			"[notice]",
+			"hide_full_access_warning = true",
+			"hide_rate_limit_model_nudge = false",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+		if err := EnsureFileCredentialStore(home); err != nil {
+			t.Fatalf("EnsureFileCredentialStore() error = %v", err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Read config.toml: %v", err)
+		}
+		assertManagedDefaults(t, data)
+		if strings.Count(string(data), "[notice]") != 1 {
+			t.Fatalf("expected a single [notice] table:\n%s", string(data))
+		}
+	})
+
+	t.Run("normalizes inline managed settings", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			`cli_auth_credentials_store = "keychain"`,
+			"[features]multi_agent = false",
+			"[notice]hide_rate_limit_model_nudge = false",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+		if err := EnsureFileCredentialStore(home); err != nil {
+			t.Fatalf("EnsureFileCredentialStore() error = %v", err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Read config.toml: %v", err)
+		}
+		assertManagedDefaults(t, data)
+		text := string(data)
+		if strings.Contains(text, "[features]multi_agent") {
+			t.Fatalf("inline [features] setting should be normalized:\n%s", text)
+		}
+		if strings.Contains(text, "[notice]hide_rate_limit_model_nudge") {
+			t.Fatalf("inline [notice] setting should be normalized:\n%s", text)
+		}
+	})
+
+	t.Run("repairs collapsed table header after notice value", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			"[notice]",
+			"hide_full_access_warning = true",
+			"hide_rate_limit_model_nudge = true[assistant_principles]",
+			`values = ["keep"]`,
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+		if err := EnsureFileCredentialStore(home); err != nil {
+			t.Fatalf("EnsureFileCredentialStore() error = %v", err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Read config.toml: %v", err)
+		}
+		text := string(data)
+		assertManagedDefaults(t, data)
+		if !strings.Contains(text, "hide_rate_limit_model_nudge = true\n[assistant_principles]") {
+			t.Fatalf("collapsed section header should be repaired:\n%s", text)
+		}
+	})
+
+	t.Run("repairs real malformed backup snapshot without duplicate managed settings", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			`model_reasoning_effort = "xhigh"`,
+			`approval_policy = "never"`,
+			`sandbox_mode = "danger-full-access"`,
+			`cli_auth_credentials_store = "file"`,
+			`project_doc_fallback_filenames = ["CLAUDE.md", "VISION.md"]`,
+			`project_doc_max_bytes = 65536`,
+			`model = "gpt-5.4"`,
+			"",
+			`[projects."/Users/hope"]`,
+			`trust_level = "trusted"`,
+			`sandbox_mode = "danger-full-access"`,
+			`approval_policy = "never"`,
+			"",
+			`[notice]`,
+			`hide_full_access_warning = true`,
+			`hide_rate_limit_model_nudge = true[assistant_principles]`,
+			`values = ["progress_and_learning_speed_over_perfection"]`,
+			`hide_rate_limit_model_nudge = true[notice.model_migrations]`,
+			`"gpt-5.2" = "gpt-5.2"`,
+			`hide_rate_limit_model_nudge = true`,
+			`[features]multi_agent = true`,
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+		if err := EnsureFileCredentialStore(home); err != nil {
+			t.Fatalf("EnsureFileCredentialStore() error = %v", err)
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("Read config.toml: %v", err)
+		}
+
+		assertManagedDefaults(t, data)
+		text := string(data)
+		if strings.Contains(text, "hide_rate_limit_model_nudge = true[assistant_principles]") {
+			t.Fatalf("assistant_principles boundary should be repaired:\n%s", text)
+		}
+		if strings.Contains(text, "hide_rate_limit_model_nudge = true[notice.model_migrations]") {
+			t.Fatalf("notice.model_migrations boundary should be repaired:\n%s", text)
+		}
+		if strings.Contains(text, "[features]multi_agent") {
+			t.Fatalf("inline [features] setting should be normalized:\n%s", text)
+		}
+		if strings.Count(text, "hide_rate_limit_model_nudge = true") != 1 {
+			t.Fatalf("expected one canonical rate-limit nudge setting, got %d:\n%s", strings.Count(text, "hide_rate_limit_model_nudge = true"), text)
+		}
+		if strings.Count(text, "multi_agent = true") != 1 {
+			t.Fatalf("expected one canonical multi_agent setting, got %d:\n%s", strings.Count(text, "multi_agent = true"), text)
+		}
+	})
+
+	t.Run("preserves symlinked config target", func(t *testing.T) {
+		root := t.TempDir()
+		home := filepath.Join(root, "codex-home")
+		canonicalDir := filepath.Join(root, "canonical")
+		path := filepath.Join(home, "config.toml")
+		target := filepath.Join(canonicalDir, "config.toml")
+
+		if err := os.MkdirAll(home, 0o700); err != nil {
+			t.Fatalf("MkdirAll home: %v", err)
+		}
+		if err := os.MkdirAll(canonicalDir, 0o700); err != nil {
+			t.Fatalf("MkdirAll canonicalDir: %v", err)
+		}
+		if err := os.WriteFile(target, []byte("cli_auth_credentials_store = \"keychain\"\n"), 0o600); err != nil {
+			t.Fatalf("Write target config.toml: %v", err)
+		}
+		if err := os.Symlink(target, path); err != nil {
+			t.Fatalf("Symlink config.toml: %v", err)
+		}
+
+		if err := EnsureFileCredentialStore(home); err != nil {
+			t.Fatalf("EnsureFileCredentialStore() error = %v", err)
+		}
+
+		info, err := os.Lstat(path)
+		if err != nil {
+			t.Fatalf("Lstat config.toml: %v", err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("expected config.toml to remain a symlink, mode=%v", info.Mode())
+		}
+
+		data, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatalf("Read target config.toml: %v", err)
+		}
+		assertManagedDefaults(t, data)
+	})
+}
+
+func TestManagedConfigProblems(t *testing.T) {
+	t.Run("rejects empty home", func(t *testing.T) {
+		if _, err := ManagedConfigProblems(" "); err == nil {
+			t.Fatal("expected error for empty codex home")
+		}
+	})
+
+	t.Run("reports missing config", func(t *testing.T) {
+		problems, err := ManagedConfigProblems(t.TempDir())
+		if err != nil {
+			t.Fatalf("ManagedConfigProblems() error = %v", err)
+		}
+		if len(problems) != 1 || problems[0] != "config.toml missing" {
+			t.Fatalf("ManagedConfigProblems() = %#v, want missing config", problems)
+		}
+	})
+
+	t.Run("reports malformed inline managed settings", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			`cli_auth_credentials_store = "keychain"`,
+			"[features]multi_agent = false",
+			"[notice]hide_rate_limit_model_nudge = false",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+
+		problems, err := ManagedConfigProblems(home)
+		if err != nil {
+			t.Fatalf("ManagedConfigProblems() error = %v", err)
+		}
+		if len(problems) < 4 {
+			t.Fatalf("expected multiple managed config problems, got %#v", problems)
+		}
+	})
+
+	t.Run("reports invalid toml", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			"[notice]",
+			"hide_full_access_warning = true",
+			"hide_rate_limit_model_nudge = true[assistant_principles]",
+			`values = ["broken"]`,
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+
+		problems, err := ManagedConfigProblems(home)
+		if err != nil {
+			t.Fatalf("ManagedConfigProblems() error = %v", err)
+		}
+		if len(problems) == 0 || !strings.Contains(problems[0], "config.toml is not valid TOML") {
+			t.Fatalf("expected invalid TOML problem, got %#v", problems)
+		}
+	})
+
+	t.Run("healthy config reports no problems", func(t *testing.T) {
+		home := t.TempDir()
+		if err := EnsureFileCredentialStore(home); err != nil {
+			t.Fatalf("EnsureFileCredentialStore() error = %v", err)
+		}
+
+		problems, err := ManagedConfigProblems(home)
+		if err != nil {
+			t.Fatalf("ManagedConfigProblems() error = %v", err)
+		}
+		if len(problems) != 0 {
+			t.Fatalf("ManagedConfigProblems() = %#v, want none", problems)
+		}
+	})
+
+	t.Run("wrong section does not count as healthy", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, "config.toml")
+		content := strings.Join([]string{
+			`cli_auth_credentials_store = "file"`,
+			"",
+			"[features]",
+			"experimental_resume = true",
+			"",
+			"[other]",
+			"multi_agent = true",
+			"",
+			"[notice]",
+			"hide_full_access_warning = true",
+			"",
+			"[other_notice]",
+			"hide_rate_limit_model_nudge = true",
+			"",
+		}, "\n")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("Write config.toml: %v", err)
+		}
+
+		problems, err := ManagedConfigProblems(home)
+		if err != nil {
+			t.Fatalf("ManagedConfigProblems() error = %v", err)
+		}
+		if !containsProblem(problems, "managed [features] multi_agent = true is missing") {
+			t.Fatalf("expected missing managed features problem, got %#v", problems)
+		}
+		if !containsProblem(problems, "managed [notice] hide_rate_limit_model_nudge = true is missing") {
+			t.Fatalf("expected missing managed notice problem, got %#v", problems)
+		}
+	})
+}
+
+func TestRepairCollapsedTableHeaders(t *testing.T) {
+	input := []byte("[notice]\nhide_rate_limit_model_nudge = true[assistant_principles]\nvalues = [\"keep\"]\n")
+	repaired, changed := repairCollapsedTableHeaders(input)
+	if !changed {
+		t.Fatal("expected collapsed table header repair to report a change")
+	}
+	text := string(repaired)
+	if !strings.Contains(text, "hide_rate_limit_model_nudge = true\n[assistant_principles]") {
+		t.Fatalf("expected repaired boundary, got:\n%s", text)
+	}
+	if strings.Contains(text, "values = \n") {
+		t.Fatalf("array value should not be split into a fake section header:\n%s", text)
+	}
+}
+
+func containsProblem(problems []string, want string) bool {
+	for _, problem := range problems {
+		if problem == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestLoginDispatchAndCommandFailures(t *testing.T) {

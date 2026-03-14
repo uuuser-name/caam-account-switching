@@ -22,6 +22,7 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/config"
 	caamdb "github.com/Dicklesworthstone/coding_agent_account_manager/internal/db"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/health"
+	codexprovider "github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider/codex"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/ratelimit"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/rotation"
 )
@@ -330,6 +331,11 @@ func (w *Wrapper) runOnce(ctx context.Context, profile string) (int, bool, error
 	}
 
 	// Activate the profile (restore auth files)
+	if w.config.Provider == "codex" {
+		if err := codexprovider.EnsureFileCredentialStore(codexprovider.ResolveHome()); err != nil {
+			return 1, false, fmt.Errorf("configure codex credential store: %w", err)
+		}
+	}
 	if err := w.vault.Restore(fileSet, profile); err != nil {
 		return 1, false, fmt.Errorf("activate profile %s: %w", profile, err)
 	}

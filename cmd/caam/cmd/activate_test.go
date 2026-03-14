@@ -14,9 +14,7 @@ func TestActivate_AutoBackupsOriginalOnFirstSwitch(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Isolate Codex auth location.
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_HOME", oldCodexHome) })
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
 
 	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
 		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
@@ -94,14 +92,10 @@ func TestActivate_AutoBackupsUnsavedStateBeforeSwitch(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Isolate Codex auth location.
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_HOME", oldCodexHome) })
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
 
 	// Isolate CAAM_HOME (SPM config lives here).
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CAAM_HOME", oldCaamHome) })
-	_ = os.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
+	t.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
 
 	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
 		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)

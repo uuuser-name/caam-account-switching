@@ -69,11 +69,20 @@ func TestHelperProcess_Run(t *testing.T) {
 
 		if count == 1 {
 			fmt.Println("Processing...")
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(1 * time.Second)
 			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
 			fmt.Println("at 3:05 PM.")
 			fmt.Printf("To continue this session, run codex resume %s\n", expectedSessionID)
-			time.Sleep(700 * time.Millisecond)
+			deadline := time.Now().Add(15 * time.Second)
+			for time.Now().Before(deadline) {
+				if authPath != "" {
+					if content, err := os.ReadFile(authPath); err == nil && strings.TrimSpace(string(content)) == `{"token":"backup"}` {
+						break
+					}
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+			time.Sleep(500 * time.Millisecond)
 			os.Exit(1)
 			return
 		}
@@ -414,6 +423,9 @@ func TestProviderSwitchCandidateAndHardBlocked(t *testing.T) {
 }
 
 func TestRunWrap_CodexRateLimitResumeContinuesOnSwitchedProfile(t *testing.T) {
+	resetCommandTreeForExecute(rootCmd)
+	defer resetCommandTreeForExecute(rootCmd)
+
 	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
@@ -472,11 +484,21 @@ if counter_file:
 
 if count == 1:
     print("Processing...", flush=True)
-    time.sleep(0.1)
+    time.sleep(1.0)
     print("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again", flush=True)
     print("at 3:05 PM.", flush=True)
     print(f"To continue this session, run codex resume {expected_session}", flush=True)
-    time.sleep(0.7)
+    deadline = time.time() + 15.0
+    while time.time() < deadline:
+        if auth_path:
+            try:
+                with open(auth_path, "r", encoding="utf-8") as fh:
+                    if fh.read().strip() == "{\"token\":\"backup\"}":
+                        break
+            except FileNotFoundError:
+                pass
+        time.sleep(0.05)
+    time.sleep(0.5)
     sys.exit(1)
 
 joined_args = " ".join(sys.argv[1:])
@@ -568,6 +590,198 @@ sys.exit(0)
 	authData, authErr := os.ReadFile(liveAuthPath)
 	require.NoError(t, authErr)
 	require.Equal(t, `{"token":"backup"}`, strings.TrimSpace(string(authData)), "expected live auth file to stay on backup profile")
+}
+
+func TestRunWrap_CodexExplicitResumeBypassesLockedProfileFallback(t *testing.T) {
+	resetCommandTreeForExecute(rootCmd)
+	defer resetCommandTreeForExecute(rootCmd)
+
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	rootDir := h.TempDir
+	vaultDir := filepath.Join(rootDir, "vault")
+	codexHome := filepath.Join(rootDir, ".codex")
+	profilesDir := filepath.Join(rootDir, "caam", "profiles")
+	liveAuthPath := filepath.Join(codexHome, "auth.json")
+	sessionID := "019cd767-e334-7162-a2c3-80699b6dd4bd"
+
+	h.SetEnv("HOME", rootDir)
+	h.SetEnv("XDG_DATA_HOME", rootDir)
+	h.SetEnv("XDG_CONFIG_HOME", rootDir)
+	h.SetEnv("CAAM_HOME", filepath.Join(rootDir, "caam"))
+	h.SetEnv("CODEX_HOME", codexHome)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "active"), 0o755))
+	require.NoError(t, os.MkdirAll(codexHome, 0o755))
+	require.NoError(t, os.MkdirAll(profilesDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "active", "auth.json"), []byte(`{"token":"active"}`), 0o600))
+	require.NoError(t, os.WriteFile(liveAuthPath, []byte(`{"token":"active"}`), 0o600))
+
+	originalVault := vault
+	originalTools := make(map[string]func() authfile.AuthFileSet)
+	for k, v := range tools {
+		originalTools[k] = v
+	}
+	originalRegistry := registry
+	originalGetWd := getWd
+	originalProfileStore := profileStore
+	originalRunner := runner
+	originalExecCommand := caamexec.ExecCommand
+	defer func() {
+		vault = originalVault
+		tools = originalTools
+		registry = originalRegistry
+		getWd = originalGetWd
+		profileStore = originalProfileStore
+		runner = originalRunner
+		caamexec.ExecCommand = originalExecCommand
+		_ = runCmd.Flags().Set("quiet", "false")
+		_ = runCmd.Flags().Set("algorithm", "smart")
+		_ = runCmd.Flags().Set("cooldown", "1h")
+		_ = runCmd.Flags().Set("max-retries", "1")
+	}()
+
+	vault = authfile.NewVault(vaultDir)
+	tools["codex"] = func() authfile.AuthFileSet {
+		return authfile.AuthFileSet{
+			Tool: "codex",
+			Files: []authfile.AuthFileSpec{
+				{Tool: "codex", Path: liveAuthPath, Required: true},
+			},
+		}
+	}
+	registry = provider.NewRegistry()
+	registry.Register(&MockProvider{id: "codex"})
+	profileStore = profile.NewStore(profilesDir)
+	getWd = func() (string, error) { return rootDir, nil }
+	runner = nil
+
+	caamexec.ExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=^TestHelperProcess_Run$", "--", name}
+		cs = append(cs, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cs...)
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1", "MOCK_RUN_MODE=success")
+		return cmd
+	}
+
+	activeProfile, err := profileStore.Create("codex", "active", "oauth")
+	require.NoError(t, err)
+	require.NoError(t, activeProfile.LockWithCleanup())
+	defer activeProfile.Unlock()
+
+	require.NoError(t, runCmd.Flags().Set("quiet", "true"))
+	require.NoError(t, runCmd.Flags().Set("algorithm", "round_robin"))
+	require.NoError(t, runCmd.Flags().Set("cooldown", "30m"))
+	require.NoError(t, runCmd.Flags().Set("max-retries", "2"))
+
+	err = runWrap(runCmd, []string{"codex", "resume", sessionID})
+	require.NoError(t, err, "explicit codex resume should not be blocked by CAAM profile locks")
+}
+
+func TestRunWrap_CodexRepairsLiveConfigBeforeLaunch(t *testing.T) {
+	resetCommandTreeForExecute(rootCmd)
+	defer resetCommandTreeForExecute(rootCmd)
+
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+
+	rootDir := h.TempDir
+	vaultDir := filepath.Join(rootDir, "vault")
+	codexHome := filepath.Join(rootDir, ".codex")
+	profilesDir := filepath.Join(rootDir, "caam", "profiles")
+	liveAuthPath := filepath.Join(codexHome, "auth.json")
+	canonicalDir := filepath.Join(rootDir, "canonical")
+	configPath := filepath.Join(codexHome, "config.toml")
+	canonicalConfigPath := filepath.Join(canonicalDir, "config.toml")
+
+	h.SetEnv("HOME", rootDir)
+	h.SetEnv("XDG_DATA_HOME", rootDir)
+	h.SetEnv("XDG_CONFIG_HOME", rootDir)
+	h.SetEnv("CAAM_HOME", filepath.Join(rootDir, "caam"))
+	h.SetEnv("CODEX_HOME", codexHome)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "active"), 0o755))
+	require.NoError(t, os.MkdirAll(codexHome, 0o755))
+	require.NoError(t, os.MkdirAll(profilesDir, 0o755))
+	require.NoError(t, os.MkdirAll(canonicalDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "active", "auth.json"), []byte(`{"token":"active"}`), 0o600))
+	require.NoError(t, os.WriteFile(liveAuthPath, []byte(`{"token":"active"}`), 0o600))
+	require.NoError(t, os.WriteFile(canonicalConfigPath, []byte("model_reasoning_effort = \"high\"\ncli_auth_credentials_store = \"keychain\"\n"), 0o600))
+	require.NoError(t, os.Symlink(canonicalConfigPath, configPath))
+
+	originalVault := vault
+	originalTools := make(map[string]func() authfile.AuthFileSet)
+	for k, v := range tools {
+		originalTools[k] = v
+	}
+	originalRegistry := registry
+	originalGetWd := getWd
+	originalProfileStore := profileStore
+	originalRunner := runner
+	originalExecCommand := caamexec.ExecCommand
+	defer func() {
+		vault = originalVault
+		tools = originalTools
+		registry = originalRegistry
+		getWd = originalGetWd
+		profileStore = originalProfileStore
+		runner = originalRunner
+		caamexec.ExecCommand = originalExecCommand
+		_ = runCmd.Flags().Set("quiet", "false")
+		_ = runCmd.Flags().Set("algorithm", "smart")
+		_ = runCmd.Flags().Set("cooldown", "1h")
+		_ = runCmd.Flags().Set("max-retries", "1")
+	}()
+
+	vault = authfile.NewVault(vaultDir)
+	tools["codex"] = func() authfile.AuthFileSet {
+		return authfile.AuthFileSet{
+			Tool: "codex",
+			Files: []authfile.AuthFileSpec{
+				{Tool: "codex", Path: liveAuthPath, Required: true},
+			},
+		}
+	}
+	registry = provider.NewRegistry()
+	registry.Register(&MockProvider{id: "codex"})
+	profileStore = profile.NewStore(profilesDir)
+	getWd = func() (string, error) { return rootDir, nil }
+	runner = nil
+
+	caamexec.ExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cs := []string{"-test.run=^TestHelperProcess_Run$", "--", name}
+		cs = append(cs, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cs...)
+		cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1", "MOCK_RUN_MODE=success")
+		return cmd
+	}
+
+	_, err := profileStore.Create("codex", "active", "oauth")
+	require.NoError(t, err)
+
+	require.NoError(t, runCmd.Flags().Set("quiet", "true"))
+	require.NoError(t, runCmd.Flags().Set("algorithm", "round_robin"))
+	require.NoError(t, runCmd.Flags().Set("cooldown", "30m"))
+	require.NoError(t, runCmd.Flags().Set("max-retries", "2"))
+
+	err = runWrap(runCmd, []string{"codex", "--model", "gpt-5.4"})
+	require.NoError(t, err)
+
+	configInfo, err := os.Lstat(configPath)
+	require.NoError(t, err)
+	require.NotZero(t, configInfo.Mode()&os.ModeSymlink, "run should preserve a symlinked config.toml")
+
+	configData, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	configText := string(configData)
+	require.Contains(t, configText, `model_reasoning_effort = "high"`)
+	require.Contains(t, configText, `cli_auth_credentials_store = "file"`)
+	require.Contains(t, configText, "[features]")
+	require.Contains(t, configText, `multi_agent = true`)
+	require.Contains(t, configText, "[notice]")
+	require.Contains(t, configText, `hide_rate_limit_model_nudge = true`)
+	require.NotContains(t, configText, `cli_auth_credentials_store = "keychain"`)
 }
 
 func TestIsProfileLockedErr(t *testing.T) {

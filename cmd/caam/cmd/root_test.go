@@ -737,9 +737,7 @@ func TestWithTempDir(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set XDG_DATA_HOME to temp dir
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create necessary subdirectories
 	vaultDir := filepath.Join(tmpDir, "caam", "vault")

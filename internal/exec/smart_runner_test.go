@@ -10,9 +10,11 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authpool"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/config"
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/handoff"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/notify"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider"
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/ratelimit"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/rotation"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/usage"
 )
@@ -193,11 +195,14 @@ func TestSmartRunner_DrainLoginDone(t *testing.T) {
 
 type mockNotifier struct {
 	alerts []*notify.Alert
+	calls  int
+	err    error
 }
 
 func (m *mockNotifier) Notify(alert *notify.Alert) error {
+	m.calls++
 	m.alerts = append(m.alerts, alert)
-	return nil
+	return m.err
 }
 
 func (m *mockNotifier) Name() string {
@@ -206,6 +211,42 @@ func (m *mockNotifier) Name() string {
 
 func (m *mockNotifier) Available() bool {
 	return true
+}
+
+func writeSmartRunnerFixtureFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func newCodexRateLimitedSmartRunner(t *testing.T, vaultDir string, notifier *mockNotifier) *SmartRunner {
+	t.Helper()
+
+	registry := provider.NewRegistry()
+	runner := NewRunner(registry)
+	detector, err := ratelimit.NewDetector(ratelimit.ProviderCodex, nil)
+	if err != nil {
+		t.Fatalf("new detector: %v", err)
+	}
+	if !detector.Check("refresh_token_reused") {
+		t.Fatal("expected detector to accept codex auth refresh failure fixture")
+	}
+
+	sr := NewSmartRunner(runner, SmartRunnerOptions{
+		Vault:    authfile.NewVault(vaultDir),
+		AuthPool: authpool.NewAuthPool(),
+		Notifier: notifier,
+		Rotation: rotation.NewSelector(rotation.AlgorithmSmart, nil, nil),
+	})
+	sr.detector = detector
+	sr.loginHandler = handoff.GetHandler("codex")
+	sr.providerID = "codex"
+	sr.currentProfile = "active"
+	return sr
 }
 
 func TestSmartRunner_NotifierIntegration(t *testing.T) {
@@ -576,6 +617,258 @@ func TestResumeHasPrompt(t *testing.T) {
 	}
 	if !resumeHasPrompt([]string{"resume", "--model", "gpt-5", "session-1", "continue previous task"}, "session-1") {
 		t.Fatal("expected prompt detection to survive leading options")
+	}
+}
+
+func TestResumeHasPrompt_FallbackCases(t *testing.T) {
+	t.Run("empty session id falls back to trailing args", func(t *testing.T) {
+		if resumeHasPrompt([]string{"resume", "session-1"}, "") {
+			t.Fatal("expected bare resume command without session context to be treated as promptless")
+		}
+		if !resumeHasPrompt([]string{"resume", "session-1", "continue previous task"}, "") {
+			t.Fatal("expected trailing payload to count as a continuation prompt")
+		}
+	})
+
+	t.Run("missing session id still treats trailing payload as a prompt", func(t *testing.T) {
+		if !resumeHasPrompt([]string{"resume", "--model", "gpt-5", "continue previous task"}, "session-1") {
+			t.Fatal("expected fallback branch to treat trailing payload as a prompt when the session id is absent")
+		}
+	})
+}
+
+func TestSmartRunner_HandleRateLimit_MaxHandoffs(t *testing.T) {
+	registry := provider.NewRegistry()
+	runner := NewRunner(registry)
+	notifier := &mockNotifier{}
+	detector, err := ratelimit.NewDetector(ratelimit.ProviderClaude, nil)
+	if err != nil {
+		t.Fatalf("new detector: %v", err)
+	}
+	if !detector.Check("rate limit exceeded") {
+		t.Fatal("expected detector to accept rate limit fixture")
+	}
+
+	sr := NewSmartRunner(runner, SmartRunnerOptions{Notifier: notifier})
+	sr.detector = detector
+	sr.loginHandler = handoff.GetHandler("claude")
+	sr.currentProfile = "active"
+	sr.handoffCount = 1
+	sr.maxHandoffs = 1
+
+	sr.handleRateLimit(context.Background())
+
+	if sr.getState() != HandoffFailed {
+		t.Fatalf("state = %v, want %v", sr.getState(), HandoffFailed)
+	}
+	if len(notifier.alerts) != 1 {
+		t.Fatalf("expected 1 alert, got %d", len(notifier.alerts))
+	}
+	if notifier.alerts[0].Title != "Auto-handoff failed" {
+		t.Fatalf("unexpected alert title: %q", notifier.alerts[0].Title)
+	}
+	if notifier.alerts[0].Message != "maximum profile switches reached for this session (1)" {
+		t.Fatalf("unexpected alert message: %q", notifier.alerts[0].Message)
+	}
+}
+
+func TestSmartRunner_HandleRateLimit_RefreshTokenFailureAppliesExtendedCooldown(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	vaultDir := t.TempDir()
+	notifier := &mockNotifier{}
+	sr := newCodexRateLimitedSmartRunner(t, vaultDir, notifier)
+	sr.authPool.AddProfile("codex", "active")
+
+	writeSmartRunnerFixtureFile(t, filepath.Join(codexHome, "auth.json"), "active-token")
+
+	sr.handleRateLimit(context.Background())
+
+	profileState := sr.authPool.GetProfile("codex", "active")
+	if profileState == nil {
+		t.Fatal("expected active profile to remain tracked in auth pool")
+	}
+	if profileState.Status != authpool.PoolStatusCooldown {
+		t.Fatalf("status = %v, want cooldown", profileState.Status)
+	}
+	if remaining := time.Until(profileState.CooldownUntil); remaining < 23*time.Hour {
+		t.Fatalf("cooldown remaining = %v, want at least 23h", remaining)
+	}
+	if sr.getState() != Running {
+		t.Fatalf("state = %v, want %v after rollback", sr.getState(), Running)
+	}
+	if sr.currentProfile != "active" {
+		t.Fatalf("currentProfile = %q, want %q after rollback", sr.currentProfile, "active")
+	}
+	if len(notifier.alerts) == 0 || notifier.alerts[len(notifier.alerts)-1].Title != "Auto-handoff failed" {
+		t.Fatal("expected auto-handoff failure alert to be emitted")
+	}
+}
+
+func TestSmartRunner_HandleRateLimit_CodexSystemFallbackSkipsInteractiveLogin(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	vaultDir := t.TempDir()
+	notifier := &mockNotifier{}
+	registry := provider.NewRegistry()
+	runner := NewRunner(registry)
+	detector, err := ratelimit.NewDetector(ratelimit.ProviderCodex, nil)
+	if err != nil {
+		t.Fatalf("new detector: %v", err)
+	}
+	if !detector.Check("rate limit exceeded") {
+		t.Fatal("expected detector to accept codex rate limit fixture")
+	}
+
+	sr := NewSmartRunner(runner, SmartRunnerOptions{
+		Vault:    authfile.NewVault(vaultDir),
+		Notifier: notifier,
+	})
+	sr.detector = detector
+	sr.loginHandler = handoff.GetHandler("codex")
+	sr.providerID = "codex"
+	sr.currentProfile = "active"
+	sr.lastSessionID = "session-1"
+
+	writeSmartRunnerFixtureFile(t, filepath.Join(codexHome, "auth.json"), "active-token")
+	writeSmartRunnerFixtureFile(t, filepath.Join(vaultDir, "codex", "_backup_ready", "auth.json"), "backup-token")
+
+	sr.handleRateLimit(context.Background())
+
+	if sr.getState() != Running {
+		t.Fatalf("state = %v, want %v", sr.getState(), Running)
+	}
+	if sr.currentProfile != "_backup_ready" {
+		t.Fatalf("currentProfile = %q, want %q", sr.currentProfile, "_backup_ready")
+	}
+	if sr.previousProfile != "active" {
+		t.Fatalf("previousProfile = %q, want %q", sr.previousProfile, "active")
+	}
+	if sr.handoffCount != 1 {
+		t.Fatalf("handoffCount = %d, want 1", sr.handoffCount)
+	}
+	if !sr.hasAuthSwapped() {
+		t.Fatal("expected authSwapped to remain true after stored-credential handoff")
+	}
+	if !sr.seamlessResumePending {
+		t.Fatal("expected seamless resume to be armed when a codex session id is available")
+	}
+	if got := sr.resumeHint("_backup_ready"); got != "caam resume codex _backup_ready --session session-1" {
+		t.Fatalf("unexpected resume hint: %q", got)
+	}
+	liveAuth, err := os.ReadFile(filepath.Join(codexHome, "auth.json"))
+	if err != nil {
+		t.Fatalf("read live auth: %v", err)
+	}
+	if string(liveAuth) != "backup-token" {
+		t.Fatalf("live auth content = %q, want backup token", string(liveAuth))
+	}
+	if sr.detector.Detected() || sr.detector.Reason() != "" {
+		t.Fatalf("expected detector to be reset, got detected=%v reason=%q", sr.detector.Detected(), sr.detector.Reason())
+	}
+}
+
+func TestSmartRunner_HandleRateLimit_NoUsableFallbackRollsBackAndAlerts(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	vaultDir := t.TempDir()
+	notifier := &mockNotifier{}
+	registry := provider.NewRegistry()
+	runner := NewRunner(registry)
+	detector, err := ratelimit.NewDetector(ratelimit.ProviderCodex, nil)
+	if err != nil {
+		t.Fatalf("new detector: %v", err)
+	}
+	if !detector.Check("rate limit exceeded") {
+		t.Fatal("expected detector to accept codex rate limit fixture")
+	}
+
+	sr := NewSmartRunner(runner, SmartRunnerOptions{
+		Vault:    authfile.NewVault(vaultDir),
+		Notifier: notifier,
+	})
+	sr.detector = detector
+	sr.loginHandler = handoff.GetHandler("codex")
+	sr.providerID = "codex"
+	sr.currentProfile = "active"
+
+	writeSmartRunnerFixtureFile(t, filepath.Join(codexHome, "auth.json"), "active-token")
+
+	sr.handleRateLimit(context.Background())
+
+	if sr.getState() != Running {
+		t.Fatalf("state = %v, want %v after rollback", sr.getState(), Running)
+	}
+	if sr.currentProfile != "active" {
+		t.Fatalf("currentProfile = %q, want active after rollback", sr.currentProfile)
+	}
+	if len(notifier.alerts) < 2 {
+		t.Fatalf("expected at least 2 alerts, got %d", len(notifier.alerts))
+	}
+	lastAlert := notifier.alerts[len(notifier.alerts)-1]
+	if lastAlert.Title != "Auto-handoff failed" {
+		t.Fatalf("unexpected final alert title: %q", lastAlert.Title)
+	}
+	if lastAlert.Message != "all codex profiles are exhausted, in cooldown, locked, or out of credits" {
+		t.Fatalf("unexpected failure alert message: %q", lastAlert.Message)
+	}
+	liveAuth, err := os.ReadFile(filepath.Join(codexHome, "auth.json"))
+	if err != nil {
+		t.Fatalf("read live auth: %v", err)
+	}
+	if string(liveAuth) != "active-token" {
+		t.Fatalf("live auth content = %q, want active token after rollback", string(liveAuth))
+	}
+}
+
+func TestSmartRunner_HandleRateLimit_NotifierFailureStillCompletesStoredCredentialHandoff(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	vaultDir := t.TempDir()
+	notifier := &mockNotifier{err: context.Canceled}
+	registry := provider.NewRegistry()
+	runner := NewRunner(registry)
+	detector, err := ratelimit.NewDetector(ratelimit.ProviderCodex, nil)
+	if err != nil {
+		t.Fatalf("new detector: %v", err)
+	}
+	if !detector.Check("rate limit exceeded") {
+		t.Fatal("expected detector to accept codex rate limit fixture")
+	}
+
+	sr := NewSmartRunner(runner, SmartRunnerOptions{
+		Vault:    authfile.NewVault(vaultDir),
+		Notifier: notifier,
+	})
+	sr.detector = detector
+	sr.loginHandler = handoff.GetHandler("codex")
+	sr.providerID = "codex"
+	sr.currentProfile = "active"
+	sr.lastSessionID = "session-1"
+
+	writeSmartRunnerFixtureFile(t, filepath.Join(codexHome, "auth.json"), "active-token")
+	writeSmartRunnerFixtureFile(t, filepath.Join(vaultDir, "codex", "_backup_ready", "auth.json"), "backup-token")
+
+	sr.handleRateLimit(context.Background())
+
+	if sr.getState() != Running {
+		t.Fatalf("state = %v, want %v", sr.getState(), Running)
+	}
+	if sr.currentProfile != "_backup_ready" {
+		t.Fatalf("currentProfile = %q, want _backup_ready", sr.currentProfile)
+	}
+	if sr.handoffCount != 1 {
+		t.Fatalf("handoffCount = %d, want 1", sr.handoffCount)
+	}
+	if !sr.seamlessResumePending {
+		t.Fatal("expected seamless resume to remain armed despite notifier failure")
+	}
+	if notifier.calls < 2 {
+		t.Fatalf("expected notifier to be attempted at least twice, got %d", notifier.calls)
 	}
 }
 

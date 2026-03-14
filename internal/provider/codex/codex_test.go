@@ -138,10 +138,7 @@ func TestAuthFiles(t *testing.T) {
 	})
 
 	t.Run("uses CODEX_HOME if set", func(t *testing.T) {
-		originalHome := os.Getenv("CODEX_HOME")
-		defer os.Setenv("CODEX_HOME", originalHome)
-
-		os.Setenv("CODEX_HOME", "/custom/codex/home")
+		t.Setenv("CODEX_HOME", "/custom/codex/home")
 		p := New()
 		files := p.AuthFiles()
 
@@ -155,10 +152,7 @@ func TestAuthFiles(t *testing.T) {
 	})
 
 	t.Run("uses default .codex if CODEX_HOME not set", func(t *testing.T) {
-		originalHome := os.Getenv("CODEX_HOME")
-		defer os.Setenv("CODEX_HOME", originalHome)
-
-		os.Unsetenv("CODEX_HOME")
+		t.Setenv("CODEX_HOME", "")
 		p := New()
 		files := p.AuthFiles()
 
@@ -488,12 +482,8 @@ func TestProviderInterface(t *testing.T) {
 // =============================================================================
 
 func TestCodexHomeHelper(t *testing.T) {
-	// Test CODEX_HOME environment variable override
-	originalHome := os.Getenv("CODEX_HOME")
-	defer os.Setenv("CODEX_HOME", originalHome)
-
 	t.Run("respects CODEX_HOME env var", func(t *testing.T) {
-		os.Setenv("CODEX_HOME", "/test/codex")
+		t.Setenv("CODEX_HOME", "/test/codex")
 		p := New()
 		files := p.AuthFiles()
 		if !hasPrefix(files[0].Path, "/test/codex") {
@@ -502,7 +492,7 @@ func TestCodexHomeHelper(t *testing.T) {
 	})
 
 	t.Run("falls back to ~/.codex", func(t *testing.T) {
-		os.Unsetenv("CODEX_HOME")
+		t.Setenv("CODEX_HOME", "")
 		p := New()
 		files := p.AuthFiles()
 		homeDir, _ := os.UserHomeDir()

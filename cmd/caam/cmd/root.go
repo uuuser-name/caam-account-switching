@@ -377,19 +377,13 @@ func getVaultIdentity(tool, profileName string) *identity.Identity {
 
 	switch tool {
 	case "codex":
-		id, err := identity.ExtractFromCodexAuth(filepath.Join(vaultPath, "auth.json"))
-		if err != nil {
-			return nil
-		}
-		normalizeIdentityPlan(id)
-		return id
+		return bestEffortVaultIdentity(func() (*identity.Identity, error) {
+			return identity.ExtractFromCodexAuth(filepath.Join(vaultPath, "auth.json"))
+		})
 	case "claude":
-		id, err := identity.ExtractFromClaudeCredentials(filepath.Join(vaultPath, ".credentials.json"))
-		if err != nil {
-			return nil
-		}
-		normalizeIdentityPlan(id)
-		return id
+		return bestEffortVaultIdentity(func() (*identity.Identity, error) {
+			return identity.ExtractFromClaudeCredentials(filepath.Join(vaultPath, ".credentials.json"))
+		})
 	case "gemini":
 		candidates := []string{
 			filepath.Join(vaultPath, "settings.json"),
@@ -406,6 +400,15 @@ func getVaultIdentity(tool, profileName string) *identity.Identity {
 	}
 
 	return nil
+}
+
+func bestEffortVaultIdentity(extract func() (*identity.Identity, error)) *identity.Identity {
+	id, extractErr := extract()
+	if extractErr != nil {
+		return nil
+	}
+	normalizeIdentityPlan(id)
+	return id
 }
 
 func applyIdentityToHealth(tool, profileName string, ph *health.ProfileHealth, id *identity.Identity) {

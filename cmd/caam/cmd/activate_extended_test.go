@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,20 +21,20 @@ func TestActivateCommand_Extended(t *testing.T) {
 
 	// 1. Setup
 	h.StartStep("Setup", "Create vault and mock globals")
-	
+
 	rootDir := h.TempDir
 	vaultDir := filepath.Join(rootDir, "vault")
-	
+
 	// Create database path
 	dbDir := filepath.Join(rootDir, "db")
 	require.NoError(t, os.MkdirAll(dbDir, 0755))
-	
+
 	// Override DB path via env var (caamdb.Open uses XDG_DATA_HOME/caam/caam.db)
 	h.SetEnv("HOME", rootDir)
 	h.SetEnv("XDG_DATA_HOME", rootDir) // DB will be at rootDir/caam/caam.db
 	configDir := filepath.Join(rootDir, "caam")
 	h.SetEnv("CAAM_HOME", configDir)
-	
+
 	// Override vault and tools
 	originalVault := vault
 	originalTools := make(map[string]func() authfile.AuthFileSet)
@@ -48,20 +49,20 @@ func TestActivateCommand_Extended(t *testing.T) {
 		activateCmd.Flags().Set("auto", "false")
 		activateCmd.Flags().Set("force", "false")
 	}()
-	
+
 	vault = authfile.NewVault(vaultDir)
-	
+
 	// Setup profiles in vault
 	profileDir := filepath.Join(vaultDir, "claude", "work")
 	require.NoError(t, os.MkdirAll(profileDir, 0755))
-	
+
 	authPath := filepath.Join(profileDir, "auth.json")
 	require.NoError(t, os.WriteFile(authPath, []byte(`{"token":"work"}`), 0600))
-	
+
 	// Define target location for restore
 	homeDir := filepath.Join(rootDir, "home")
 	targetPath := filepath.Join(homeDir, "auth.json")
-	
+
 	tools["claude"] = func() authfile.AuthFileSet {
 		return authfile.AuthFileSet{
 			Tool: "claude",
@@ -70,9 +71,9 @@ func TestActivateCommand_Extended(t *testing.T) {
 			},
 		}
 	}
-	
+
 	h.EndStep("Setup")
-	
+
 	// 2. Test Basic Activation
 	h.StartStep("Activate", "Activate 'work' profile")
 
@@ -93,14 +94,14 @@ func TestActivateCommand_Extended(t *testing.T) {
 	assert.True(t, output.Success)
 	assert.Equal(t, "claude", output.Tool)
 	assert.Equal(t, "work", output.Profile)
-	
+
 	// Verify file restored
 	content, err := os.ReadFile(targetPath)
 	require.NoError(t, err)
 	assert.Equal(t, `{"token":"work"}`, string(content))
-	
+
 	h.EndStep("Activate")
-	
+
 	// 3. Test Unknown Tool
 	h.StartStep("Error", "Test unknown tool")
 
@@ -117,19 +118,19 @@ func TestActivateCommand_Extended(t *testing.T) {
 
 	assert.False(t, errOutput.Success)
 	assert.Contains(t, errOutput.Error, "unknown tool")
-	
+
 	h.EndStep("Error")
-	
+
 	// 4. Test Cooldown Enforcement
 	h.StartStep("Cooldown", "Test activation with active cooldown")
-	
+
 	// Setup DB with cooldown
 	db, err := caamdb.Open()
 	require.NoError(t, err)
 	_, err = db.SetCooldown("claude", "work", time.Now(), 1*time.Hour, "test cooldown")
 	db.Close()
 	require.NoError(t, err)
-	
+
 	// Enable cooldown in config (requires writing config file or mocking config load)
 	// runActivate loads config via config.LoadSPMConfig() -> config.Load()
 	// config.Load() looks for config.yaml.
@@ -143,7 +144,7 @@ stealth:
 `
 	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0600))
 	h.SetEnv("XDG_CONFIG_HOME", rootDir) // for config.json (old config)
-	
+
 	// Try activate
 	outputStr, err = captureStdout(t, func() error {
 		return runActivate(activateCmd, []string{"claude", "work"})
@@ -157,6 +158,79 @@ stealth:
 	// Should fail due to cooldown
 	assert.False(t, cooldownOutput.Success)
 	assert.Contains(t, cooldownOutput.Error, "is in cooldown")
-	
+
 	h.EndStep("Cooldown")
+}
+
+func TestRunActivate_CodexRepairsLiveConfig(t *testing.T) {
+	rootDir := t.TempDir()
+	vaultDir := filepath.Join(rootDir, "vault")
+	codexHome := filepath.Join(rootDir, "codex-home")
+	configPath := filepath.Join(codexHome, "config.toml")
+	canonicalDir := filepath.Join(rootDir, "canonical")
+	canonicalConfigPath := filepath.Join(canonicalDir, "config.toml")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "work"), 0o755))
+	require.NoError(t, os.MkdirAll(codexHome, 0o755))
+	require.NoError(t, os.MkdirAll(canonicalDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "work", "auth.json"), []byte(`{"token":"work"}`), 0o600))
+	require.NoError(t, os.WriteFile(canonicalConfigPath, []byte("model_reasoning_effort = \"high\"\ncli_auth_credentials_store = \"keychain\"\n"), 0o600))
+	require.NoError(t, os.Symlink(canonicalConfigPath, configPath))
+
+	originalVault := vault
+	originalTools := make(map[string]func() authfile.AuthFileSet)
+	for k, v := range tools {
+		originalTools[k] = v
+	}
+	defer func() {
+		vault = originalVault
+		tools = originalTools
+		activateCmd.Flags().Set("json", "false")
+		activateCmd.Flags().Set("auto", "false")
+		activateCmd.Flags().Set("force", "false")
+	}()
+
+	vault = authfile.NewVault(vaultDir)
+	tools["codex"] = authfile.CodexAuthFiles
+
+	t.Setenv("HOME", rootDir)
+	t.Setenv("XDG_CONFIG_HOME", rootDir)
+	t.Setenv("XDG_DATA_HOME", rootDir)
+	t.Setenv("CAAM_HOME", filepath.Join(rootDir, "caam"))
+	t.Setenv("CODEX_HOME", codexHome)
+
+	require.NoError(t, activateCmd.Flags().Set("json", "true"))
+	require.NoError(t, activateCmd.Flags().Set("auto", "false"))
+	require.NoError(t, activateCmd.Flags().Set("force", "false"))
+
+	outputStr, err := captureStdout(t, func() error {
+		return runActivate(activateCmd, []string{"codex", "work"})
+	})
+	require.NoError(t, err)
+
+	var output activateOutput
+	require.NoError(t, json.Unmarshal([]byte(outputStr), &output))
+	assert.True(t, output.Success)
+	assert.Equal(t, "codex", output.Tool)
+	assert.Equal(t, "work", output.Profile)
+
+	authData, err := os.ReadFile(filepath.Join(codexHome, "auth.json"))
+	require.NoError(t, err)
+	assert.Equal(t, `{"token":"work"}`, string(authData))
+
+	configInfo, err := os.Lstat(configPath)
+	require.NoError(t, err)
+	assert.NotZero(t, configInfo.Mode()&os.ModeSymlink)
+
+	configData, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	configText := string(configData)
+	assert.Contains(t, configText, `model_reasoning_effort = "high"`)
+	assert.Contains(t, configText, `cli_auth_credentials_store = "file"`)
+	assert.Contains(t, configText, "[features]")
+	assert.Contains(t, configText, `multi_agent = true`)
+	assert.Contains(t, configText, "[notice]")
+	assert.Contains(t, configText, `hide_rate_limit_model_nudge = true`)
+	assert.NotContains(t, configText, `cli_auth_credentials_store = "keychain"`)
+	assert.True(t, strings.Contains(configText, "[features]\nmulti_agent = true") || strings.Contains(configText, "[features]\r\nmulti_agent = true"))
 }

@@ -314,6 +314,10 @@ func switchWorkspace(cfg *config.Config, workspaceName string) error {
 		}
 
 		// Restore profile
+		if err := prepareToolActivation(tool); err != nil {
+			fmt.Printf("  Error preparing %s/%s: %v\n", tool, profile, err)
+			continue
+		}
 		if err := vault.Restore(fileSet, profile); err != nil {
 			fmt.Printf("  Error activating %s/%s: %v\n", tool, profile, err)
 			continue

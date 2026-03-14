@@ -90,6 +90,9 @@ func runNext(cmd *cobra.Command, args []string) error {
 		}
 		// Single profile case: just activate it
 		if !dryRun {
+			if err := prepareToolActivation(tool); err != nil {
+				return err
+			}
 			if err := vault.Restore(fileSet, profiles[0]); err != nil {
 				return fmt.Errorf("activate failed: %w", err)
 			}
@@ -184,6 +187,9 @@ func runNext(cmd *cobra.Command, args []string) error {
 	}
 
 	// Activate selected profile
+	if err := prepareToolActivation(tool); err != nil {
+		return err
+	}
 	if err := vault.Restore(fileSet, selection.Selected); err != nil {
 		return fmt.Errorf("activate failed: %w", err)
 	}

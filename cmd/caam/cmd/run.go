@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -151,6 +150,16 @@ func samePath(a, b string) bool {
 	return a == b
 }
 
+func isExplicitResumeInvocation(tool string, args []string) bool {
+	if normalizeToolName(tool) != "codex" {
+		return false
+	}
+	if len(args) == 0 {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(args[0]), "resume")
+}
+
 // runCmd wraps AI CLI execution with automatic rate limit handling.
 var runCmd = &cobra.Command{
 	Use:   "run <tool> [-- args...]",
@@ -224,6 +233,7 @@ func runWrap(cmd *cobra.Command, args []string) error {
 	if len(args) > 1 {
 		cliArgs = args[1:]
 	}
+	explicitResume := isExplicitResumeInvocation(tool, cliArgs)
 
 	// Get flags
 	quiet, _ := cmd.Flags().GetBool("quiet")
@@ -339,6 +349,9 @@ func runWrap(cmd *cobra.Command, args []string) error {
 	if precheckSelectedProfile != "" {
 		activeProfileName = precheckSelectedProfile
 	}
+	if err := prepareToolActivation(tool); err != nil {
+		return err
+	}
 	if activeProfileName == "" {
 		// If no active profile, try to select one
 		profiles, err := vault.List(tool)
@@ -394,6 +407,7 @@ func runWrap(cmd *cobra.Command, args []string) error {
 		Provider:     prov,
 		Args:         cliArgs,
 		WorkDir:      cwd,
+		NoLock:       explicitResume,
 		Env:          nil,  // Inherit
 		UseGlobalEnv: true, // Force global environment for vault-based switching
 		Binary:       providerBinary,
@@ -440,16 +454,6 @@ func runWrap(cmd *cobra.Command, args []string) error {
 	// Stop signal handling and allow the signal goroutine to exit
 	signal.Stop(sigChan)
 	cancel() // Ensure goroutine exits via ctx.Done() path
-
-	// Handle exit code
-	var exitErr *exec.ExitCodeError
-	if errors.As(err, &exitErr) {
-		// Clean up before exiting - os.Exit() bypasses defers
-		if db != nil {
-			db.Close()
-		}
-		os.Exit(exitErr.Code)
-	}
 
 	return err
 }
@@ -635,6 +639,9 @@ func runPrecheck(tool string, threshold float64, quiet bool, db *caamdb.DB, algo
 	}
 
 	// Switch to the better profile
+	if err := prepareToolActivation(tool); err != nil {
+		return false, ""
+	}
 	if err := vault.Restore(fileSet, result.Selected); err != nil {
 		return false, ""
 	}
@@ -855,6 +862,9 @@ func switchToUnlockedProfile(tool, currentProfile string, fileSet authfile.AuthF
 	}
 	if res == nil || res.Selected == "" {
 		return "", nil, fmt.Errorf("selector returned no unlocked profile")
+	}
+	if err := prepareToolActivation(tool); err != nil {
+		return "", nil, err
 	}
 	if err := vault.Restore(fileSet, res.Selected); err != nil {
 		return "", nil, fmt.Errorf("activate unlocked profile %s: %w", res.Selected, err)

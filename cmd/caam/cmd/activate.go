@@ -365,6 +365,10 @@ func runActivate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if err := prepareToolActivation(tool); err != nil {
+		return emitJSONError(err)
+	}
+
 	// Restore from vault
 	if err := vault.Restore(fileSet, profileName); err != nil {
 		return emitJSONError(fmt.Errorf("activate failed: %w", err))

@@ -12,10 +12,8 @@ import (
 
 func TestResolveInvokedProviderBinary(t *testing.T) {
 	origArgs := os.Args
-	origPath := os.Getenv("PATH")
 	t.Cleanup(func() {
 		os.Args = origArgs
-		_ = os.Setenv("PATH", origPath)
 	})
 
 	dirA := t.TempDir()
@@ -31,9 +29,7 @@ func TestResolveInvokedProviderBinary(t *testing.T) {
 	}
 
 	os.Args = []string{invoked}
-	if err := os.Setenv("PATH", strings.Join([]string{dirA, dirB}, string(os.PathListSeparator))); err != nil {
-		t.Fatalf("set PATH: %v", err)
-	}
+	t.Setenv("PATH", strings.Join([]string{dirA, dirB}, string(os.PathListSeparator)))
 
 	got := resolveInvokedProviderBinary("codex")
 	if got == "" {

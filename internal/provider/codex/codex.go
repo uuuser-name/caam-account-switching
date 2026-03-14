@@ -17,6 +17,7 @@ package codex
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/browser"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/passthrough"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
@@ -82,9 +84,21 @@ func ResolveHome() string {
 }
 
 var codexCredentialsStoreRe = regexp.MustCompile(`(?m)^\s*cli_auth_credentials_store\s*=\s*\"[^\"]*\"`)
+var codexCredentialsStoreFileRe = regexp.MustCompile(`(?m)^\s*cli_auth_credentials_store\s*=\s*\"file\"\s*$`)
+var codexFeaturesTableRe = regexp.MustCompile(`(?m)^\s*\[features\]\s*$`)
+var codexNoticeTableRe = regexp.MustCompile(`(?m)^\s*\[notice\]\s*$`)
+var codexTableHeaderRe = regexp.MustCompile(`(?m)^\s*\[\[?.*?\]\]?\s*$`)
+var codexMultiAgentDottedRe = regexp.MustCompile(`(?m)^\s*features\.multi_agent\s*=\s*(?:true|false)\s*$`)
+var codexInlineFeaturesMultiAgentRe = regexp.MustCompile(`(?m)^\s*\[features\][ \t]*multi_agent\s*=\s*(?:true|false)\s*$`)
+var codexMultiAgentSettingRe = regexp.MustCompile(`(?m)^[ \t]*multi_agent\s*=\s*(?:true|false)[ \t]*$`)
+var codexRateLimitNudgeDottedRe = regexp.MustCompile(`(?m)^\s*notice\.hide_rate_limit_model_nudge\s*=\s*(?:true|false)\s*$`)
+var codexInlineRateLimitNudgeRe = regexp.MustCompile(`(?m)^\s*\[notice\][ \t]*hide_rate_limit_model_nudge\s*=\s*(?:true|false)\s*$`)
+var codexRateLimitNudgeSettingRe = regexp.MustCompile(`(?m)^[ \t]*hide_rate_limit_model_nudge\s*=\s*(?:true|false)[ \t]*$`)
+var codexCollapsedTableHeaderCandidateRe = regexp.MustCompile(`^\[[A-Za-z0-9_][^\]\n]*\]$`)
 
-// EnsureFileCredentialStore ensures Codex uses file-based credential storage.
-// This is required for CAAM to manage auth.json reliably.
+// EnsureFileCredentialStore ensures Codex keeps the managed defaults CAAM
+// depends on: file-based auth storage, multi-agent mode, and the persisted
+// "hide rate-limit model nudge" notice flag.
 func EnsureFileCredentialStore(home string) error {
 	home = strings.TrimSpace(home)
 	if home == "" {
@@ -93,12 +107,15 @@ func EnsureFileCredentialStore(home string) error {
 
 	configPath := filepath.Join(home, "config.toml")
 	const settingLine = `cli_auth_credentials_store = "file"`
+	const multiAgentSetting = `multi_agent = true`
+	const rateLimitNudgeSetting = `hide_rate_limit_model_nudge = true`
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(home, 0700); err != nil {
 			return fmt.Errorf("create codex home: %w", err)
 		}
-		content := "# Managed by caam to ensure file-based auth storage\n" + settingLine + "\n"
+		content := "# Managed by caam to ensure file-based auth storage\n" +
+			settingLine + "\n\n[features]\n" + multiAgentSetting + "\n\n[notice]\n" + rateLimitNudgeSetting + "\n"
 		return atomicWriteFile(configPath, []byte(content), 0600)
 	}
 
@@ -107,20 +124,226 @@ func EnsureFileCredentialStore(home string) error {
 		return fmt.Errorf("read config.toml: %w", err)
 	}
 
-	if match := codexCredentialsStoreRe.Find(data); match != nil {
-		if strings.Contains(string(match), `"file"`) {
-			return nil
+	updated, _ := repairCollapsedTableHeaders(data)
+	updated = dropManagedSettingOutsideTable(updated, "features", codexMultiAgentSettingRe)
+	updated = dropManagedSettingOutsideTable(updated, "notice", codexRateLimitNudgeSettingRe)
+	if match := codexCredentialsStoreRe.Find(updated); match != nil {
+		if !strings.Contains(string(match), `"file"`) {
+			updated = codexCredentialsStoreRe.ReplaceAll(updated, []byte(settingLine))
 		}
-		updated := codexCredentialsStoreRe.ReplaceAll(data, []byte(settingLine))
-		return atomicWriteFile(configPath, updated, 0600)
+	} else {
+		text := string(updated)
+		if !strings.HasSuffix(text, "\n") {
+			text += "\n"
+		}
+		text += settingLine + "\n"
+		updated = []byte(text)
 	}
 
+	updated = ensureMultiAgentEnabled(updated, multiAgentSetting)
+	updated = ensureRateLimitModelNudgeHidden(updated, rateLimitNudgeSetting)
+	return atomicWriteFile(configPath, updated, 0600)
+}
+
+func ensureMultiAgentEnabled(data []byte, multiAgentSetting string) []byte {
+	data = codexInlineFeaturesMultiAgentRe.ReplaceAll(data, []byte{})
+	data = codexMultiAgentDottedRe.ReplaceAll(data, []byte{})
+
+	section, sectionStart, sectionEnd := findManagedTableSection(data, codexFeaturesTableRe)
+	if section == nil {
+		return appendManagedTable(data, "features", multiAgentSetting)
+	}
+
+	if codexMultiAgentSettingRe.Match(section) {
+		replaced := codexMultiAgentSettingRe.ReplaceAll(section, []byte(multiAgentSetting))
+		return append(append([]byte{}, data[:sectionStart]...), append(replaced, data[sectionEnd:]...)...)
+	}
+
+	text := string(data[:sectionEnd])
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	text += multiAgentSetting + "\n"
+	return append([]byte(text), data[sectionEnd:]...)
+}
+
+func ensureRateLimitModelNudgeHidden(data []byte, rateLimitNudgeSetting string) []byte {
+	data = codexInlineRateLimitNudgeRe.ReplaceAll(data, []byte{})
+	data = codexRateLimitNudgeDottedRe.ReplaceAll(data, []byte{})
+
+	section, sectionStart, sectionEnd := findManagedTableSection(data, codexNoticeTableRe)
+	if section == nil {
+		return appendManagedTable(data, "notice", rateLimitNudgeSetting)
+	}
+	if codexRateLimitNudgeSettingRe.Match(section) {
+		replaced := codexRateLimitNudgeSettingRe.ReplaceAll(section, []byte(rateLimitNudgeSetting))
+		return append(append([]byte{}, data[:sectionStart]...), append(replaced, data[sectionEnd:]...)...)
+	}
+
+	text := string(data[:sectionEnd])
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	text += rateLimitNudgeSetting + "\n"
+	return append([]byte(text), data[sectionEnd:]...)
+}
+
+func appendManagedTable(data []byte, tableName string, settingLine string) []byte {
 	text := string(data)
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	text += settingLine + "\n"
-	return atomicWriteFile(configPath, []byte(text), 0600)
+	if !strings.HasSuffix(text, "\n\n") {
+		text += "\n"
+	}
+	text += "[" + tableName + "]\n" + settingLine + "\n"
+	return []byte(text)
+}
+
+func findManagedTableSection(data []byte, tableRe *regexp.Regexp) ([]byte, int, int) {
+	tableLoc := tableRe.FindIndex(data)
+	if tableLoc == nil {
+		return nil, 0, 0
+	}
+
+	sectionStart := tableLoc[1]
+	sectionEnd := len(data)
+	for _, next := range codexTableHeaderRe.FindAllIndex(data[sectionStart:], -1) {
+		if next[0] == 0 {
+			continue
+		}
+		sectionEnd = sectionStart + next[0]
+		break
+	}
+
+	return data[sectionStart:sectionEnd], sectionStart, sectionEnd
+}
+
+func tableHasManagedSetting(data []byte, tableRe *regexp.Regexp, settingRe *regexp.Regexp, want string) bool {
+	section, _, _ := findManagedTableSection(data, tableRe)
+	if section == nil {
+		return false
+	}
+
+	for _, match := range settingRe.FindAll(section, -1) {
+		if strings.TrimSpace(string(match)) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func repairCollapsedTableHeaders(data []byte) ([]byte, bool) {
+	text := string(data)
+	hasTrailingNewline := strings.HasSuffix(text, "\n")
+	lines := strings.Split(text, "\n")
+	changed := false
+	out := make([]string, 0, len(lines)+2)
+
+	for _, line := range lines {
+		idx := strings.LastIndex(line, "[")
+		if idx <= 0 {
+			out = append(out, line)
+			continue
+		}
+		header := strings.TrimSpace(line[idx:])
+		before := strings.TrimRight(line[:idx], " \t")
+		if !strings.Contains(before, "=") || !codexCollapsedTableHeaderCandidateRe.MatchString(header) {
+			out = append(out, line)
+			continue
+		}
+		out = append(out, before, header)
+		changed = true
+	}
+
+	repaired := strings.Join(out, "\n")
+	if hasTrailingNewline && !strings.HasSuffix(repaired, "\n") {
+		repaired += "\n"
+	}
+	return []byte(repaired), changed && !bytes.Equal([]byte(repaired), data)
+}
+
+func dropManagedSettingOutsideTable(data []byte, tableName string, settingRe *regexp.Regexp) []byte {
+	text := string(data)
+	hasTrailingNewline := strings.HasSuffix(text, "\n")
+	lines := strings.Split(text, "\n")
+	currentTable := ""
+	out := make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		if header, ok := parseTableHeader(line); ok {
+			currentTable = header
+			out = append(out, line)
+			continue
+		}
+		if settingRe.MatchString(line) && currentTable != tableName {
+			continue
+		}
+		out = append(out, line)
+	}
+
+	repaired := strings.Join(out, "\n")
+	if hasTrailingNewline && !strings.HasSuffix(repaired, "\n") {
+		repaired += "\n"
+	}
+	return []byte(repaired)
+}
+
+func parseTableHeader(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) < 3 || !strings.HasPrefix(trimmed, "[") || !strings.HasSuffix(trimmed, "]") {
+		return "", false
+	}
+	if strings.HasPrefix(trimmed, "[[") || strings.HasSuffix(trimmed, "]]") {
+		return "", false
+	}
+	name := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+	if name == "" {
+		return "", false
+	}
+	return name, true
+}
+
+// ManagedConfigProblems reports whether the Codex config at home is missing any
+// managed defaults CAAM relies on or contains non-canonical managed fragments
+// that should be normalized.
+func ManagedConfigProblems(home string) ([]string, error) {
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return nil, fmt.Errorf("codex home is empty")
+	}
+
+	configPath := filepath.Join(home, "config.toml")
+	data, err := os.ReadFile(configPath)
+	if os.IsNotExist(err) {
+		return []string{"config.toml missing"}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read config.toml: %w", err)
+	}
+
+	var problems []string
+	if _, err := toml.Decode(string(data), &map[string]any{}); err != nil {
+		problems = append(problems, fmt.Sprintf("config.toml is not valid TOML: %v", err))
+	}
+
+	if !codexCredentialsStoreFileRe.Match(data) {
+		problems = append(problems, `cli_auth_credentials_store is not set to "file"`)
+	}
+	if !tableHasManagedSetting(data, codexFeaturesTableRe, codexMultiAgentSettingRe, `multi_agent = true`) {
+		problems = append(problems, "managed [features] multi_agent = true is missing")
+	}
+	if !tableHasManagedSetting(data, codexNoticeTableRe, codexRateLimitNudgeSettingRe, `hide_rate_limit_model_nudge = true`) {
+		problems = append(problems, "managed [notice] hide_rate_limit_model_nudge = true is missing")
+	}
+	if codexInlineFeaturesMultiAgentRe.Match(data) || codexMultiAgentDottedRe.Match(data) {
+		problems = append(problems, "managed multi_agent setting is present in a non-canonical form")
+	}
+	if codexInlineRateLimitNudgeRe.Match(data) || codexRateLimitNudgeDottedRe.Match(data) {
+		problems = append(problems, "managed hide_rate_limit_model_nudge setting is present in a non-canonical form")
+	}
+
+	return problems, nil
 }
 
 // AuthFiles returns the auth file specifications for Codex.
@@ -512,6 +735,11 @@ func (p *Provider) ImportAuth(ctx context.Context, sourcePath string, prof *prof
 
 // atomicWriteFile writes data to a file atomically using temp file + fsync + rename.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	path, err := resolveWriteTarget(path)
+	if err != nil {
+		return err
+	}
+
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create directory: %w", err)
@@ -548,6 +776,38 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 
 	return nil
+}
+
+func resolveWriteTarget(path string) (string, error) {
+	current := path
+	seen := map[string]struct{}{}
+
+	for {
+		if _, ok := seen[current]; ok {
+			return "", fmt.Errorf("resolve write target %q: symlink loop detected", path)
+		}
+		seen[current] = struct{}{}
+
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			return current, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("lstat %s: %w", current, err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return current, nil
+		}
+
+		target, err := os.Readlink(current)
+		if err != nil {
+			return "", fmt.Errorf("readlink %s: %w", current, err)
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(current), target)
+		}
+		current = filepath.Clean(target)
+	}
 }
 
 // copyFile copies a file from src to dst with fsync for durability.

@@ -22,10 +22,12 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/handoff"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/notify"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
+	codexprovider "github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider/codex"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/pty"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/ratelimit"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/rotation"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/usage"
+	"golang.org/x/term"
 )
 
 // ExecCommand allows mocking exec.CommandContext in tests
@@ -277,16 +279,26 @@ func (r *SmartRunner) run(ctx context.Context, opts RunOptions, preserveHandoffS
 	}
 
 	// Create PTY controller
-	ctrl, err := pty.NewController(cmd, nil)
+	ctrl, err := pty.NewController(cmd, currentPTYOptions())
 	if err != nil {
 		return fmt.Errorf("create pty controller: %w", err)
 	}
-	r.ptyController = ctrl
 	defer ctrl.Close()
 
 	// Start the PTY (this executes the command)
 	if err := ctrl.Start(); err != nil {
 		return fmt.Errorf("start pty: %w", err)
+	}
+	r.setPTYController(ctrl)
+	defer r.setPTYController(nil)
+
+	if !preserveHandoffState {
+		restoreInput := r.startInteractiveInputRelay(ctx)
+		defer func() {
+			if restoreInput != nil {
+				restoreInput()
+			}
+		}()
 	}
 
 	var capture *codexSessionCapture
@@ -521,6 +533,12 @@ func (r *SmartRunner) handleRateLimit(ctx context.Context) {
 
 	// 4. Swap auth files
 	r.setState(SwappingAuth)
+	if r.loginHandler != nil && r.loginHandler.Provider() == "codex" {
+		if err := codexprovider.EnsureFileCredentialStore(codexprovider.ResolveHome()); err != nil {
+			r.failWithManual("codex credential store prep failed: %v", err)
+			return
+		}
+	}
 	if err := r.vault.Restore(fileSet, nextProfile); err != nil {
 		r.failWithManual("auth swap failed: %v", err)
 		return
@@ -540,7 +558,7 @@ func (r *SmartRunner) handleRateLimit(ctx context.Context) {
 	// 6. Inject login command
 	r.drainLoginDone()
 	r.setState(LoggingIn)
-	if err := r.loginHandler.TriggerLogin(r.ptyController); err != nil {
+	if err := r.loginHandler.TriggerLogin(r.currentPTYController()); err != nil {
 		r.failWithManual("login trigger failed: %v", err)
 		return
 	}
@@ -626,7 +644,12 @@ func (r *SmartRunner) completeHandoff(nextProfile string, loginSkipped bool) {
 		fmt.Fprintf(os.Stderr, "[caam] Resume hint: %s\n", resumeHint)
 	}
 	if loginSkipped {
-		r.pauseRateLimitDispatch(3 * time.Second)
+		// When we skip interactive login, any remaining PTY output before the
+		// interrupted process fully exits still belongs to the exhausted session.
+		// Keep redispatch paused for the full seamless-resume arming window so
+		// stale buffered rate-limit lines cannot trigger a second handoff on the
+		// already-switched profile.
+		r.pauseRateLimitDispatch(seamlessResumeMaxDelay)
 		r.maybeMarkSeamlessResumePending(resumeHint)
 	}
 
@@ -637,6 +660,12 @@ func (r *SmartRunner) completeHandoff(nextProfile string, loginSkipped bool) {
 
 func (r *SmartRunner) rollback(fileSet authfile.AuthFileSet) {
 	fmt.Fprintf(os.Stderr, "Rolling back to %s...\n", r.previousProfile)
+	if r.loginHandler != nil && r.loginHandler.Provider() == "codex" {
+		if err := codexprovider.EnsureFileCredentialStore(codexprovider.ResolveHome()); err != nil {
+			fmt.Fprintf(os.Stderr, "Rollback prep failed: %v\n", err)
+			return
+		}
+	}
 	if err := r.vault.Restore(fileSet, r.previousProfile); err != nil {
 		fmt.Fprintf(os.Stderr, "Rollback failed: %v\n", err)
 	}
@@ -838,6 +867,124 @@ func splitEnv(s string) []string {
 	return []string{s}
 }
 
+func currentPTYOptions() *pty.Options {
+	opts := pty.DefaultOptions()
+	if cols, rows, ok := currentTerminalSize(); ok {
+		opts.Cols = uint16(cols)
+		opts.Rows = uint16(rows)
+	}
+	opts.DisableEcho = true
+	return opts
+}
+
+func currentTerminalSize() (cols, rows int, ok bool) {
+	for _, file := range []*os.File{os.Stdout, os.Stdin} {
+		if file == nil {
+			continue
+		}
+		fd := int(file.Fd())
+		if !term.IsTerminal(fd) {
+			continue
+		}
+		width, height, err := term.GetSize(fd)
+		if err != nil || width <= 0 || height <= 0 {
+			continue
+		}
+		return width, height, true
+	}
+	return 0, 0, false
+}
+
+func (r *SmartRunner) startInteractiveInputRelay(ctx context.Context) func() {
+	stdin := os.Stdin
+	if stdin == nil {
+		return nil
+	}
+
+	relayInput := stdin
+	closeRelayInput := func() {}
+	if duplicated, closeDup, err := duplicateInputSource(stdin); err != nil {
+		fmt.Fprintf(os.Stderr, "[caam] Warning: failed to duplicate terminal input source: %v\n", err)
+	} else if duplicated != nil {
+		relayInput = duplicated
+		closeRelayInput = closeDup
+	}
+
+	restoreTerminal := func() {}
+	fd := int(stdin.Fd())
+	if term.IsTerminal(fd) {
+		oldState, err := term.MakeRaw(fd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[caam] Warning: failed to enable raw terminal input: %v\n", err)
+		} else {
+			restoreTerminal = func() {
+				_ = term.Restore(fd, oldState)
+			}
+		}
+	}
+
+	stopRelay := make(chan struct{})
+	done := make(chan struct{})
+	var cleanupOnce sync.Once
+
+	go func() {
+		defer close(done)
+		defer cleanupOnce.Do(closeRelayInput)
+		buf := make([]byte, 4096)
+		for {
+			n, err := relayInput.Read(buf)
+			if n > 0 {
+				select {
+				case <-stopRelay:
+					return
+				default:
+				}
+				ctrl := r.currentPTYController()
+				if ctrl != nil {
+					data := append([]byte(nil), buf[:n]...)
+					if injectErr := ctrl.InjectRaw(data); injectErr != nil && !errors.Is(injectErr, pty.ErrClosed) {
+						fmt.Fprintf(os.Stderr, "[caam] Warning: failed to forward terminal input: %v\n", injectErr)
+					}
+				}
+			}
+			if err != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-stopRelay:
+				return
+			default:
+			}
+		}
+	}()
+
+	return func() {
+		cleanupOnce.Do(func() {
+			close(stopRelay)
+			closeRelayInput()
+			restoreTerminal()
+		})
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+func (r *SmartRunner) setPTYController(ctrl pty.Controller) {
+	r.mu.Lock()
+	r.ptyController = ctrl
+	r.mu.Unlock()
+}
+
+func (r *SmartRunner) currentPTYController() pty.Controller {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ptyController
+}
+
 func (r *SmartRunner) updateResumeHint(command, sessionID string) {
 	command = strings.TrimSpace(command)
 	sessionID = strings.TrimSpace(sessionID)
@@ -882,7 +1029,7 @@ func (r *SmartRunner) resumeHint(nextProfile string) string {
 }
 
 func (r *SmartRunner) terminateCurrentSession() {
-	ctrl := r.ptyController
+	ctrl := r.currentPTYController()
 	if ctrl == nil {
 		return
 	}
@@ -939,10 +1086,6 @@ func (r *SmartRunner) maybeSchedulePostStartCommand(ctx context.Context, ctrl pt
 
 		if err := ctrl.InjectCommand(command); err != nil {
 			if errors.Is(err, pty.ErrClosed) {
-				return
-			}
-			lower := strings.ToLower(err.Error())
-			if strings.Contains(lower, "input/output error") || strings.Contains(lower, "file already closed") {
 				return
 			}
 			fmt.Fprintf(os.Stderr, "[caam] Warning: failed to inject post-start command: %v\n", err)

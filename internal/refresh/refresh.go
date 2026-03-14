@@ -13,6 +13,7 @@ import (
 
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/health"
+	codexprovider "github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider/codex"
 )
 
 // maxErrorBodySize limits how much of an error response body we read.
@@ -81,6 +82,11 @@ func RefreshProfile(ctx context.Context, provider, profile string, vault *authfi
 		// Instead, we verify that the live files are exactly as they were before the refresh.
 		currentState, _ := readAuthFiles(fileSet)
 		if filesEqual(preRefreshState, currentState) {
+			if provider == "codex" {
+				if err := codexprovider.EnsureFileCredentialStore(codexprovider.ResolveHome()); err != nil {
+					return fmt.Errorf("refresh successful but failed to prepare codex live config: %w", err)
+				}
+			}
 			if restoreErr := vault.Restore(fileSet, profile); restoreErr != nil {
 				return fmt.Errorf("refresh successful but failed to update active files: %w", restoreErr)
 			}

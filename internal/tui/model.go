@@ -19,6 +19,7 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/health"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/identity"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
+	codexprovider "github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider/codex"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/project"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/refresh"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/signals"
@@ -1615,6 +1616,15 @@ func (m Model) doActivateProfile(provider, profile string) tea.Cmd {
 		}
 
 		vault := authfile.NewVault(m.vaultPath)
+		if provider == "codex" {
+			if err := codexprovider.EnsureFileCredentialStore(codexprovider.ResolveHome()); err != nil {
+				return activateResultMsg{
+					provider: provider,
+					profile:  profile,
+					err:      fmt.Errorf("configure codex credential store: %w", err),
+				}
+			}
+		}
 		if err := vault.Restore(fileSet, profile); err != nil {
 			return activateResultMsg{
 				provider: provider,

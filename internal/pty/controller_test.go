@@ -4,6 +4,7 @@ package pty
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -182,6 +183,58 @@ func TestControllerInjectRaw(t *testing.T) {
 
 		if !strings.Contains(output, "test") {
 			t.Errorf("expected output to contain 'test', got %q", output)
+		}
+	})
+
+	t.Run("returns ErrClosed after child exits", func(t *testing.T) {
+		ctrl, err := NewControllerFromArgs("sh", []string{"-c", "exit 0"}, nil)
+		if err != nil {
+			t.Fatalf("NewControllerFromArgs failed: %v", err)
+		}
+		defer ctrl.Close()
+
+		if err := ctrl.Start(); err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+
+		time.Sleep(100 * time.Millisecond)
+
+		err = ctrl.InjectRaw([]byte("test"))
+		if !errors.Is(err, ErrClosed) {
+			t.Fatalf("expected ErrClosed after child exit, got %v", err)
+		}
+	})
+
+	t.Run("disable echo suppresses slave tty local echo", func(t *testing.T) {
+		ctrl, err := NewControllerFromArgs("sh", []string{"-c", "sleep 1"}, &Options{
+			Rows:        24,
+			Cols:        80,
+			DisableEcho: true,
+		})
+		if err != nil {
+			t.Fatalf("NewControllerFromArgs failed: %v", err)
+		}
+		defer ctrl.Close()
+
+		if err := ctrl.Start(); err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+
+		err = ctrl.InjectRaw([]byte("\x1b[8;1R"))
+		if err != nil {
+			t.Fatalf("InjectRaw failed: %v", err)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+
+		output, err := ctrl.ReadOutput()
+		if err != nil {
+			t.Fatalf("ReadOutput failed: %v", err)
+		}
+		t.Logf("[TEST] Output with DisableEcho: %q", output)
+
+		if output != "" {
+			t.Fatalf("expected no echoed terminal response bytes, got %q", output)
 		}
 	})
 }
@@ -669,6 +722,34 @@ func TestControllerErrorHandling(t *testing.T) {
 			t.Errorf("expected ErrClosed, got %v", err)
 		}
 		t.Logf("[TEST] InjectRaw after close error: %v", err)
+	})
+
+	t.Run("InjectRaw returns ErrClosed after wrapped process exits", func(t *testing.T) {
+		ctrl, err := NewControllerFromArgs("sh", []string{"-c", "exit 0"}, nil)
+		if err != nil {
+			t.Fatalf("NewControllerFromArgs failed: %v", err)
+		}
+		defer ctrl.Close()
+
+		if err := ctrl.Start(); err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+
+		exitCode, err := ctrl.Wait()
+		if err != nil {
+			t.Fatalf("Wait failed: %v", err)
+		}
+		if exitCode != 0 {
+			t.Fatalf("expected exit code 0, got %d", exitCode)
+		}
+
+		time.Sleep(50 * time.Millisecond)
+
+		err = ctrl.InjectRaw([]byte("test"))
+		if err != ErrClosed {
+			t.Errorf("expected ErrClosed after wrapped process exit, got %v", err)
+		}
+		t.Logf("[TEST] InjectRaw after process exit error: %v", err)
 	})
 
 	t.Run("Signal returns error when closed", func(t *testing.T) {
