@@ -55,6 +55,7 @@ func TestMockCLI_Handoff(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		fmt.Println("To continue this session, run codex resume 019b2e3d-b524-7c22-91da-47de9068d09a")
 		fmt.Println("Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again.")
+		time.Sleep(200 * time.Millisecond)
 		os.Exit(1)
 		return
 	}
