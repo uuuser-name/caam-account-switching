@@ -16,9 +16,14 @@ summary_json="$artifact_dir/test_audit.json"
 e2e_json="$artifact_dir/e2e_inventory.json"
 double_json="$artifact_dir/mock_fake_stub_by_package.json"
 double_file_json="$artifact_dir/mock_fake_stub_by_file.json"
+realism_allowlist_invalid_json="$artifact_dir/realism_allowlist_invalid_rules.json"
 baseline_snapshot_json="$artifact_dir/baseline_snapshot.json"
 baseline_ref_path="${TEST_AUDIT_BASELINE_FILE:-$repo_root/docs/testing/coverage_baseline.json}"
 realism_allowlist_path="${TEST_AUDIT_REALISM_ALLOWLIST:-$repo_root/docs/testing/test_realism_allowlist.json}"
+cli_matrix_json="${TEST_AUDIT_CLI_MATRIX_FILE:-$repo_root/artifacts/cli-matrix/cli_workflow_matrix.json}"
+traceability_json_path="${TEST_AUDIT_TRACEABILITY_FILE:-$repo_root/artifacts/cli-matrix/scenario_traceability.json}"
+traceability_md_path="${TEST_AUDIT_TRACEABILITY_MD_FILE:-$repo_root/docs/testing/cli_scenario_traceability.md}"
+traceability_bindings_path="${TEST_AUDIT_TRACEABILITY_BINDINGS_FILE:-$repo_root/artifacts/cli-matrix/scenario_test_bindings.json}"
 timestamp_utc="$(date -u +"%Y%m%dT%H%M%SZ")"
 snapshot_dir="$snapshot_root/$timestamp_utc"
 
@@ -27,20 +32,48 @@ tmp_cov="$(mktemp)"
 tmp_pkgs="$(mktemp)"
 tmp_pkg_cov="$(mktemp)"
 tmp_double_events="$(mktemp)"
+tmp_realism_invalid="$(mktemp)"
 tmp_scenarios="$(mktemp)"
 go_test_failure_log="$artifact_dir/go_test_failures.log"
 suite_failed="false"
+audit_failed="false"
 first_failure_stage=""
 first_failure_package=""
-trap 'rm -f "$tmp_cov" "$tmp_pkgs" "$tmp_pkg_cov" "$tmp_double_events" "$tmp_scenarios"' EXIT
+first_failure_message=""
+trap 'rm -f "$tmp_cov" "$tmp_pkgs" "$tmp_pkg_cov" "$tmp_double_events" "$tmp_realism_invalid" "$tmp_scenarios"' EXIT
 
 : >"$go_test_failure_log"
 
 export GOFLAGS="${GOFLAGS:--buildvcs=false}"
+record_failure() {
+  local stage="$1"
+  local package="${2:-}"
+  local message="${3:-}"
+
+  audit_failed="true"
+  if [[ -z "$first_failure_stage" ]]; then
+    first_failure_stage="$stage"
+    first_failure_package="$package"
+    first_failure_message="$message"
+  fi
+}
+
+append_failure_log() {
+  local heading="$1"
+  local body="${2:-}"
+
+  {
+    printf '== %s ==\n' "$heading"
+    if [[ -n "$body" ]]; then
+      printf '%s\n' "$body"
+    fi
+  } >>"$go_test_failure_log"
+}
+
 if ! aggregate_test_output="$(go test ./... -coverprofile="$tmp_cov" 2>&1)"; then
   suite_failed="true"
-  first_failure_stage="aggregate"
-  printf '== aggregate go test ./... failure ==\n%s\n' "$aggregate_test_output" >"$go_test_failure_log"
+  record_failure "aggregate" "" "go test ./... failed while generating coverage profile"
+  append_failure_log "aggregate go test ./... failure" "$aggregate_test_output"
   echo "test audit: go test ./... failed while generating coverage profile; continuing to emit partial artifacts" >&2
 fi
 
@@ -64,14 +97,8 @@ while IFS= read -r pkg; do
   # Single-package run makes per-package coverage explicit and scriptable.
   if ! pkg_test_output="$(go test -cover "$pkg" 2>&1)"; then
     suite_failed="true"
-    if [[ -z "$first_failure_stage" ]]; then
-      first_failure_stage="per_package"
-      first_failure_package="$pkg"
-    fi
-    {
-      printf '== package %s failure ==\n' "$pkg"
-      printf '%s\n' "$pkg_test_output"
-    } >>"$go_test_failure_log"
+    record_failure "per_package" "$pkg" "go test -cover failed for package: $pkg"
+    append_failure_log "package $pkg failure" "$pkg_test_output"
     echo "test audit: go test -cover failed for package: $pkg; recording 0.0% and continuing" >&2
     printf '%s\t%s\n' "$pkg" "0.0" >>"$tmp_pkg_cov"
     continue
@@ -215,11 +242,30 @@ critical_path_below_floor_count="$(jq 'length' <<<"$critical_path_below_floor")"
 
 double_hits="$(rg -n --glob '*_test.go' '\b(mock|fake|stub)\b' . || true)"
 mock_count="$(printf "%s\n" "$double_hits" | sed '/^$/d' | wc -l | tr -d ' ')"
+rule_rows=""
+invalid_rule_rows=""
 if [[ ! -f "$realism_allowlist_path" ]]; then
-  echo "realism allowlist not found: $realism_allowlist_path" >&2
-  exit 1
+  record_failure "realism_allowlist" "" "realism allowlist not found: $realism_allowlist_path"
+  append_failure_log "realism allowlist failure" "realism allowlist not found: $realism_allowlist_path"
+  echo "test audit: realism allowlist not found: $realism_allowlist_path; continuing with empty rules" >&2
+elif ! rule_rows="$(jq -r '.rules[]? | [.prefix, .scope, .owner, (.expiry // ""), (.remediation_issue // ""), (.notes // "")] | @tsv' "$realism_allowlist_path" 2>/dev/null)"; then
+  record_failure "realism_allowlist" "" "realism allowlist could not be parsed: $realism_allowlist_path"
+  append_failure_log "realism allowlist parse failure" "realism allowlist could not be parsed: $realism_allowlist_path"
+  echo "test audit: realism allowlist could not be parsed: $realism_allowlist_path; continuing with empty rules" >&2
+elif ! invalid_rule_rows="$(jq -c '.rules[]? | . as $rule | [if ((.prefix // "") | endswith("/")) then "broad_prefix" else empty end, if ((.owner // "") | length == 0) then "missing_owner" else empty end, if ((.expiry // "") | length == 0) then "missing_expiry" else empty end, if ((.remediation_issue // "") | length == 0) then "missing_remediation_issue" else empty end] | map(select(length > 0)) as $issues | select(($issues | length) > 0) | {prefix: ($rule.prefix // null), owner: ($rule.owner // null), expiry: ($rule.expiry // null), remediation_issue: ($rule.remediation_issue // null), issues: $issues}' "$realism_allowlist_path" 2>/dev/null)"; then
+  record_failure "realism_allowlist" "" "realism allowlist metadata could not be validated: $realism_allowlist_path"
+  append_failure_log "realism allowlist metadata failure" "realism allowlist metadata could not be validated: $realism_allowlist_path"
+  echo "test audit: realism allowlist metadata could not be validated: $realism_allowlist_path; continuing with empty invalid-rule set" >&2
 fi
-rule_rows="$(jq -r '.rules[]? | [.prefix, .scope, .owner] | @tsv' "$realism_allowlist_path")"
+
+if [[ -n "$invalid_rule_rows" ]]; then
+  printf '%s\n' "$invalid_rule_rows" | jq -s '.' >"$realism_allowlist_invalid_json"
+  invalid_rule_count="$(jq 'length' "$realism_allowlist_invalid_json")"
+  record_failure "realism_allowlist" "" "realism allowlist has $invalid_rule_count invalid exception rule(s)"
+  append_failure_log "realism allowlist invalid rules" "$(jq -r '.[] | "- \(.prefix // "<missing-prefix>"): " + (.issues | join(","))' "$realism_allowlist_invalid_json")"
+else
+  echo "[]" >"$realism_allowlist_invalid_json"
+fi
 
 while IFS= read -r hit; do
   [[ -z "$hit" ]] && continue
@@ -234,17 +280,31 @@ while IFS= read -r hit; do
 
   scope="core"
   owner_hint="unassigned"
-  while IFS=$'\t' read -r prefix scope_rule owner_rule; do
+  matched_prefix=""
+  rule_notes=""
+  rule_expiry=""
+  rule_remediation_issue=""
+  rule_metadata_valid="false"
+  while IFS=$'\t' read -r prefix scope_rule owner_rule expiry_rule remediation_rule notes_rule; do
     [[ -z "$prefix" ]] && continue
     if [[ "$path" == "$prefix"* ]]; then
       scope="$scope_rule"
       owner_hint="$owner_rule"
+      matched_prefix="$prefix"
+      rule_expiry="$expiry_rule"
+      rule_remediation_issue="$remediation_rule"
+      rule_notes="$notes_rule"
+      if [[ "$prefix" != */ && -n "$owner_rule" && -n "$expiry_rule" && -n "$remediation_rule" ]]; then
+        rule_metadata_valid="true"
+      else
+        rule_notes="${notes_rule:+$notes_rule; }missing required allowlist metadata"
+      fi
       break
     fi
   done <<<"$rule_rows"
 
   severity="violation"
-  if [[ "$scope" == "boundary" ]]; then
+  if [[ "$scope" == "boundary" && "$rule_metadata_valid" == "true" ]]; then
     severity="allowed"
   fi
 
@@ -255,7 +315,12 @@ while IFS= read -r hit; do
     --arg scope "$scope" \
     --arg severity "$severity" \
     --arg owner_hint "$owner_hint" \
-    '{file:$file,line:$line,term:$term,scope:$scope,severity:$severity,owner_hint:$owner_hint}' \
+    --arg matched_prefix "$matched_prefix" \
+    --arg rule_expiry "$rule_expiry" \
+    --arg rule_remediation_issue "$rule_remediation_issue" \
+    --argjson rule_metadata_valid "$([[ "$rule_metadata_valid" == "true" ]] && echo "true" || echo "false")" \
+    --arg rule_notes "$rule_notes" \
+    '{file:$file,line:$line,term:$term,scope:$scope,severity:$severity,owner_hint:$owner_hint,matched_prefix:$matched_prefix,rule_expiry:$rule_expiry,rule_remediation_issue:$rule_remediation_issue,rule_metadata_valid:$rule_metadata_valid,rule_notes:$rule_notes}' \
     >>"$tmp_double_events"
 done <<<"$(printf "%s\n" "$double_hits" | sed '/^$/d')"
 
@@ -357,6 +422,7 @@ if [[ -s "$tmp_scenarios" ]]; then
 else
   e2e_scenarios_json="[]"
 fi
+scenario_entry_count="$(jq 'length' <<<"$e2e_scenarios_json")"
 
 workflow_files_count="$(jq '[.[] | select(startswith("internal/e2e/workflows/"))] | length' <<<"$e2e_files_json")"
 workflow_covered_count="$(jq '[.[] | select(.file | startswith("internal/e2e/workflows/")) | .file] | unique | length' <<<"$e2e_scenarios_json")"
@@ -371,10 +437,61 @@ if [[ "$cmd_e2e_files_count" -gt 0 && "$cmd_e2e_files_count" -eq "$cmd_e2e_cover
   all_cmd_e2e_covered="true"
 fi
 
+traceability_matrix_present="false"
+traceability_artifact_present="false"
+traceability_bindings_present="false"
+traceability_markdown_present="false"
+traceability_status="blocked_missing_cli_matrix"
+traceability_summary_json="null"
+if [[ -f "$cli_matrix_json" ]]; then
+  traceability_matrix_present="true"
+  traceability_status="matrix_present_traceability_not_generated"
+fi
+if [[ -f "$traceability_bindings_path" ]]; then
+  traceability_bindings_present="true"
+fi
+if [[ -f "$traceability_md_path" ]]; then
+  traceability_markdown_present="true"
+fi
+if [[ -f "$traceability_json_path" ]]; then
+  traceability_artifact_present="true"
+  traceability_status="traceability_artifact_present"
+  traceability_summary_json="$(jq -c '{
+    generated_at,
+    totals,
+    bindings_mode
+  }' "$traceability_json_path" 2>/dev/null || printf 'null')"
+fi
+
+logging_baseline_json="$(
+  while IFS= read -r rel_file; do
+    [[ -z "$rel_file" ]] && continue
+    has_logging_signal="false"
+    if rg -n -q 'daemon\.log|logs|stderr|stdout|tail|ReadFile\(|Output:' "$rel_file"; then
+      has_logging_signal="true"
+    fi
+    jq -nc \
+      --arg file "$rel_file" \
+      --argjson has_logging_signal "$has_logging_signal" \
+      '{file:$file,has_logging_signal:$has_logging_signal}'
+  done < <(jq -r '.[]' <<<"$e2e_files_json") | jq -s '.'
+)"
+if [[ -z "$logging_baseline_json" || "$logging_baseline_json" == "null" ]]; then
+  logging_baseline_json="[]"
+fi
+logging_files_with_signals="$(jq '[.[] | select(.has_logging_signal)] | length' <<<"$logging_baseline_json")"
+logging_files_without_signals_json="$(jq '[.[] | select(.has_logging_signal | not) | .file]' <<<"$logging_baseline_json")"
+logging_status="partial_heuristic_baseline"
+if [[ "$e2e_count" -gt 0 && "$logging_files_with_signals" -eq "$e2e_count" ]]; then
+  logging_status="all_e2e_files_show_obvious_logging_signals"
+fi
+
 cat >"$e2e_json" <<EOF
 {
   "scenario_files": $e2e_files_json,
   "scenario_count": $e2e_count,
+  "scenario_file_count": $e2e_count,
+  "scenario_entry_count": $scenario_entry_count,
   "scenario_catalog": $e2e_scenarios_json,
   "completeness": {
     "internal_workflow_files": $workflow_files_count,
@@ -383,6 +500,26 @@ cat >"$e2e_json" <<EOF
     "cmd_e2e_files": $cmd_e2e_files_count,
     "cmd_e2e_files_with_scenarios": $cmd_e2e_covered_count,
     "all_cmd_e2e_files_covered": $all_cmd_e2e_covered
+  },
+  "traceability_matrix": {
+    "status": "$traceability_status",
+    "cli_matrix_path": "${cli_matrix_json#$repo_root/}",
+    "cli_matrix_present": $traceability_matrix_present,
+    "bindings_path": "${traceability_bindings_path#$repo_root/}",
+    "bindings_present": $traceability_bindings_present,
+    "traceability_json_path": "${traceability_json_path#$repo_root/}",
+    "traceability_json_present": $traceability_artifact_present,
+    "traceability_md_path": "${traceability_md_path#$repo_root/}",
+    "traceability_md_present": $traceability_markdown_present,
+    "summary": $traceability_summary_json
+  },
+  "logging_validation": {
+    "status": "$logging_status",
+    "method": "heuristic_static_scan",
+    "signal_patterns": ["daemon.log","logs","stderr","stdout","tail","ReadFile(","Output:"],
+    "files_with_obvious_logging_signals": $logging_files_with_signals,
+    "files_without_obvious_logging_signals": $logging_files_without_signals_json,
+    "file_results": $logging_baseline_json
   }
 }
 EOF
@@ -398,6 +535,8 @@ cat >"$summary_json" <<EOF
   "mock_fake_stub_matches": $mock_count,
   "mock_fake_stub_violations": $double_violation_count,
   "realism_allowlist_path": "${realism_allowlist_path#$repo_root/}",
+  "realism_allowlist_invalid_rules_path": "artifacts/test-audit/realism_allowlist_invalid_rules.json",
+  "realism_allowlist_invalid_rule_count": $(jq 'length' "$realism_allowlist_invalid_json"),
   "baseline_reference_path": "${baseline_ref_path#$repo_root/}",
   "baseline_snapshot_path": "artifacts/test-audit/baseline_snapshot.json",
   "mock_fake_stub_by_package_path": "artifacts/test-audit/mock_fake_stub_by_package.json",
@@ -407,9 +546,11 @@ cat >"$summary_json" <<EOF
   "critical_path_below_floor_count": $critical_path_below_floor_count,
   "critical_path_below_floor": $critical_path_below_floor,
   "e2e_inventory_path": "artifacts/test-audit/e2e_inventory.json",
+  "audit_pass": $( [[ "$audit_failed" == "true" ]] && echo "false" || echo "true" ),
   "go_test_pass": $( [[ "$suite_failed" == "true" ]] && echo "false" || echo "true" ),
   "first_failure_stage": $( if [[ -n "$first_failure_stage" ]]; then printf '"%s"' "$first_failure_stage"; else printf 'null'; fi ),
   "first_failure_package": $( if [[ -n "$first_failure_package" ]]; then printf '"%s"' "$first_failure_package"; else printf 'null'; fi ),
+  "first_failure_message": $( if [[ -n "$first_failure_message" ]]; then printf '%s' "$first_failure_message" | jq -Rs '.'; else printf 'null'; fi ),
   "go_test_failure_log_path": "artifacts/test-audit/go_test_failures.log",
   "snapshot_dir": "artifacts/test-audit/snapshots/$timestamp_utc"
 }
@@ -435,8 +576,18 @@ cat >"$coverage_md" <<EOF
 - Coverage threshold: ${threshold}%
 - Mock/fake/stub matches in test files: ${mock_count}
 - Mock/fake/stub violations in core scope: ${double_violation_count}
+- Invalid realism allowlist rules: $(jq 'length' "$realism_allowlist_invalid_json")
 - E2E scenario file count: ${e2e_count}
+- E2E scenario entry count: ${scenario_entry_count}
+- Traceability status: ${traceability_status}
+- CLI matrix present: ${traceability_matrix_present}
+- Logging baseline status: ${logging_status}
+- E2E files with obvious logging signals: ${logging_files_with_signals}/${e2e_count}
+- Audit pass: $([[ "$audit_failed" == "true" ]] && echo "false" || echo "true")
 - Go test pass: $([[ "$suite_failed" == "true" ]] && echo "false" || echo "true")
+- First failure stage: ${first_failure_stage:-none}
+- First failure package: ${first_failure_package:-none}
+- First failure condition: ${first_failure_message:-none}
 
 ## Artifact Paths
 
@@ -448,7 +599,10 @@ cat >"$coverage_md" <<EOF
 - Package coverage with risk tiers: \`artifacts/test-audit/coverage_by_package_with_risk.json\`
 - Mock/fake/stub by package: \`artifacts/test-audit/mock_fake_stub_by_package.json\`
 - Mock/fake/stub by file: \`artifacts/test-audit/mock_fake_stub_by_file.json\`
+- Invalid realism allowlist rules: \`artifacts/test-audit/realism_allowlist_invalid_rules.json\`
 - E2E inventory: \`artifacts/test-audit/e2e_inventory.json\`
+- CLI traceability JSON: \`${traceability_json_path#$repo_root/}\`
+- CLI traceability markdown: \`${traceability_md_path#$repo_root/}\`
 
 ## Packages Below Threshold (${threshold}%)
 
@@ -488,7 +642,7 @@ cat >>"$coverage_md" <<EOF
 
 EOF
 if [[ "$double_by_file_json" != "[]" ]]; then
-  jq -r '.[] | "- `\(.file):\(.line)` term=`\(.term)` scope=`\(.scope)` severity=`\(.severity)` owner=`\(.owner_hint)`"' <<<"$double_by_file_json" >>"$coverage_md"
+  jq -r '.[] | "- `\(.file):\(.line)` term=`\(.term)` scope=`\(.scope)` severity=`\(.severity)` owner=`\(.owner_hint)`" + (if (.matched_prefix // "") != "" then " rule=`\(.matched_prefix)`" else "" end)' <<<"$double_by_file_json" >>"$coverage_md"
 else
   echo "- None" >>"$coverage_md"
 fi
@@ -500,6 +654,7 @@ cp "$coverage_json" "$snapshot_dir/coverage_by_package.json"
 cp "$coverage_risk_json" "$snapshot_dir/coverage_by_package_with_risk.json"
 cp "$double_json" "$snapshot_dir/mock_fake_stub_by_package.json"
 cp "$double_file_json" "$snapshot_dir/mock_fake_stub_by_file.json"
+cp "$realism_allowlist_invalid_json" "$snapshot_dir/realism_allowlist_invalid_rules.json"
 cp "$e2e_json" "$snapshot_dir/e2e_inventory.json"
 cp "$baseline_snapshot_json" "$snapshot_dir/baseline_snapshot.json"
 cp "$go_test_failure_log" "$snapshot_dir/go_test_failures.log"
@@ -518,6 +673,11 @@ fi
 echo "wrote $summary_json"
 echo "wrote $baseline_snapshot_json"
 echo "wrote $coverage_md"
+
+if [[ "$audit_failed" == "true" ]]; then
+  echo "test audit: emitted partial artifacts with failing status (first failure stage=${first_failure_stage:-unknown}${first_failure_package:+ package=$first_failure_package})" >&2
+  exit 1
+fi
 echo "wrote $coverage_json"
 echo "wrote $coverage_risk_json"
 echo "wrote $double_json"

@@ -1,7 +1,7 @@
 # CLI Scenario Traceability Map
 
-Generated: 2026-03-04T20:03:45Z
-Source bead: bd-1r67.3.3.3
+Generated: 2026-03-14T12:31:15Z
+Source bead: bd-3fy.3.5.1
 
 ## Summary
 - Required scenarios: 227

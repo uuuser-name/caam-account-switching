@@ -118,9 +118,7 @@ func TestHarness_SetEnv(t *testing.T) {
 	h := NewHarness(t)
 	defer h.Close()
 
-	// Save original value
-	original := os.Getenv("TESTUTIL_TEST_VAR")
-	defer os.Setenv("TESTUTIL_TEST_VAR", original)
+	t.Setenv("TESTUTIL_TEST_VAR", "original")
 
 	// Set new value
 	h.SetEnv("TESTUTIL_TEST_VAR", "test_value")
@@ -135,7 +133,7 @@ func TestHarness_UnsetEnv(t *testing.T) {
 	defer h.Close()
 
 	// Set a value first
-	os.Setenv("TESTUTIL_UNSET_VAR", "to_be_removed")
+	t.Setenv("TESTUTIL_UNSET_VAR", "to_be_removed")
 
 	h.UnsetEnv("TESTUTIL_UNSET_VAR")
 
@@ -145,15 +143,19 @@ func TestHarness_UnsetEnv(t *testing.T) {
 }
 
 func TestHarness_Close_RestoresEnv(t *testing.T) {
+	const newKey = "TESTUTIL_NEW_VAR_ABSENT"
+	if _, exists := os.LookupEnv(newKey); exists {
+		t.Fatalf("%s unexpectedly set in test environment", newKey)
+	}
+
 	// Set up initial state
-	os.Setenv("TESTUTIL_RESTORE_VAR", "original")
-	os.Unsetenv("TESTUTIL_NEW_VAR")
+	t.Setenv("TESTUTIL_RESTORE_VAR", "original")
 
 	h := NewHarness(t)
 
 	// Modify environment
 	h.SetEnv("TESTUTIL_RESTORE_VAR", "modified")
-	h.SetEnv("TESTUTIL_NEW_VAR", "new_value")
+	h.SetEnv(newKey, "new_value")
 
 	// Close should restore
 	h.Close()
@@ -162,12 +164,9 @@ func TestHarness_Close_RestoresEnv(t *testing.T) {
 	if got := os.Getenv("TESTUTIL_RESTORE_VAR"); got != "original" {
 		t.Errorf("TESTUTIL_RESTORE_VAR = %q, want %q", got, "original")
 	}
-	if _, exists := os.LookupEnv("TESTUTIL_NEW_VAR"); exists {
-		t.Error("TESTUTIL_NEW_VAR should have been unset")
+	if _, exists := os.LookupEnv(newKey); exists {
+		t.Errorf("%s should have been unset", newKey)
 	}
-
-	// Clean up
-	os.Unsetenv("TESTUTIL_RESTORE_VAR")
 }
 
 func TestHarness_AddCleanup(t *testing.T) {

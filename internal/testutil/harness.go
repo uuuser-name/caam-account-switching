@@ -7,10 +7,12 @@
 package testutil
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"reflect"
 	"strings"
 	"testing"
@@ -75,6 +77,7 @@ type Logger struct {
 	verbose   bool
 	jsonMode  bool
 	canonical *CanonicalLogger
+	buffer    *bytes.Buffer
 }
 
 // NewLogger creates a new logger for the given test.
@@ -88,6 +91,7 @@ func NewLogger(t *testing.T) *Logger {
 		startTime: time.Now(),
 		verbose:   verbose,
 		jsonMode:  false,
+		buffer:    &bytes.Buffer{},
 	}
 }
 
@@ -128,8 +132,13 @@ func (l *Logger) log(level LogLevel, msg string, data map[string]interface{}) {
 		Data:      data,
 	}
 
+	jsonBytes, _ := json.Marshal(entry)
+	if l.buffer != nil {
+		l.buffer.Write(jsonBytes)
+		l.buffer.WriteString("\n")
+	}
+
 	if l.jsonMode {
-		jsonBytes, _ := json.Marshal(entry)
 		l.t.Log(string(jsonBytes))
 	} else if l.verbose || level >= WARN {
 		// Human-readable format
@@ -237,6 +246,14 @@ func (l *Logger) Error(msg string, data ...map[string]interface{}) {
 	l.log(ERROR, msg, d)
 }
 
+// DumpLogs returns all structured log entries as newline-delimited JSON.
+func (l *Logger) DumpLogs() string {
+	if l.buffer == nil {
+		return ""
+	}
+	return l.buffer.String()
+}
+
 // =============================================================================
 // TestHarness - Test environment management
 // =============================================================================
@@ -327,6 +344,21 @@ func (h *TestHarness) AddCleanup(fn func()) {
 
 // Close restores environment and runs cleanup functions.
 func (h *TestHarness) Close() {
+	runID := normalizeScenarioID(h.T.Name())
+	scenarioID := ScenarioIDFromTestName(h.T.Name())
+	canonicalLogs := ""
+	if h.Canon != nil {
+		runID = h.Canon.RunID()
+		scenarioID = h.Canon.ScenarioID()
+		canonicalLogs = h.Canon.DumpJSONL()
+	}
+	paths := h.artifactBundlePaths(runID)
+	summary := h.bundleSummary(runID, scenarioID)
+	transcript := h.Log.DumpLogs()
+	replayHints := h.buildReplayHints(runID, scenarioID)
+	replayHints.ArtifactPaths = paths
+	report := h.buildBundleReport(runID, scenarioID)
+
 	h.Log.SetStep("cleanup")
 
 	// Restore environment variables
@@ -349,7 +381,127 @@ func (h *TestHarness) Close() {
 		}
 	}
 
+	if err := h.exportArtifactBundle(paths, summary, canonicalLogs, transcript, replayHints, report); err != nil {
+		h.Log.Warn("Failed to export artifact bundle", map[string]interface{}{"error": err.Error()})
+	}
+
 	h.Log.Info("Test harness closed")
+}
+
+func (h *TestHarness) artifactBundlePaths(runID string) ArtifactBundlePaths {
+	artifactRoot := filepath.Join(h.TempDir, "artifacts", "e2e")
+	if override, ok := lookupEnv("CAAM_E2E_ARTIFACT_ROOT"); ok && strings.TrimSpace(override) != "" {
+		artifactRoot = strings.TrimSpace(override)
+	} else if repoRoot, err := findModuleRoot(); err == nil {
+		artifactRoot = filepath.Join(repoRoot, "artifacts", "e2e")
+	}
+
+	bundleDir := filepath.Join(artifactRoot, runID)
+	return ArtifactBundlePaths{
+		BundleDir:       bundleDir,
+		CanonicalPath:   filepath.Join(bundleDir, "canonical.jsonl"),
+		TranscriptPath:  filepath.Join(bundleDir, "raw_transcript.jsonl"),
+		SummaryPath:     filepath.Join(bundleDir, "summary.txt"),
+		ReportPath:      filepath.Join(bundleDir, "report.json"),
+		ReplayHintsPath: filepath.Join(bundleDir, "replay_hints.json"),
+	}
+}
+
+func (h *TestHarness) buildReplayHints(runID, scenarioID string) *ReplayHints {
+	quotedTestName := regexp.QuoteMeta(h.T.Name())
+	command := fmt.Sprintf("go test . -run '^%s$' -count=1", quotedTestName)
+
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		workingDirectory = ""
+	}
+
+	return &ReplayHints{
+		RunID:            runID,
+		ScenarioID:       scenarioID,
+		TestName:         h.T.Name(),
+		WorkingDirectory: workingDirectory,
+		Commands: []string{
+			command,
+			command + " -v",
+		},
+		Environment:   h.relevantEnvVars(),
+		ArtifactPaths: h.artifactBundlePaths(runID),
+	}
+}
+
+func (h *TestHarness) buildBundleReport(runID, scenarioID string) map[string]interface{} {
+	return map[string]interface{}{
+		"test_name":    h.T.Name(),
+		"run_id":       runID,
+		"scenario_id":  scenarioID,
+		"temp_dir":     h.TempDir,
+		"cleanup_count": len(h.cleanups),
+		"passed":       !h.T.Failed(),
+	}
+}
+
+func (h *TestHarness) bundleSummary(runID, scenarioID string) string {
+	var sb strings.Builder
+	sb.WriteString("TEST SUMMARY\n")
+	sb.WriteString("============\n")
+	sb.WriteString(fmt.Sprintf("test_name: %s\n", h.T.Name()))
+	sb.WriteString(fmt.Sprintf("run_id: %s\n", runID))
+	sb.WriteString(fmt.Sprintf("scenario_id: %s\n", scenarioID))
+	sb.WriteString(fmt.Sprintf("temp_dir: %s\n", h.TempDir))
+	return sb.String()
+}
+
+func (h *TestHarness) relevantEnvVars() map[string]string {
+	relevant := []string{
+		"HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME",
+		"CODEX_HOME", "CLAUDE_HOME", "GEMINI_HOME",
+		"CAAM_PROFILES_DIR", "CAAM_DEBUG",
+		"CI", "GITHUB_ACTIONS", "GITLAB_CI",
+	}
+
+	result := make(map[string]string)
+	for _, key := range relevant {
+		if val, ok := os.LookupEnv(key); ok {
+			result[key] = val
+		}
+	}
+	return result
+}
+
+func (h *TestHarness) exportArtifactBundle(paths ArtifactBundlePaths, summary, canonicalLogs, transcript string, replayHints *ReplayHints, report map[string]interface{}) error {
+	if err := os.MkdirAll(paths.BundleDir, 0755); err != nil {
+		return fmt.Errorf("create artifact bundle dir: %w", err)
+	}
+
+	reportBytes, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal report: %w", err)
+	}
+
+	replayBytes, err := json.MarshalIndent(replayHints, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal replay hints: %w", err)
+	}
+
+	files := []struct {
+		path string
+		data []byte
+	}{
+		{path: paths.CanonicalPath, data: []byte(canonicalLogs)},
+		{path: paths.TranscriptPath, data: []byte(transcript)},
+		{path: paths.SummaryPath, data: []byte(summary)},
+		{path: paths.ReportPath, data: reportBytes},
+		{path: paths.ReplayHintsPath, data: replayBytes},
+	}
+
+	for _, file := range files {
+		if err := os.WriteFile(file.path, file.data, 0644); err != nil {
+			return fmt.Errorf("write %s: %w", filepath.Base(file.path), err)
+		}
+	}
+
+	return nil
 }
 
 // SubDir creates a subdirectory in the temp directory.

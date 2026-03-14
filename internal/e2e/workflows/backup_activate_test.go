@@ -330,6 +330,10 @@ func TestE2E_CompleteBackupActivateSwitchWorkflow(t *testing.T) {
 	h.EndStep("final_verification")
 
 	// Log summary
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
+
 	t.Log("\n" + h.Summary())
 }
 
@@ -415,6 +419,10 @@ func TestE2E_RapidProfileSwitching(t *testing.T) {
 	}
 
 	h.EndStep("rapid_switching")
+
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
 
 	t.Log("\n" + h.Summary())
 }
@@ -563,6 +571,10 @@ func TestE2E_CrossProviderSwitching(t *testing.T) {
 	h.LogInfo("All providers verified on work profile")
 
 	h.EndStep("cross_provider_switching")
+
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
 
 	t.Log("\n" + h.Summary())
 }

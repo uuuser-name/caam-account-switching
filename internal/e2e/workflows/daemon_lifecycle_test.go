@@ -41,12 +41,13 @@ daemon:
 	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0600))
 
 	// Set up environment for the subprocess
-	env := os.Environ()
-	env = append(env, "GO_WANT_DAEMON_HELPER=1")
-	env = append(env, fmt.Sprintf("XDG_DATA_HOME=%s", rootDir))
-	env = append(env, fmt.Sprintf("XDG_CONFIG_HOME=%s", rootDir))
-	// Critical: Set CAAM_HOME so LoadSPMConfig finds the isolated config.yaml
-	env = append(env, fmt.Sprintf("CAAM_HOME=%s", configDir))
+	env := withEnvOverrides(os.Environ(), map[string]string{
+		"GO_WANT_DAEMON_HELPER": "1",
+		"HOME":                  rootDir,
+		"XDG_DATA_HOME":         rootDir,
+		"XDG_CONFIG_HOME":       rootDir,
+		"CAAM_HOME":             configDir,
+	})
 
 	h.EndStep("Setup")
 
@@ -71,6 +72,7 @@ daemon:
 	// Start without waiting
 	err = cmd.Start()
 	require.NoError(t, err)
+	registerProcessCleanup(t, cmd, 5*time.Second)
 
 	daemonPID := cmd.Process.Pid
 	h.LogInfo("Daemon process started", "pid", daemonPID)
@@ -176,11 +178,13 @@ daemon:
 `, pidFile)
 	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0600))
 
-	env := os.Environ()
-	env = append(env, "GO_WANT_DAEMON_HELPER=1")
-	env = append(env, fmt.Sprintf("XDG_DATA_HOME=%s", rootDir))
-	env = append(env, fmt.Sprintf("XDG_CONFIG_HOME=%s", rootDir))
-	env = append(env, fmt.Sprintf("CAAM_HOME=%s", configDir))
+	env := withEnvOverrides(os.Environ(), map[string]string{
+		"GO_WANT_DAEMON_HELPER": "1",
+		"HOME":                  rootDir,
+		"XDG_DATA_HOME":         rootDir,
+		"XDG_CONFIG_HOME":       rootDir,
+		"CAAM_HOME":             configDir,
+	})
 
 	exe, err := os.Executable()
 	require.NoError(t, err)
@@ -196,6 +200,7 @@ daemon:
 		cmd.Stderr = logFile
 
 		require.NoError(t, cmd.Start())
+		registerProcessCleanup(t, cmd, 5*time.Second)
 		return cmd, logFile, logPath
 	}
 

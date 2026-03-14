@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -769,5 +770,124 @@ func TestExtendedHarness_ValidateCanonicalLogsReadsOnDiskArtifact(t *testing.T) 
 
 	if err := h.ValidateCanonicalLogs(); err == nil {
 		t.Fatal("expected validation to fail for corrupted on-disk canonical artifact")
+	}
+}
+
+func TestExtendedHarness_ValidateCanonicalLogsRejectsDenyPatternInOutput(t *testing.T) {
+	h := NewExtendedHarness(t)
+	defer h.Close()
+
+	event := CanonicalLogEvent{
+		RunID:         "run-1",
+		ScenarioID:    "scenario-1",
+		StepID:        "step-1",
+		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+		Actor:         ActorCI,
+		Component:     ComponentTest,
+		InputRedacted: map[string]interface{}{},
+		Output: map[string]interface{}{
+			"authorization": "Bearer secret-token",
+		},
+		Decision:   DecisionPass,
+		DurationMs: 1,
+		Error: ErrorEnvelope{
+			Details: map[string]interface{}{},
+		},
+	}
+
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("Marshal(event): %v", err)
+	}
+	_, _ = h.canonicalBuffer.Write(raw)
+	_, _ = h.canonicalBuffer.WriteString("\n")
+
+	if err := h.ValidateCanonicalLogs(); err == nil {
+		t.Fatal("expected validation to fail for deny-pattern match in canonical payload")
+	}
+}
+
+func TestExtendedHarness_ValidateCanonicalLogsAllowsDiagnosticTokenPhrase(t *testing.T) {
+	h := NewExtendedHarness(t)
+	defer h.Close()
+
+	event := CanonicalLogEvent{
+		RunID:      "run-1",
+		ScenarioID: "scenario-1",
+		StepID:     "step-1",
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+		Actor:      ActorCI,
+		Component:  ComponentTest,
+		InputRedacted: map[string]interface{}{},
+		Output: map[string]interface{}{
+			"message": "refresh-token reuse triggered profile switch",
+		},
+		Decision:   DecisionContinue,
+		DurationMs: 1,
+		Error: ErrorEnvelope{
+			Details: map[string]interface{}{},
+		},
+	}
+
+	raw, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("Marshal(event): %v", err)
+	}
+	_, _ = h.canonicalBuffer.Write(raw)
+	_, _ = h.canonicalBuffer.WriteString("\n")
+
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("expected diagnostic token phrasing to pass validation, got %v", err)
+	}
+}
+
+func TestExtendedHarness_ValidateCanonicalLogsRejectsRunIntegrityDrift(t *testing.T) {
+	h := NewExtendedHarness(t)
+	defer h.Close()
+
+	events := []CanonicalLogEvent{
+		{
+			RunID:         "run-1",
+			ScenarioID:    "scenario-1",
+			StepID:        "step-start",
+			Timestamp:     time.Now().UTC().Format(time.RFC3339),
+			Actor:         ActorCI,
+			Component:     ComponentTest,
+			InputRedacted: map[string]interface{}{},
+			Output:        map[string]interface{}{},
+			Decision:      DecisionContinue,
+			DurationMs:    0,
+			Error: ErrorEnvelope{
+				Details: map[string]interface{}{},
+			},
+		},
+		{
+			RunID:         "run-2",
+			ScenarioID:    "scenario-1",
+			StepID:        "step-end",
+			Timestamp:     time.Now().UTC().Add(time.Second).Format(time.RFC3339),
+			Actor:         ActorCI,
+			Component:     ComponentTest,
+			InputRedacted: map[string]interface{}{},
+			Output:        map[string]interface{}{},
+			Decision:      DecisionPass,
+			DurationMs:    1,
+			Error: ErrorEnvelope{
+				Details: map[string]interface{}{},
+			},
+		},
+	}
+
+	for _, event := range events {
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("Marshal(event): %v", err)
+		}
+		_, _ = h.canonicalBuffer.Write(raw)
+		_, _ = h.canonicalBuffer.WriteString("\n")
+	}
+
+	if err := h.ValidateCanonicalLogs(); err == nil {
+		t.Fatal("expected validation to fail for run_id drift")
 	}
 }

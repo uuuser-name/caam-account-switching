@@ -85,7 +85,7 @@ jq -n --slurpfile m "$MATRIX_JSON" --slurpfile i "$INVENTORY_JSON" --slurpfile b
   ] as $rows
   | {
       generated_at: (now | todateiso8601),
-      source_bead: "bd-1r67.3.3.3",
+      source_bead: "bd-3fy.3.5.1",
       bindings_file: $BINDINGS_JSON,
       bindings_mode: $BINDINGS_MODE,
       totals: {
@@ -110,7 +110,7 @@ heuristic="$(jq -r '.totals.heuristic_matches // 0' "$OUT_JSON")"
 # CLI Scenario Traceability Map
 
 Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-Source bead: bd-1r67.3.3.3
+Source bead: bd-3fy.3.5.1
 
 ## Summary
 - Required scenarios: ${total}

@@ -3,7 +3,6 @@ package workflows
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -443,12 +442,12 @@ func TestE2E_BundleDryRun(t *testing.T) {
 // =============================================================================
 
 func buildCLIEnv(rootDir string) []string {
-	env := os.Environ()
-	env = append(env, "GO_WANT_CLI_HELPER=1")
-	env = append(env, fmt.Sprintf("XDG_DATA_HOME=%s", rootDir))
-	env = append(env, fmt.Sprintf("XDG_CONFIG_HOME=%s", rootDir))
-	env = append(env, fmt.Sprintf("HOME=%s", rootDir))
-	return env
+	return withEnvOverrides(os.Environ(), map[string]string{
+		"GO_WANT_CLI_HELPER": "1",
+		"XDG_DATA_HOME":      rootDir,
+		"XDG_CONFIG_HOME":    rootDir,
+		"HOME":               rootDir,
+	})
 }
 
 func extractBundlePath(outputDir string) string {

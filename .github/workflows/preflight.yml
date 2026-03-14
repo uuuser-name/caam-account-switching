@@ -86,6 +86,20 @@ jobs:
         echo "::endgroup::"
         exit $quality_exit
 
+    - name: Build quality trend diff
+      id: quality_trend
+      run: |
+        echo "::group::Building quality trend diff"
+        ./scripts/build_quality_trend_diff.sh
+        echo "::endgroup::"
+
+    - name: Enforce release readiness attestation
+      id: release_attestation
+      run: |
+        echo "::group::Running release readiness attestation"
+        ./scripts/release_readiness_attestation.sh
+        echo "::endgroup::"
+
     - name: Preflight Summary
       if: always()
       run: |
@@ -114,12 +128,24 @@ jobs:
           jq -r '"- **Coverage Ratio**: \(.totals.coverage_pct)%"' artifacts/test-audit/e2e_quality_gate.json >> $GITHUB_STEP_SUMMARY
           jq -r '"- **Gate Pass**: \(.pass)"' artifacts/test-audit/e2e_quality_gate.json >> $GITHUB_STEP_SUMMARY
         fi
+
+        if [[ -f artifacts/test-audit/release_attestation.json ]]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Release Attestation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Deterministic Pass**: \(.pass)"' artifacts/test-audit/release_attestation.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Full Closure Pass**: \(.full_closure_pass)"' artifacts/test-audit/release_attestation.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Deterministic Truth Label**: \(.truth_labels.deterministic)"' artifacts/test-audit/release_attestation.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Installed Binary Truth Label**: \(.truth_labels.installed_binary)"' artifacts/test-audit/release_attestation.json >> $GITHUB_STEP_SUMMARY
+          jq -r '"- **Bounded Live Truth Label**: \(.truth_labels.bounded_live)"' artifacts/test-audit/release_attestation.json >> $GITHUB_STEP_SUMMARY
+        fi
         
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Failure Criteria" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- Core-scope mock/fake/stub violations detected (strict realism lint fails)" >> $GITHUB_STEP_SUMMARY
         echo "- Required scripts or configurations missing" >> $GITHUB_STEP_SUMMARY
+        echo "- Missing or invalid log evidence prevents the attestation from being emitted or passing" >> $GITHUB_STEP_SUMMARY
 
     - name: Upload preflight artifacts
       if: always()

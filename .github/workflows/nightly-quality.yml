@@ -32,6 +32,9 @@ jobs:
     - name: Build quality trend diff
       run: ./scripts/build_quality_trend_diff.sh
 
+    - name: Enforce release readiness attestation
+      run: ./scripts/release_readiness_attestation.sh
+
     - name: Auto-create regression remediation bead
       if: always()
       run: |

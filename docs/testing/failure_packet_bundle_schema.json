@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:caam:failure-packet-bundle-schema:1.0.0",
+  "title": "CAAM Failure Packet Bundle Manifest",
+  "schema_version": "1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "packet_id",
+    "generated_utc",
+    "source_dir",
+    "first_failure",
+    "schema_validation",
+    "totals",
+    "schema_artifacts",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Schema version for this manifest."
+    },
+    "packet_id": {
+      "type": "string",
+      "description": "Stable packet directory identifier."
+    },
+    "generated_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the packet bundle was generated."
+    },
+    "source_dir": {
+      "type": "string",
+      "description": "Source directory scanned to build the failure packet."
+    },
+    "first_failure": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Actionable first failing condition with owner and replay context.",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "scenario_id",
+        "step_id",
+        "timestamp",
+        "component",
+        "decision",
+        "error",
+        "likely_owner",
+        "artifact_paths",
+        "replay_context"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string"
+        },
+        "scenario_id": {
+          "type": "string"
+        },
+        "step_id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "component": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string"
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "code",
+            "message",
+            "details"
+          ],
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object"
+            }
+          }
+        },
+        "likely_owner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lane",
+            "source"
+          ],
+          "properties": {
+            "lane": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "test_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "package": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "working_directory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "artifact_paths": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "packet_summary",
+            "packet_merged_timeline",
+            "packet_raw_log",
+            "source_log",
+            "source_bundle_dir",
+            "source_replay_hints_path",
+            "source_report_path",
+            "bundle_canonical_path",
+            "bundle_transcript_path",
+            "bundle_summary_path",
+            "bundle_report_path",
+            "bundle_replay_hints_path"
+          ],
+          "properties": {
+            "packet_summary": {
+              "type": "string"
+            },
+            "packet_merged_timeline": {
+              "type": "string"
+            },
+            "packet_raw_log": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_log": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_bundle_dir": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_replay_hints_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source_report_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bundle_canonical_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bundle_transcript_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bundle_summary_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bundle_report_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bundle_replay_hints_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "replay_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "command",
+            "commands"
+          ],
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string"
+            },
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            },
+            "test_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "working_directory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "schema_validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "log_schema",
+        "log_validator"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "log_schema": {
+          "type": "string"
+        },
+        "log_validator": {
+          "type": "string"
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "log_files",
+        "events",
+        "errors",
+        "runs",
+        "scenarios"
+      ],
+      "properties": {
+        "log_files": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "events": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scenarios": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "schema_artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_schema",
+        "log_schema",
+        "log_schema_policy"
+      ],
+      "properties": {
+        "bundle_schema": {
+          "type": "string"
+        },
+        "log_schema": {
+          "type": "string"
+        },
+        "log_schema_policy": {
+          "type": "string"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "events",
+        "merged_timeline",
+        "top_errors",
+        "failure_index",
+        "failure_narratives",
+        "first_failure",
+        "raw_dir",
+        "raw_logs",
+        "archive_name"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "events": {
+          "type": "string"
+        },
+        "merged_timeline": {
+          "type": "string"
+        },
+        "top_errors": {
+          "type": "string"
+        },
+        "failure_index": {
+          "type": "string"
+        },
+        "failure_narratives": {
+          "type": "string"
+        },
+        "first_failure": {
+          "type": "string"
+        },
+        "raw_dir": {
+          "type": "string"
+        },
+        "raw_logs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "archive_name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

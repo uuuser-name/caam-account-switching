@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -364,6 +365,7 @@ func (h *ExtendedHarness) ValidateCanonicalLogs() error {
 	}
 
 	lines := strings.Split(strings.TrimSpace(source), "\n")
+	events := make([]CanonicalLogEvent, 0, len(lines))
 	for i, line := range lines {
 		if line == "" {
 			continue
@@ -406,6 +408,10 @@ func (h *ExtendedHarness) ValidateCanonicalLogs() error {
 		if !event.Error.Present && (event.Error.Code != "" || event.Error.Message != "") {
 			return fmt.Errorf("line %d: error.code and error.message must be empty when error.present=false", i+1)
 		}
+		events = append(events, event)
+	}
+	if err := validateCanonicalEventSet(events); err != nil {
+		return err
 	}
 	return nil
 }
@@ -662,9 +668,15 @@ func (h *ExtendedHarness) Close() {
 		h.mu.Unlock()
 	}
 
+	summary := h.Summary()
+	canonicalLogs := h.DumpCanonicalLogs()
+	transcript := h.DumpLogs()
+	report := h.GetReport()
+	replayHints := h.buildReplayHints()
+
 	// Log summary if verbose
 	if testing.Verbose() {
-		h.T.Log("\n" + h.Summary())
+		h.T.Log("\n" + summary)
 	}
 
 	// Close canonical output file if open.
@@ -673,6 +685,10 @@ func (h *ExtendedHarness) Close() {
 		h.T.Logf("close canonical output file: %v", err)
 	}
 	h.mu.Unlock()
+
+	if err := h.exportArtifactBundle(summary, canonicalLogs, transcript, report, replayHints); err != nil {
+		h.T.Logf("export artifact bundle: %v", err)
+	}
 
 	// Call parent close
 	h.TestHarness.Close()
@@ -742,6 +758,27 @@ type FailureContext struct {
 	OpenSteps    []string          `json:"open_steps,omitempty"`
 	EnvVars      map[string]string `json:"env_vars,omitempty"`
 	FileStates   map[string]string `json:"file_states,omitempty"`
+}
+
+// ArtifactBundlePaths enumerates the standard artifact bundle locations for a run.
+type ArtifactBundlePaths struct {
+	BundleDir       string `json:"bundle_dir"`
+	CanonicalPath   string `json:"canonical_path"`
+	TranscriptPath  string `json:"transcript_path"`
+	SummaryPath     string `json:"summary_path"`
+	ReportPath      string `json:"report_path"`
+	ReplayHintsPath string `json:"replay_hints_path"`
+}
+
+// ReplayHints captures the minimum context needed to replay a test run.
+type ReplayHints struct {
+	RunID            string              `json:"run_id"`
+	ScenarioID       string              `json:"scenario_id"`
+	TestName         string              `json:"test_name"`
+	WorkingDirectory string              `json:"working_directory,omitempty"`
+	Commands         []string            `json:"commands"`
+	Environment      map[string]string   `json:"environment,omitempty"`
+	ArtifactPaths    ArtifactBundlePaths `json:"artifact_paths"`
 }
 
 // ExportJSON exports the complete test report to a JSON file.
@@ -855,6 +892,102 @@ func (h *ExtendedHarness) GetReport() *ExportReport {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.buildReportUnsafe()
+}
+
+func (h *ExtendedHarness) artifactBundlePaths() ArtifactBundlePaths {
+	artifactRoot := filepath.Join(h.TempDir, "artifacts", "e2e")
+	if override, ok := lookupEnv("CAAM_E2E_ARTIFACT_ROOT"); ok && strings.TrimSpace(override) != "" {
+		artifactRoot = strings.TrimSpace(override)
+	} else if repoRoot, err := findModuleRoot(); err == nil {
+		artifactRoot = filepath.Join(repoRoot, "artifacts", "e2e")
+	}
+
+	bundleDir := filepath.Join(artifactRoot, h.runID)
+	return ArtifactBundlePaths{
+		BundleDir:       bundleDir,
+		CanonicalPath:   filepath.Join(bundleDir, "canonical.jsonl"),
+		TranscriptPath:  filepath.Join(bundleDir, "raw_transcript.jsonl"),
+		SummaryPath:     filepath.Join(bundleDir, "summary.txt"),
+		ReportPath:      filepath.Join(bundleDir, "report.json"),
+		ReplayHintsPath: filepath.Join(bundleDir, "replay_hints.json"),
+	}
+}
+
+func (h *ExtendedHarness) buildReplayHints() *ReplayHints {
+	quotedTestName := regexp.QuoteMeta(h.T.Name())
+	command := fmt.Sprintf("go test . -run '^%s$' -count=1", quotedTestName)
+
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		workingDirectory = ""
+	}
+
+	return &ReplayHints{
+		RunID:            h.runID,
+		ScenarioID:       h.scenarioID,
+		TestName:         h.T.Name(),
+		WorkingDirectory: workingDirectory,
+		Commands: []string{
+			command,
+			command + " -v",
+		},
+		Environment:   h.relevantEnvVars(),
+		ArtifactPaths: h.artifactBundlePaths(),
+	}
+}
+
+func (h *ExtendedHarness) exportArtifactBundle(summary, canonicalLogs, transcript string, report *ExportReport, replayHints *ReplayHints) error {
+	paths := h.artifactBundlePaths()
+	if err := os.MkdirAll(paths.BundleDir, 0755); err != nil {
+		return fmt.Errorf("create artifact bundle dir: %w", err)
+	}
+
+	reportBytes, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal report: %w", err)
+	}
+
+	replayBytes, err := json.MarshalIndent(replayHints, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal replay hints: %w", err)
+	}
+
+	files := []struct {
+		path string
+		data []byte
+	}{
+		{path: paths.CanonicalPath, data: []byte(canonicalLogs)},
+		{path: paths.TranscriptPath, data: []byte(transcript)},
+		{path: paths.SummaryPath, data: []byte(summary)},
+		{path: paths.ReportPath, data: reportBytes},
+		{path: paths.ReplayHintsPath, data: replayBytes},
+	}
+
+	for _, file := range files {
+		if err := writeFileAtomic(file.path, file.data, 0644); err != nil {
+			return fmt.Errorf("write %s: %w", filepath.Base(file.path), err)
+		}
+	}
+
+	return nil
+}
+
+func findModuleRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("module root not found from %s", dir)
+		}
+		dir = parent
+	}
 }
 
 // =============================================================================

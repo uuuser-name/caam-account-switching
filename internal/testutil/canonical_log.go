@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -319,13 +320,7 @@ func (l *CanonicalLogger) DumpJSONL() string {
 
 // ValidateAgainstSchema validates all events against the canonical schema.
 func (l *CanonicalLogger) ValidateAgainstSchema() error {
-	events := l.Events()
-	for i, event := range events {
-		if err := validateCanonicalEvent(event); err != nil {
-			return fmt.Errorf("event %d: %w", i, err)
-		}
-	}
-	return nil
+	return validateCanonicalEventSet(l.Events())
 }
 
 // =============================================================================
@@ -450,10 +445,119 @@ func validateCanonicalEvent(event CanonicalLogEvent) error {
 		}
 	}
 
-	// Check input_redacted doesn't contain raw tokens
+	// Check canonical payloads don't contain raw tokens or deny-pattern matches
 	inputJSON, _ := json.Marshal(event.InputRedacted)
-	if containsRawToken(string(inputJSON)) {
-		return fmt.Errorf("input_redacted contains potential raw token")
+	outputJSON, _ := json.Marshal(event.Output)
+	errorJSON, _ := json.Marshal(event.Error.Details)
+	combined := string(inputJSON) + "\n" + string(outputJSON) + "\n" + string(errorJSON)
+	if containsRawToken(combined) {
+		return fmt.Errorf("canonical payload contains potential raw token")
+	}
+	if matchesCanonicalDenyPattern(combined) {
+		return fmt.Errorf("canonical payload contains deny-pattern match")
+	}
+
+	return nil
+}
+
+var canonicalRedactionDenyPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)api[_-]?key`),
+	regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9._-]+`),
+	regexp.MustCompile(`(?i)sk-[A-Za-z0-9]+`),
+	regexp.MustCompile(`(?i)password`),
+	regexp.MustCompile(`(?i)secret`),
+	regexp.MustCompile(`(?i)authorization`),
+}
+
+var canonicalRawTokenPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\b(?:access|refresh|session)?[_-]?token\b["']?\s*[:=]\s*["']?[A-Za-z0-9._-]{16,}`),
+	regexp.MustCompile(`\bpk-[A-Za-z0-9]{12,}\b`),
+	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{12,}\b`),
+	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9._-]{8,}`),
+}
+
+func matchesCanonicalDenyPattern(blob string) bool {
+	for _, re := range canonicalRedactionDenyPatterns {
+		if re.MatchString(blob) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateCanonicalEventSet(events []CanonicalLogEvent) error {
+	if len(events) == 0 {
+		return fmt.Errorf("no canonical log events")
+	}
+	for i, event := range events {
+		if err := validateCanonicalEvent(event); err != nil {
+			return fmt.Errorf("event %d: %w", i+1, err)
+		}
+	}
+	if err := validateCanonicalRunIntegrity(events); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCanonicalRunIntegrity(events []CanonicalLogEvent) error {
+	if len(events) == 0 {
+		return fmt.Errorf("no canonical log events")
+	}
+
+	runID := events[0].RunID
+	scenarioID := events[0].ScenarioID
+	timestamps := make([]time.Time, len(events))
+
+	type stepStamp struct {
+		base string
+		ts   time.Time
+	}
+	var starts []stepStamp
+	var ends []stepStamp
+
+	for i, event := range events {
+		if event.RunID != runID {
+			return fmt.Errorf("event %d: run_id drift detected (%q != %q)", i+1, event.RunID, runID)
+		}
+		if event.ScenarioID != scenarioID {
+			return fmt.Errorf("event %d: scenario_id drift detected (%q != %q)", i+1, event.ScenarioID, scenarioID)
+		}
+
+		ts, err := time.Parse(time.RFC3339, event.Timestamp)
+		if err != nil {
+			return fmt.Errorf("event %d: invalid timestamp format: %w", i+1, err)
+		}
+		timestamps[i] = ts
+		if i > 0 && ts.Before(timestamps[i-1]) {
+			return fmt.Errorf("event %d: timestamp monotonicity violated", i+1)
+		}
+
+		switch {
+		case strings.HasSuffix(event.StepID, "-start"):
+			starts = append(starts, stepStamp{
+				base: strings.TrimSuffix(event.StepID, "-start"),
+				ts:   ts,
+			})
+		case strings.HasSuffix(event.StepID, "-end"):
+			ends = append(ends, stepStamp{
+				base: strings.TrimSuffix(event.StepID, "-end"),
+				ts:   ts,
+			})
+		}
+	}
+
+	for _, start := range starts {
+		matched := false
+		for _, end := range ends {
+			if end.base == start.base && !end.ts.Before(start.ts) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("step %q missing matching end event", start.base)
+		}
 	}
 
 	return nil
@@ -461,20 +565,12 @@ func validateCanonicalEvent(event CanonicalLogEvent) error {
 
 // containsRawToken checks if a string contains raw token patterns.
 func containsRawToken(s string) bool {
-	// Common token patterns that should be redacted
-	patterns := []string{
-		"token-", "-token",
-		"sk-", "pk-", // OpenAI-style keys
-		"ghp_", "gho_", // GitHub tokens
-		"eyJ", // JWT prefix
+	if strings.Contains(s, "[REDACTED]") {
+		return false
 	}
-
-	for _, p := range patterns {
-		if strings.Contains(s, p) {
-			// Check if it's not already redacted
-			if !strings.Contains(s, "[REDACTED]") {
-				return true
-			}
+	for _, re := range canonicalRawTokenPatterns {
+		if re.MatchString(s) {
+			return true
 		}
 	}
 	return false

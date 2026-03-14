@@ -188,6 +188,10 @@ func TestE2E_CooldownEnforcesDuringAutoRotation(t *testing.T) {
 
 	h.EndStep("clear_cooldown")
 
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
+
 	t.Log("\n" + h.Summary())
 }
 
@@ -333,6 +337,10 @@ func TestE2E_RotationAlgorithms(t *testing.T) {
 		"delta_count", randomCounts["delta"])
 
 	h.EndStep("random_algorithm")
+
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
 
 	t.Log("\n" + h.Summary())
 }
@@ -492,6 +500,10 @@ func TestE2E_CooldownBypass(t *testing.T) {
 
 	h.EndStep("record_activation")
 
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
+
 	t.Log("\n" + h.Summary())
 }
 
@@ -577,6 +589,10 @@ func TestE2E_CooldownListAndClearAll(t *testing.T) {
 	}
 
 	h.EndStep("clear_all")
+
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
 
 	t.Log("\n" + h.Summary())
 }
@@ -680,6 +696,10 @@ func TestE2E_RotationWithRecencyPenalty(t *testing.T) {
 	}
 
 	h.EndStep("recency_selection")
+
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
 
 	t.Log("\n" + h.Summary())
 }

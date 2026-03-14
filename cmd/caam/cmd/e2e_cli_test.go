@@ -37,9 +37,11 @@ func setupCLITest(t *testing.T, h *testutil.TestHarness) {
 
 // executeCommand runs a CLI command and captures output
 func executeCommand(args ...string) (string, error) {
+	resetCommandTreeForExecute(rootCmd)
+	defer resetCommandTreeForExecute(rootCmd)
+
 	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
+	setCommandTreeWriters(rootCmd, buf, buf)
 	rootCmd.SetArgs(args)
 	err := rootCmd.Execute()
 	return buf.String(), err
@@ -199,11 +201,11 @@ func TestE2E_BackupCommand(t *testing.T) {
 
 // TestE2E_RestoreCommand tests the restore (activate) workflow
 func TestE2E_RestoreCommand(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
-	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	h.StartStep("setup", "Prepare restore workflow environment")
+	setupCLITest(t, h.TestHarness)
 
 	// Create home directory structure
 	homeDir := h.SubDir("home")
@@ -232,8 +234,9 @@ func TestE2E_RestoreCommand(t *testing.T) {
 	if err := vault.Backup(fileSet, "initial"); err != nil {
 		t.Fatalf("Initial backup failed: %v", err)
 	}
+	h.EndStep("setup")
 
-	h.Log.SetStep("create_second_profile")
+	h.StartStep("create_second_profile", "Create second restore target")
 
 	// Create second profile with different token
 	secondContent := `{"access_token": "second-token", "token_type": "Bearer"}`
@@ -244,8 +247,9 @@ func TestE2E_RestoreCommand(t *testing.T) {
 	if err := vault.Backup(fileSet, "second"); err != nil {
 		t.Fatalf("Second backup failed: %v", err)
 	}
+	h.EndStep("create_second_profile")
 
-	h.Log.SetStep("test_restore")
+	h.StartStep("test_restore", "Restore initial profile")
 
 	// Now restore initial profile
 	if err := vault.Restore(fileSet, "initial"); err != nil {
@@ -256,8 +260,9 @@ func TestE2E_RestoreCommand(t *testing.T) {
 	if !h.FileContains(initialAuthPath, "initial-token") {
 		t.Errorf("Expected initial-token after restore")
 	}
+	h.EndStep("test_restore")
 
-	h.Log.SetStep("test_switch_back")
+	h.StartStep("test_switch_back", "Switch back to second profile")
 
 	// Switch to second profile
 	if err := vault.Restore(fileSet, "second"); err != nil {
@@ -267,8 +272,12 @@ func TestE2E_RestoreCommand(t *testing.T) {
 	if !h.FileContains(initialAuthPath, "second-token") {
 		t.Errorf("Expected second-token after second restore")
 	}
+	h.EndStep("test_switch_back")
 
 	h.Log.Info("Restore command test complete")
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
 }
 
 // TestE2E_DeleteCommand tests the delete workflow
@@ -497,21 +506,31 @@ func TestE2E_ProfileWorkflow(t *testing.T) {
 	h.Log.SetStep("test_locking")
 
 	// Test lock/unlock
-	if err := prof.Lock(); err != nil {
-		t.Fatalf("Failed to lock profile: %v", err)
-	}
+		if err := prof.Lock(); err != nil {
+			t.Fatalf("Failed to lock profile: %v", err)
+		}
+		locked := true
+		defer func() {
+			if !locked {
+				return
+			}
+			if err := prof.Unlock(); err != nil {
+				t.Errorf("Failed to unlock profile during cleanup: %v", err)
+			}
+		}()
 
-	if !prof.IsLocked() {
-		t.Errorf("Profile should be locked")
-	}
+		if !prof.IsLocked() {
+			t.Errorf("Profile should be locked")
+		}
 
-	if err := prof.Unlock(); err != nil {
-		t.Fatalf("Failed to unlock profile: %v", err)
-	}
+		if err := prof.Unlock(); err != nil {
+			t.Fatalf("Failed to unlock profile: %v", err)
+		}
+		locked = false
 
-	if prof.IsLocked() {
-		t.Errorf("Profile should be unlocked")
-	}
+		if prof.IsLocked() {
+			t.Errorf("Profile should be unlocked")
+		}
 
 	h.Log.SetStep("test_list_profiles")
 
@@ -594,13 +613,14 @@ func TestE2E_ClearAuthFiles(t *testing.T) {
 
 // TestE2E_MultiProviderWorkflow tests working with multiple providers
 func TestE2E_MultiProviderWorkflow(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
-	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	h.StartStep("setup", "Prepare multi-provider workflow environment")
+	setupCLITest(t, h.TestHarness)
 
 	homeDir := h.SubDir("home")
+	h.EndStep("setup")
 
 	// Create auth files for multiple providers
 	providers := []struct {
@@ -623,7 +643,7 @@ func TestE2E_MultiProviderWorkflow(t *testing.T) {
 		},
 	}
 
-	h.Log.SetStep("create_auth_files")
+	h.StartStep("create_auth_files", "Create auth files for multiple providers")
 
 	for _, p := range providers {
 		if p.homeDir != homeDir {
@@ -641,8 +661,9 @@ func TestE2E_MultiProviderWorkflow(t *testing.T) {
 			"path": authPath,
 		})
 	}
+	h.EndStep("create_auth_files")
 
-	h.Log.SetStep("backup_all")
+	h.StartStep("backup_all", "Backup auth for all providers")
 
 	// Backup all providers
 	for _, p := range providers {
@@ -658,8 +679,9 @@ func TestE2E_MultiProviderWorkflow(t *testing.T) {
 			t.Fatalf("Backup failed for %s: %v", p.tool, err)
 		}
 	}
+	h.EndStep("backup_all")
 
-	h.Log.SetStep("verify_isolation")
+	h.StartStep("verify_isolation", "Verify provider isolation in vault")
 
 	// Verify each provider has its own backup
 	allProfiles, err := vault.ListAll()
@@ -680,9 +702,13 @@ func TestE2E_MultiProviderWorkflow(t *testing.T) {
 			t.Errorf("Expected profile 'multi-test' for %s, got '%s'", p.tool, profiles[0])
 		}
 	}
+	h.EndStep("verify_isolation")
 
 	h.Log.Info("Multi-provider workflow test complete", map[string]interface{}{
 		"providers": len(providers),
 		"profiles":  allProfiles,
 	})
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
 }

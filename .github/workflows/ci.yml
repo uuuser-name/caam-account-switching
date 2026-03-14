@@ -57,6 +57,18 @@ jobs:
         ./scripts/ci_e2e_quality_gate.sh
         echo "::endgroup::"
 
+    - name: Build Quality Trend Diff
+      run: |
+        echo "::group::Quality Trend Diff"
+        ./scripts/build_quality_trend_diff.sh
+        echo "::endgroup::"
+
+    - name: Enforce Release Readiness Attestation
+      run: |
+        echo "::group::Release Readiness Attestation"
+        ./scripts/release_readiness_attestation.sh
+        echo "::endgroup::"
+
     - name: Upload Audit Artifacts
       if: ${{ always() }}
       uses: actions/upload-artifact@v4

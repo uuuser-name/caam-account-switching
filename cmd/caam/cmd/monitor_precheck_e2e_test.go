@@ -71,9 +71,11 @@ func createTestProfile(t *testing.T, h *testutil.TestHarness, provider, profileN
 // executeMonitorCommand runs the monitor command with given args.
 func executeMonitorCommand(args ...string) (string, error) {
 	fullArgs := append([]string{"monitor"}, args...)
+	resetCommandTreeForExecute(rootCmd)
+	defer resetCommandTreeForExecute(rootCmd)
+
 	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
+	setCommandTreeWriters(rootCmd, buf, buf)
 	rootCmd.SetArgs(fullArgs)
 	err := rootCmd.Execute()
 	return buf.String(), err
@@ -82,9 +84,11 @@ func executeMonitorCommand(args ...string) (string, error) {
 // executePrecheckCommand runs the precheck command with given args.
 func executePrecheckCommand(args ...string) (string, error) {
 	fullArgs := append([]string{"precheck"}, args...)
+	resetCommandTreeForExecute(rootCmd)
+	defer resetCommandTreeForExecute(rootCmd)
+
 	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
+	setCommandTreeWriters(rootCmd, buf, buf)
 	rootCmd.SetArgs(fullArgs)
 	err := rootCmd.Execute()
 	return buf.String(), err

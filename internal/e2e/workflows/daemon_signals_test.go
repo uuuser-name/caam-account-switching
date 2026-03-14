@@ -39,19 +39,14 @@ daemon:
 `, pidFile)
 	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0600))
 
-	env := os.Environ()
-	env = append(env, "GO_WANT_DAEMON_HELPER=1")
-	env = append(env, fmt.Sprintf("XDG_CONFIG_HOME=%s", rootDir))
-	// Critical: Set CAAM_HOME so LoadSPMConfig finds the isolated config.yaml
-	env = append(env, fmt.Sprintf("CAAM_HOME=%s", configDir))
-	// We need to capture logs to verify reload
+	env := withEnvOverrides(os.Environ(), map[string]string{
+		"GO_WANT_DAEMON_HELPER": "1",
+		"HOME":                  rootDir,
+		"XDG_DATA_HOME":         rootDir,
+		"XDG_CONFIG_HOME":       rootDir,
+		"CAAM_HOME":             configDir,
+	})
 	logPath := filepath.Join(rootDir, "daemon.log")
-	// Daemon helper doesn't use config for log path, it uses args or default.
-	// We passed --verbose in helper.
-
-	// But we want to test reload. If we change config, does daemon pick it up?
-	// Daemon loads global config in New().
-	// Reload logic should re-load config.
 
 	h.EndStep("Setup")
 
@@ -73,6 +68,7 @@ daemon:
 
 	err = cmd.Start()
 	require.NoError(t, err)
+	registerProcessCleanup(t, cmd, 5*time.Second)
 
 	// Wait for PID file
 	pidFound := false
@@ -134,9 +130,9 @@ daemon:
 	logs, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 	h.LogInfo("Daemon logs", "content", string(logs))
-
-	// Assertions on log content would depend on implementation.
-	// For now just verify it didn't die.
+	logText := string(logs)
+	require.Contains(t, logText, "Received SIGHUP, reloading config...", "daemon should log explicit SIGHUP reload handling")
+	require.NotContains(t, logText, "Reload on SIGHUP is disabled in config", "daemon should not ignore SIGHUP when reload is enabled")
 
 	h.EndStep("Reload")
 

@@ -4,15 +4,28 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
-audit_json="${1:-artifacts/test-audit/test_audit.json}"
-gate_json="${2:-artifacts/test-audit/e2e_quality_gate.json}"
-traceability_json="${3:-artifacts/cli-matrix/scenario_traceability.json}"
-coverage_baseline_json="${4:-docs/testing/coverage_baseline.json}"
-traceability_baseline_json="${5:-docs/testing/e2e_traceability_baseline.json}"
+manifest_json="${RUN_ARTIFACT_INDEX_PATH:-artifacts/test-audit/run_artifact_index.json}"
+if (( $# == 0 )) && [[ "${RUN_ARTIFACT_INDEX_AUTO_REFRESH:-1}" == "1" ]]; then
+  RUN_ARTIFACT_INDEX_OUT_JSON="${manifest_json}" ./scripts/build_run_artifact_index.sh >/dev/null
+fi
+
+if (( $# == 0 )) && [[ -f "${manifest_json}" ]]; then
+  audit_json="$(jq -r '.consumer_inputs.quality_trend_diff.audit_json' "${manifest_json}")"
+  gate_json="$(jq -r '.consumer_inputs.quality_trend_diff.gate_json' "${manifest_json}")"
+  traceability_json="$(jq -r '.consumer_inputs.quality_trend_diff.traceability_json' "${manifest_json}")"
+  coverage_baseline_json="$(jq -r '.consumer_inputs.quality_trend_diff.coverage_baseline_json' "${manifest_json}")"
+  traceability_baseline_json="$(jq -r '.consumer_inputs.quality_trend_diff.traceability_baseline_json' "${manifest_json}")"
+else
+  audit_json="${1:-artifacts/test-audit/test_audit.json}"
+  gate_json="${2:-artifacts/test-audit/e2e_quality_gate.json}"
+  traceability_json="${3:-artifacts/cli-matrix/scenario_traceability.json}"
+  coverage_baseline_json="${4:-docs/testing/coverage_baseline.json}"
+  traceability_baseline_json="${5:-docs/testing/e2e_traceability_baseline.json}"
+fi
 fail_on_regression="${FAIL_ON_QUALITY_REGRESSION:-0}"
 
-out_json="artifacts/test-audit/quality_trend_diff.json"
-out_md="artifacts/test-audit/quality_trend_diff.md"
+out_json="${QUALITY_TREND_OUT_JSON:-artifacts/test-audit/quality_trend_diff.json}"
+out_md="${QUALITY_TREND_OUT_MD:-artifacts/test-audit/quality_trend_diff.md}"
 
 for path in "$audit_json" "$gate_json" "$traceability_json" "$coverage_baseline_json" "$traceability_baseline_json"; do
   if [[ ! -f "$path" ]]; then

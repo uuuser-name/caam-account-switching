@@ -125,5 +125,9 @@ func TestE2E_RateLimitRecoveryWorkflow(t *testing.T) {
 	}
 	h.EndStep("recovery")
 
+	if err := h.ValidateCanonicalLogs(); err != nil {
+		t.Fatalf("ValidateCanonicalLogs failed: %v", err)
+	}
+
 	t.Log("\n" + h.Summary())
 }
