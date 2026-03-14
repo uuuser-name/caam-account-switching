@@ -558,8 +558,12 @@ func TestDetectAllChanges(t *testing.T) {
 	// Set up test environment
 	codexDir := filepath.Join(tmpDir, "codex")
 	geminiDir := filepath.Join(tmpDir, "gemini")
-	os.MkdirAll(codexDir, 0700)
-	os.MkdirAll(geminiDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+	}
+	if err := os.MkdirAll(geminiDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", geminiDir, err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 	t.Setenv("GEMINI_HOME", geminiDir)
@@ -568,11 +572,15 @@ func TestDetectAllChanges(t *testing.T) {
 	tracker := NewTracker(vault)
 
 	// Initial capture
-	tracker.CaptureAll()
+	if _, err := tracker.CaptureAll(); err != nil {
+		t.Fatalf("CaptureAll() error = %v", err)
+	}
 
 	// Create a new auth file (will trigger ChangeNew on next detect)
 	codexAuthPath := filepath.Join(codexDir, "auth.json")
-	os.WriteFile(codexAuthPath, []byte(`{"token": "test"}`), 0600)
+	if err := os.WriteFile(codexAuthPath, []byte(`{"token": "test"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", codexAuthPath, err)
+	}
 
 	// Detect all changes
 	changes, err := tracker.DetectAllChanges()
@@ -604,15 +612,23 @@ func TestMatchesProfile(t *testing.T) {
 
 	// Create auth file
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	authContent := []byte(`{"token": "test-token"}`)
 	authPath := filepath.Join(codexDir, "auth.json")
-	os.WriteFile(authPath, authContent, 0600)
+	if err := os.WriteFile(authPath, authContent, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Save as profile
 	profileDir := vault.ProfilePath("codex", "test-profile")
-	os.MkdirAll(profileDir, 0700)
-	os.WriteFile(filepath.Join(profileDir, "auth.json"), authContent, 0600)
+	if err := os.MkdirAll(profileDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(profileDir, "auth.json"), authContent, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 
@@ -628,7 +644,9 @@ func TestMatchesProfile(t *testing.T) {
 	}
 
 	// Modify auth file
-	os.WriteFile(authPath, []byte(`{"token": "different"}`), 0600)
+	if err := os.WriteFile(authPath, []byte(`{"token": "different"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Should not match
 	matches, err = tracker.MatchesProfile("codex", "test-profile")
@@ -708,7 +726,9 @@ func TestMatchesProfile_NoAuth(t *testing.T) {
 
 	// Empty codex directory - no auth
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 
@@ -729,20 +749,32 @@ func TestFindMatchingProfile(t *testing.T) {
 
 	// Create auth file
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	authContent := []byte(`{"token": "test-token"}`)
 	authPath := filepath.Join(codexDir, "auth.json")
-	os.WriteFile(authPath, authContent, 0600)
+	if err := os.WriteFile(authPath, authContent, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Save as profile "profile1"
 	profile1Dir := vault.ProfilePath("codex", "profile1")
-	os.MkdirAll(profile1Dir, 0700)
-	os.WriteFile(filepath.Join(profile1Dir, "auth.json"), authContent, 0600)
+	if err := os.MkdirAll(profile1Dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(profile1Dir, "auth.json"), authContent, 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Save different content as "profile2"
 	profile2Dir := vault.ProfilePath("codex", "profile2")
-	os.MkdirAll(profile2Dir, 0700)
-	os.WriteFile(filepath.Join(profile2Dir, "auth.json"), []byte(`{"token": "other"}`), 0600)
+	if err := os.MkdirAll(profile2Dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(profile2Dir, "auth.json"), []byte(`{"token": "other"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 
@@ -772,7 +804,9 @@ func TestFindMatchingProfile_NoAuth(t *testing.T) {
 	vault := authfile.NewVault(tmpDir)
 
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 
@@ -793,13 +827,21 @@ func TestFindMatchingProfile_NoMatch(t *testing.T) {
 
 	// Create auth file
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
-	os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{"token": "unique"}`), 0600)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{"token": "unique"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	// Save different content as profile
 	profileDir := vault.ProfilePath("codex", "other")
-	os.MkdirAll(profileDir, 0700)
-	os.WriteFile(filepath.Join(profileDir, "auth.json"), []byte(`{"token": "different"}`), 0600)
+	if err := os.MkdirAll(profileDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", profileDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(profileDir, "auth.json"), []byte(`{"token": "different"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 
@@ -821,15 +863,21 @@ func TestGetAllStatuses(t *testing.T) {
 	// Set up environment
 	codexDir := filepath.Join(tmpDir, "codex")
 	geminiDir := filepath.Join(tmpDir, "gemini")
-	os.MkdirAll(codexDir, 0700)
-	os.MkdirAll(geminiDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+	}
+	if err := os.MkdirAll(geminiDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", geminiDir, err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 	t.Setenv("GEMINI_HOME", geminiDir)
 	t.Setenv("HOME", tmpDir)
 
 	// Create auth for codex only
-	os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{"token": "test"}`), 0600)
+	if err := os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{"token": "test"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", filepath.Join(codexDir, "auth.json"), err)
+	}
 
 	tracker := NewTracker(vault)
 
@@ -869,7 +917,11 @@ func TestWatcherStartAlreadyRunning(t *testing.T) {
 	w := NewWatcher(vault, nil)
 
 	// Start in goroutine
-	go w.Start()
+	go func() {
+		if err := w.Start(); err != nil {
+			t.Errorf("Start() error = %v", err)
+		}
+	}()
 	time.Sleep(50 * time.Millisecond)
 
 	// Try to start again - should error
@@ -947,9 +999,13 @@ func TestWatcherDetectsChanges(t *testing.T) {
 	vault := authfile.NewVault(tmpDir)
 
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+	}
 	authPath := filepath.Join(codexDir, "auth.json")
-	os.WriteFile(authPath, []byte(`{"token": "initial"}`), 0600)
+	if err := os.WriteFile(authPath, []byte(`{"token": "initial"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 
@@ -959,11 +1015,17 @@ func TestWatcherDetectsChanges(t *testing.T) {
 	})
 
 	// Start watcher
-	go w.Start()
+	go func() {
+		if err := w.Start(); err != nil {
+			t.Errorf("Start() error = %v", err)
+		}
+	}()
 	time.Sleep(100 * time.Millisecond)
 
 	// Modify auth file
-	os.WriteFile(authPath, []byte(`{"token": "modified"}`), 0600)
+	if err := os.WriteFile(authPath, []byte(`{"token": "modified"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+	}
 
 	// Wait for detection (poll interval is 5 seconds, so we need to wait)
 	// For test purposes, let's just stop the watcher
@@ -994,8 +1056,12 @@ func TestLoadStateInvalidJSON(t *testing.T) {
 
 	// Create invalid JSON state file
 	stateDir := filepath.Join(tmpDir, "caam")
-	os.MkdirAll(stateDir, 0700)
-	os.WriteFile(filepath.Join(stateDir, "auth_state.json"), []byte("{invalid json"), 0600)
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", stateDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "auth_state.json"), []byte("{invalid json"), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", filepath.Join(stateDir, "auth_state.json"), err)
+	}
 
 	tracker := NewTracker(vault)
 
@@ -1010,18 +1076,24 @@ func TestDetectChangeNewAuthAfterRemoval(t *testing.T) {
 	vault := authfile.NewVault(tmpDir)
 
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
 	// Capture initial state (no auth)
-	tracker.Capture("codex")
+	if _, err := tracker.Capture("codex"); err != nil {
+		t.Fatalf("Capture() error = %v", err)
+	}
 
 	// Create auth file
 	authPath := filepath.Join(codexDir, "auth.json")
-	os.WriteFile(authPath, []byte(`{"token": "new"}`), 0600)
+	if err := os.WriteFile(authPath, []byte(`{"token": "new"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+	}
 
 	// Should detect as new
 	change, err := tracker.DetectChange("codex")
@@ -1040,15 +1112,23 @@ func TestGetStatusWithMatchingProfile(t *testing.T) {
 
 	// Create auth file
 	codexDir := filepath.Join(tmpDir, "codex")
-	os.MkdirAll(codexDir, 0700)
+	if err := os.MkdirAll(codexDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+	}
 	authContent := []byte(`{"token": "test"}`)
 	authPath := filepath.Join(codexDir, "auth.json")
-	os.WriteFile(authPath, authContent, 0600)
+	if err := os.WriteFile(authPath, authContent, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+	}
 
 	// Save as profile
 	profileDir := vault.ProfilePath("codex", "my-profile")
-	os.MkdirAll(profileDir, 0700)
-	os.WriteFile(filepath.Join(profileDir, "auth.json"), authContent, 0600)
+	if err := os.MkdirAll(profileDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", profileDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(profileDir, "auth.json"), authContent, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", filepath.Join(profileDir, "auth.json"), err)
+	}
 
 	t.Setenv("CODEX_HOME", codexDir)
 

@@ -36,7 +36,7 @@ func TestAliasCommandFlags(t *testing.T) {
 	// Check --list flag
 	listFlag := aliasCmd.Flags().Lookup("list")
 	if listFlag == nil {
-		t.Error("Expected --list flag")
+		t.Fatal("Expected --list flag")
 	}
 	if listFlag.DefValue != "false" {
 		t.Errorf("Expected list default false, got %q", listFlag.DefValue)
@@ -45,7 +45,7 @@ func TestAliasCommandFlags(t *testing.T) {
 	// Check --remove flag with shorthand
 	removeFlag := aliasCmd.Flags().Lookup("remove")
 	if removeFlag == nil {
-		t.Error("Expected --remove flag")
+		t.Fatal("Expected --remove flag")
 	}
 	if removeFlag.Shorthand != "r" {
 		t.Errorf("Expected shorthand 'r', got %q", removeFlag.Shorthand)
@@ -54,11 +54,21 @@ func TestAliasCommandFlags(t *testing.T) {
 	// Check --json flag
 	jsonFlag := aliasCmd.Flags().Lookup("json")
 	if jsonFlag == nil {
-		t.Error("Expected --json flag")
+		t.Fatal("Expected --json flag")
 	}
 	if jsonFlag.DefValue != "false" {
 		t.Errorf("Expected json default false, got %q", jsonFlag.DefValue)
 	}
+}
+
+func readPipeOutput(t *testing.T, r *os.File) string {
+	t.Helper()
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom(pipe): %v", err)
+	}
+	return buf.String()
 }
 
 // =============================================================================
@@ -107,7 +117,6 @@ func TestListAliasesEmpty(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	// Test empty aliases (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -116,8 +125,7 @@ func TestListAliasesEmpty(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -131,7 +139,6 @@ func TestListAliasesEmptyJSON(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	// Test empty aliases (JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -140,8 +147,7 @@ func TestListAliasesEmptyJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -158,7 +164,6 @@ func TestListAliasesWithAliases(t *testing.T) {
 	cfg.AddAlias("codex", "personal-profile", "personal")
 
 	// Test with aliases (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -167,8 +172,7 @@ func TestListAliasesWithAliases(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -189,7 +193,6 @@ func TestListAliasesWithAliasesJSON(t *testing.T) {
 	cfg.AddAlias("claude", "work-account", "work")
 
 	// Test with aliases (JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -198,8 +201,7 @@ func TestListAliasesWithAliasesJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -245,7 +247,6 @@ func TestRemoveAliasSuccess(t *testing.T) {
 	config.SetConfigPath(filepath.Join(tmpDir, "config.json"))
 
 	// Test non-JSON output
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -254,8 +255,7 @@ func TestRemoveAliasSuccess(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -279,7 +279,6 @@ func TestRemoveAliasSuccessJSON(t *testing.T) {
 	config.SetConfigPath(filepath.Join(tmpDir, "config.json"))
 
 	// Test JSON output
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -288,8 +287,7 @@ func TestRemoveAliasSuccessJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -317,7 +315,6 @@ func TestShowProfileAliasesEmpty(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	// Test empty aliases (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -326,8 +323,7 @@ func TestShowProfileAliasesEmpty(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -343,7 +339,6 @@ func TestShowProfileAliasesWithAliases(t *testing.T) {
 	cfg.AddAlias("claude", "work-account", "w")
 
 	// Test with aliases (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -352,8 +347,7 @@ func TestShowProfileAliasesWithAliases(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -371,7 +365,6 @@ func TestShowProfileAliasesJSON(t *testing.T) {
 	cfg.AddAlias("claude", "work-account", "work")
 
 	// Test JSON output
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -380,8 +373,7 @@ func TestShowProfileAliasesJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -413,7 +405,6 @@ func TestAddAliasNew(t *testing.T) {
 	config.SetConfigPath(filepath.Join(tmpDir, "config.json"))
 
 	// Test adding new alias (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -422,8 +413,7 @@ func TestAddAliasNew(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -446,7 +436,6 @@ func TestAddAliasNewJSON(t *testing.T) {
 	config.SetConfigPath(filepath.Join(tmpDir, "config.json"))
 
 	// Test adding new alias (JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -455,8 +444,7 @@ func TestAddAliasNewJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -482,7 +470,6 @@ func TestAddAliasAlreadyExists(t *testing.T) {
 	config.SetConfigPath(filepath.Join(tmpDir, "config.json"))
 
 	// Add same alias again (should be idempotent)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -491,8 +478,7 @@ func TestAddAliasAlreadyExists(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -511,7 +497,6 @@ func TestAddAliasAlreadyExistsJSON(t *testing.T) {
 	config.SetConfigPath(filepath.Join(tmpDir, "config.json"))
 
 	// Test JSON output
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -520,8 +505,7 @@ func TestAddAliasAlreadyExistsJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -564,7 +548,6 @@ func TestListFavoritesEmpty(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	// Test empty favorites (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -573,8 +556,7 @@ func TestListFavoritesEmpty(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -588,7 +570,6 @@ func TestListFavoritesEmptyJSON(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	// Test empty favorites (JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -597,8 +578,7 @@ func TestListFavoritesEmptyJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -614,7 +594,6 @@ func TestListFavoritesWithFavorites(t *testing.T) {
 	cfg.SetFavorites("codex", []string{"main"})
 
 	// Test with favorites (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -623,8 +602,7 @@ func TestListFavoritesWithFavorites(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -642,7 +620,6 @@ func TestListFavoritesWithFavoritesJSON(t *testing.T) {
 	cfg.SetFavorites("claude", []string{"work", "personal"})
 
 	// Test JSON output
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -651,8 +628,7 @@ func TestListFavoritesWithFavoritesJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -677,7 +653,6 @@ func TestShowFavoritesEmpty(t *testing.T) {
 	cfg := config.DefaultConfig()
 
 	// Test empty favorites (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -686,8 +661,7 @@ func TestShowFavoritesEmpty(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -702,7 +676,6 @@ func TestShowFavoritesWithFavorites(t *testing.T) {
 	cfg.SetFavorites("claude", []string{"work", "personal"})
 
 	// Test with favorites (non-JSON)
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -711,8 +684,7 @@ func TestShowFavoritesWithFavorites(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -730,7 +702,6 @@ func TestShowFavoritesJSON(t *testing.T) {
 	cfg.SetFavorites("claude", []string{"work"})
 
 	// Test JSON output
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -739,8 +710,7 @@ func TestShowFavoritesJSON(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -770,11 +740,12 @@ func TestRunAliasListFlag(t *testing.T) {
 	cmd.SetArgs([]string{})
 
 	// Set flags
-	cmd.ParseFlags([]string{"--list"})
+	if err := cmd.ParseFlags([]string{"--list"}); err != nil {
+		t.Fatalf("ParseFlags(--list): %v", err)
+	}
 
 	cfg := config.DefaultConfig()
 
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -783,7 +754,7 @@ func TestRunAliasListFlag(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	_ = readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -900,7 +871,6 @@ func TestRunFavoriteInvalidTool(t *testing.T) {
 func TestRunFavoriteListFlag(t *testing.T) {
 	cfg := config.DefaultConfig()
 
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -909,7 +879,7 @@ func TestRunFavoriteListFlag(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	_ = readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -1142,7 +1112,6 @@ func TestShowFavoritesMultipleTools(t *testing.T) {
 	cfg.SetFavorites("codex", []string{"personal"})
 
 	// listFavorites should show all
-	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -1151,8 +1120,7 @@ func TestShowFavoritesMultipleTools(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
-	output := buf.String()
+	output := readPipeOutput(t, r)
 
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)

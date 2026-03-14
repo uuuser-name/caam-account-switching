@@ -12,6 +12,7 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authpool"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/config"
+	caamdb "github.com/Dicklesworthstone/coding_agent_account_manager/internal/db"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/handoff"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/notify"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
@@ -20,6 +21,7 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/ratelimit"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/rotation"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/usage"
+	"golang.org/x/term"
 )
 
 // =============================================================================
@@ -230,6 +232,52 @@ func TestSmartRunner_MonitorOutputCapturesResumeHintOutsideRunningState(t *testi
 	}
 }
 
+func TestSplitEnv(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{name: "standard", input: "HOME=/tmp/test", want: []string{"HOME", "/tmp/test"}},
+		{name: "value contains equals", input: "TOKEN=a=b=c", want: []string{"TOKEN", "a=b=c"}},
+		{name: "missing equals", input: "JUSTKEY", want: []string{"JUSTKEY"}},
+		{name: "empty key", input: "=value", want: []string{"", "value"}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := splitEnv(tc.input)
+			if len(got) != len(tc.want) {
+				t.Fatalf("splitEnv(%q) len=%d, want %d (%v)", tc.input, len(got), len(tc.want), got)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("splitEnv(%q)[%d] = %q, want %q", tc.input, i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestSmartRunner_PauseRateLimitDispatch(t *testing.T) {
+	sr := NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{})
+
+	sr.pauseRateLimitDispatch(0)
+	if sr.rateLimitDispatchPaused() {
+		t.Fatal("expected zero-duration pause to be ignored")
+	}
+
+	sr.pauseRateLimitDispatch(-time.Second)
+	if sr.rateLimitDispatchPaused() {
+		t.Fatal("expected negative-duration pause to be ignored")
+	}
+
+	sr.pauseRateLimitDispatch(50 * time.Millisecond)
+	if !sr.rateLimitDispatchPaused() {
+		t.Fatal("expected positive-duration pause to be active")
+	}
+}
+
 // =============================================================================
 // Mock Notifier for Testing
 // =============================================================================
@@ -255,15 +303,40 @@ func (m *mockNotifier) Available() bool {
 }
 
 type scriptedController struct {
-	outputs []string
-	index   int
+	outputs          []string
+	index            int
+	injectedCommands []string
+	injectedRaw      [][]byte
+	injectCommandCh  chan struct{}
+	injectRawNotify  chan struct{}
+	injectCommandErr error
+	injectRawErr     error
+	signalErr        error
 }
 
 func (c *scriptedController) Start() error { return nil }
 
-func (c *scriptedController) InjectCommand(string) error { return nil }
+func (c *scriptedController) InjectCommand(command string) error {
+	c.injectedCommands = append(c.injectedCommands, command)
+	if c.injectCommandCh != nil {
+		select {
+		case c.injectCommandCh <- struct{}{}:
+		default:
+		}
+	}
+	return c.injectCommandErr
+}
 
-func (c *scriptedController) InjectRaw([]byte) error { return nil }
+func (c *scriptedController) InjectRaw(data []byte) error {
+	c.injectedRaw = append(c.injectedRaw, append([]byte(nil), data...))
+	if c.injectRawNotify != nil {
+		select {
+		case c.injectRawNotify <- struct{}{}:
+		default:
+		}
+	}
+	return c.injectRawErr
+}
 
 func (c *scriptedController) ReadOutput() (string, error) {
 	if c.index >= len(c.outputs) {
@@ -284,11 +357,310 @@ func (c *scriptedController) WaitForPattern(context.Context, *regexp.Regexp, tim
 
 func (c *scriptedController) Wait() (int, error) { return 0, nil }
 
-func (c *scriptedController) Signal(pty.Signal) error { return nil }
+func (c *scriptedController) Signal(pty.Signal) error { return c.signalErr }
 
 func (c *scriptedController) Close() error { return nil }
 
 func (c *scriptedController) Fd() int { return -1 }
+
+func installSmartRunnerTerminalHooks(t *testing.T) {
+	t.Helper()
+
+	originalCandidates := smartRunnerTerminalCandidates
+	originalInputSource := smartRunnerInputSource
+	originalDuplicateInput := smartRunnerDuplicateInput
+	originalIsTerminal := smartRunnerIsTerminal
+	originalGetSize := smartRunnerGetSize
+	originalMakeRaw := smartRunnerMakeRaw
+	originalRestore := smartRunnerRestoreTerm
+
+	t.Cleanup(func() {
+		smartRunnerTerminalCandidates = originalCandidates
+		smartRunnerInputSource = originalInputSource
+		smartRunnerDuplicateInput = originalDuplicateInput
+		smartRunnerIsTerminal = originalIsTerminal
+		smartRunnerGetSize = originalGetSize
+		smartRunnerMakeRaw = originalMakeRaw
+		smartRunnerRestoreTerm = originalRestore
+	})
+}
+
+func TestCurrentTerminalSizeFallsBackAcrossCandidates(t *testing.T) {
+	installSmartRunnerTerminalHooks(t)
+
+	firstRead, firstWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("first pipe: %v", err)
+	}
+	defer firstRead.Close()
+	defer firstWrite.Close()
+
+	secondRead, secondWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("second pipe: %v", err)
+	}
+	defer secondRead.Close()
+	defer secondWrite.Close()
+
+	smartRunnerTerminalCandidates = func() []*os.File { return []*os.File{firstRead, secondRead} }
+	smartRunnerIsTerminal = func(int) bool { return true }
+	smartRunnerGetSize = func(fd int) (int, int, error) {
+		switch fd {
+		case int(firstRead.Fd()):
+			return 0, 0, io.ErrUnexpectedEOF
+		case int(secondRead.Fd()):
+			return 132, 43, nil
+		default:
+			return 0, 0, io.EOF
+		}
+	}
+
+	cols, rows, ok := currentTerminalSize()
+	if !ok || cols != 132 || rows != 43 {
+		t.Fatalf("currentTerminalSize() = (%d,%d,%v), want (132,43,true)", cols, rows, ok)
+	}
+
+	opts := currentPTYOptions()
+	if opts.Cols != 132 || opts.Rows != 43 {
+		t.Fatalf("currentPTYOptions() size = (%d,%d), want (132,43)", opts.Cols, opts.Rows)
+	}
+	if !opts.DisableEcho {
+		t.Fatal("expected PTY echo to be disabled")
+	}
+}
+
+func TestCurrentPTYOptionsUsesDefaultsWithoutTerminal(t *testing.T) {
+	installSmartRunnerTerminalHooks(t)
+
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	defer readPipe.Close()
+	defer writePipe.Close()
+
+	smartRunnerTerminalCandidates = func() []*os.File { return []*os.File{readPipe} }
+	smartRunnerIsTerminal = func(int) bool { return false }
+	smartRunnerGetSize = func(int) (int, int, error) { return 200, 55, nil }
+
+	cols, rows, ok := currentTerminalSize()
+	if ok || cols != 0 || rows != 0 {
+		t.Fatalf("currentTerminalSize() = (%d,%d,%v), want (0,0,false)", cols, rows, ok)
+	}
+
+	opts := currentPTYOptions()
+	if opts.Cols != 80 || opts.Rows != 24 {
+		t.Fatalf("default PTY size = (%d,%d), want (80,24)", opts.Cols, opts.Rows)
+	}
+	if !opts.DisableEcho {
+		t.Fatal("expected PTY echo to be disabled")
+	}
+}
+
+func TestSmartRunner_StartInteractiveInputRelayFallsBackAfterDupFailure(t *testing.T) {
+	installSmartRunnerTerminalHooks(t)
+
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	defer readPipe.Close()
+
+	smartRunnerInputSource = func() *os.File { return readPipe }
+	smartRunnerDuplicateInput = func(*os.File) (*os.File, func(), error) {
+		return nil, nil, io.ErrUnexpectedEOF
+	}
+	smartRunnerIsTerminal = func(int) bool { return false }
+
+	sr := NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{})
+	ctrl := &scriptedController{injectRawNotify: make(chan struct{}, 1)}
+	sr.setPTYController(ctrl)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cleanup := sr.startInteractiveInputRelay(ctx)
+	if cleanup == nil {
+		t.Fatal("expected relay cleanup function")
+	}
+
+	if _, err := writePipe.Write([]byte("hello relay\n")); err != nil {
+		t.Fatalf("write pipe: %v", err)
+	}
+	if err := writePipe.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	select {
+	case <-ctrl.injectRawNotify:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for relay input to reach PTY controller")
+	}
+	cleanup()
+
+	if len(ctrl.injectedRaw) != 1 {
+		t.Fatalf("expected 1 forwarded chunk, got %d", len(ctrl.injectedRaw))
+	}
+	if got := string(ctrl.injectedRaw[0]); got != "hello relay\n" {
+		t.Fatalf("forwarded chunk = %q, want %q", got, "hello relay\n")
+	}
+}
+
+func TestSmartRunner_StartInteractiveInputRelayRestoresRawTerminal(t *testing.T) {
+	installSmartRunnerTerminalHooks(t)
+
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	defer writePipe.Close()
+
+	smartRunnerInputSource = func() *os.File { return readPipe }
+	smartRunnerDuplicateInput = func(*os.File) (*os.File, func(), error) {
+		return readPipe, func() { _ = readPipe.Close() }, nil
+	}
+	expectedFD := int(readPipe.Fd())
+	smartRunnerIsTerminal = func(fd int) bool { return fd == expectedFD }
+
+	makeRawCalls := 0
+	restoreCalls := 0
+	smartRunnerMakeRaw = func(fd int) (*term.State, error) {
+		makeRawCalls++
+		return nil, nil
+	}
+	smartRunnerRestoreTerm = func(fd int, state *term.State) error {
+		restoreCalls++
+		if fd != expectedFD {
+			t.Fatalf("restore fd = %d, want %d", fd, expectedFD)
+		}
+		return nil
+	}
+
+	sr := NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cleanup := sr.startInteractiveInputRelay(ctx)
+	if cleanup == nil {
+		t.Fatal("expected relay cleanup function")
+	}
+
+	if err := writePipe.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+	cleanup()
+
+	if makeRawCalls != 1 {
+		t.Fatalf("MakeRaw calls = %d, want 1", makeRawCalls)
+	}
+	if restoreCalls != 1 {
+		t.Fatalf("Restore calls = %d, want 1", restoreCalls)
+	}
+}
+
+func TestSmartRunner_MaybeSchedulePostStartCommand(t *testing.T) {
+	sr := NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{})
+
+	t.Run("injects command after delay", func(t *testing.T) {
+		ctrl := &scriptedController{injectCommandCh: make(chan struct{}, 1)}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		sr.maybeSchedulePostStartCommand(ctx, ctrl, "continue", 5*time.Millisecond)
+
+		select {
+		case <-ctrl.injectCommandCh:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for post-start command injection")
+		}
+		sr.wg.Wait()
+
+		if len(ctrl.injectedCommands) != 1 || ctrl.injectedCommands[0] != "continue" {
+			t.Fatalf("injected commands = %v", ctrl.injectedCommands)
+		}
+	})
+
+	t.Run("skips injection after cancellation", func(t *testing.T) {
+		ctrl := &scriptedController{injectCommandCh: make(chan struct{}, 1)}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		sr.maybeSchedulePostStartCommand(ctx, ctrl, "continue", 20*time.Millisecond)
+		select {
+		case <-ctrl.injectCommandCh:
+			t.Fatal("expected canceled context to prevent command injection")
+		case <-time.After(50 * time.Millisecond):
+		}
+		sr.wg.Wait()
+	})
+}
+
+func TestSmartRunner_NoteSeamlessResumeOutput(t *testing.T) {
+	sr := NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{})
+
+	sr.noteSeamlessResumeOutput("")
+	if sr.seamlessResumeOutput {
+		t.Fatal("expected blank output to be ignored")
+	}
+
+	sr.seamlessResumePending = true
+	sr.rateLimitDispatchPausedUntil = time.Now().Add(time.Minute)
+	sr.noteSeamlessResumeOutput("still draining stale output")
+	if sr.seamlessResumeOutput {
+		t.Fatal("expected paused redispatch window to suppress seamless output marker")
+	}
+
+	sr.rateLimitDispatchPausedUntil = time.Time{}
+	sr.noteSeamlessResumeOutput("fresh output after switch")
+	if !sr.seamlessResumeOutput {
+		t.Fatal("expected non-empty output to mark seamless resume output once pending")
+	}
+}
+
+func TestDuplicateInputSource(t *testing.T) {
+	duplicated, closeDup, err := duplicateInputSource(nil)
+	if err != nil {
+		t.Fatalf("duplicateInputSource(nil) error = %v", err)
+	}
+	if duplicated != nil {
+		t.Fatal("expected nil duplicated input for nil stdin")
+	}
+	closeDup()
+
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	defer readPipe.Close()
+
+	duplicated, closeDup, err = duplicateInputSource(readPipe)
+	if err != nil {
+		t.Fatalf("duplicateInputSource(readPipe) error = %v", err)
+	}
+	defer closeDup()
+
+	if duplicated == nil {
+		t.Fatal("expected duplicated input file")
+	}
+	if duplicated.Fd() == readPipe.Fd() {
+		t.Fatal("expected duplicated input to use a distinct fd")
+	}
+
+	if _, err := writePipe.Write([]byte("dup-check")); err != nil {
+		t.Fatalf("write pipe: %v", err)
+	}
+	if err := writePipe.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	data, err := io.ReadAll(duplicated)
+	if err != nil {
+		t.Fatalf("read duplicated input: %v", err)
+	}
+	if string(data) != "dup-check" {
+		t.Fatalf("duplicated input = %q, want %q", string(data), "dup-check")
+	}
+}
 
 func writeSmartRunnerFixtureFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -452,6 +824,9 @@ func TestSystemProfileFallbackHelpers(t *testing.T) {
 	if selected != "_backup_a" {
 		t.Fatalf("deterministic system fallback selected %q, want _backup_a", selected)
 	}
+	if selectDeterministicSystemFallback(nil) != "" {
+		t.Fatal("expected empty fallback when no system profiles are available")
+	}
 }
 
 func TestSmartRunner_ExcludeSharedCredentialAliases(t *testing.T) {
@@ -530,6 +905,61 @@ func TestSmartRunner_ExcludeActiveCooldownProfiles(t *testing.T) {
 	filtered := sr.excludeActiveCooldownProfiles("codex", []string{"_backup_ready", "_backup_cooldown"})
 	if len(filtered) != 1 || filtered[0] != "_backup_ready" {
 		t.Fatalf("unexpected cooldown filtered set: %v", filtered)
+	}
+}
+
+func TestSmartRunner_ExcludeActiveCooldownProfiles_UsesDatabaseCooldowns(t *testing.T) {
+	db, err := caamdb.OpenAt(filepath.Join(t.TempDir(), "caam.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := db.SetCooldown("codex", "db_blocked", time.Now(), time.Hour, "rate limit"); err != nil {
+		t.Fatalf("set cooldown: %v", err)
+	}
+
+	sr := NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{DB: db})
+	filtered := sr.excludeActiveCooldownProfiles("codex", []string{"db_blocked", "ready"})
+	if len(filtered) != 1 || filtered[0] != "ready" {
+		t.Fatalf("unexpected database cooldown filtered set: %v", filtered)
+	}
+}
+
+func TestCloneProfileForSwitch(t *testing.T) {
+	if cloneProfileForSwitch(nil, "backup") != nil {
+		t.Fatal("expected nil profile clone to stay nil")
+	}
+
+	current := &profile.Profile{Name: "active", BasePath: filepath.Join(t.TempDir(), "active")}
+	cloned := cloneProfileForSwitch(current, "backup")
+	if cloned == nil {
+		t.Fatal("expected cloned profile")
+	}
+	if cloned.Name != "backup" {
+		t.Fatalf("cloned name = %q, want %q", cloned.Name, "backup")
+	}
+	if cloned.BasePath != filepath.Join(filepath.Dir(current.BasePath), "backup") {
+		t.Fatalf("cloned base path = %q", cloned.BasePath)
+	}
+
+	noBasePath := &profile.Profile{Name: "active"}
+	cloned = cloneProfileForSwitch(noBasePath, "backup")
+	if cloned.BasePath != "" {
+		t.Fatalf("expected empty base path to remain empty, got %q", cloned.BasePath)
+	}
+}
+
+func TestSmartRunner_VaultPath(t *testing.T) {
+	sr := NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{})
+	if got := sr.vaultPath(); got != authfile.DefaultVaultPath() {
+		t.Fatalf("vaultPath() = %q, want %q", got, authfile.DefaultVaultPath())
+	}
+
+	customVault := authfile.NewVault(t.TempDir())
+	sr = NewSmartRunner(NewRunner(provider.NewRegistry()), SmartRunnerOptions{Vault: customVault})
+	if got := sr.vaultPath(); got != customVault.BasePath() {
+		t.Fatalf("vaultPath() = %q, want %q", got, customVault.BasePath())
 	}
 }
 
@@ -946,6 +1376,19 @@ func TestSmartRunner_HandleRateLimit_NotifierFailureStillCompletesStoredCredenti
 	}
 	if notifier.calls < 2 {
 		t.Fatalf("expected notifier to be attempted at least twice, got %d", notifier.calls)
+	}
+}
+
+func TestMaybeMarkSeamlessResumePendingAllowsOriginalCommandRerunWithoutResumeHint(t *testing.T) {
+	registry := provider.NewRegistry()
+	sr := NewSmartRunner(NewRunner(registry), SmartRunnerOptions{})
+	sr.providerID = "codex"
+	sr.seamlessResumeCanRerun = true
+
+	sr.maybeMarkSeamlessResumePending("")
+
+	if !sr.seamlessResumePending {
+		t.Fatal("expected seamless resume to arm when the original command can be replayed")
 	}
 }
 

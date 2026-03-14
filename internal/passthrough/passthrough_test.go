@@ -287,6 +287,55 @@ func TestSetupPassthroughs(t *testing.T) {
 	})
 }
 
+func TestSetupPassthroughsRejectsTraversalAndParentConflicts(t *testing.T) {
+	realHome := t.TempDir()
+	pseudoHome := t.TempDir()
+
+	t.Run("skips path traversal targets", func(t *testing.T) {
+		outsideSrc := filepath.Join(filepath.Dir(realHome), "escape-source")
+		if err := os.WriteFile(outsideSrc, []byte("escape"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(outsideSrc) })
+
+		m := &Manager{
+			passthroughs: []string{"../outside-link"},
+			realHome:     realHome,
+		}
+		if err := m.SetupPassthroughs(pseudoHome); err != nil {
+			t.Fatalf("SetupPassthroughs() unexpected error = %v", err)
+		}
+
+		escapedLink := filepath.Join(filepath.Dir(pseudoHome), "outside-link")
+		if _, err := os.Lstat(escapedLink); !os.IsNotExist(err) {
+			t.Fatalf("expected traversal path %q to remain untouched, got err=%v", escapedLink, err)
+		}
+	})
+
+	t.Run("returns error when parent path cannot be created", func(t *testing.T) {
+		nestedSrc := filepath.Join(realHome, ".config", "nested")
+		if err := os.MkdirAll(filepath.Dir(nestedSrc), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(nestedSrc, []byte("nested"), 0600); err != nil {
+			t.Fatal(err)
+		}
+
+		conflictPseudo := t.TempDir()
+		if err := os.WriteFile(filepath.Join(conflictPseudo, ".config"), []byte("blocker"), 0600); err != nil {
+			t.Fatal(err)
+		}
+
+		m := &Manager{
+			passthroughs: []string{".config/nested"},
+			realHome:     realHome,
+		}
+		if err := m.SetupPassthroughs(conflictPseudo); err == nil {
+			t.Fatal("expected SetupPassthroughs() to fail when parent path is a file")
+		}
+	})
+}
+
 // =============================================================================
 // VerifyPassthroughs Tests
 // =============================================================================
@@ -419,6 +468,24 @@ func TestVerifyPassthroughs(t *testing.T) {
 		}
 		if s.Error != "exists but is not a symlink" {
 			t.Errorf("Error = %q, want 'exists but is not a symlink'", s.Error)
+		}
+	})
+
+	t.Run("reports escaping passthrough paths", func(t *testing.T) {
+		m2 := &Manager{
+			passthroughs: []string{"../outside-link"},
+			realHome:     realHome,
+		}
+
+		statuses, err := m2.VerifyPassthroughs(pseudoHome)
+		if err != nil {
+			t.Fatalf("VerifyPassthroughs() error = %v", err)
+		}
+		if len(statuses) != 1 {
+			t.Fatalf("expected 1 status, got %d", len(statuses))
+		}
+		if statuses[0].Error != "invalid path: escapes profile directory" {
+			t.Fatalf("unexpected error = %q", statuses[0].Error)
 		}
 	})
 }

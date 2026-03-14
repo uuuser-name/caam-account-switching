@@ -19,21 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Test helpers
-
-// captureOutput captures stdout and stderr from a command execution.
-func captureOutput(t *testing.T, cmd *cobra.Command, args []string) (stdout, stderr string, err error) {
-	t.Helper()
-
-	var outBuf, errBuf bytes.Buffer
-	cmd.SetOut(&outBuf)
-	cmd.SetErr(&errBuf)
-	cmd.SetArgs(args)
-
-	err = cmd.Execute()
-	return outBuf.String(), errBuf.String(), err
-}
-
 // createTestCmd creates a fresh root command for testing.
 func createTestCmd() *cobra.Command {
 	return rootCmd
@@ -651,7 +636,7 @@ func TestProfileDeleteFlags(t *testing.T) {
 func TestProfileUnlockFlags(t *testing.T) {
 	flag := profileUnlockCmd.Flags().Lookup("force")
 	if flag == nil {
-		t.Error("Expected --force flag")
+		t.Fatal("Expected --force flag")
 	}
 
 	// Check shorthand

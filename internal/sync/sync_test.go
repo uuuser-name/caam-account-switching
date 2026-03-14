@@ -1016,7 +1016,7 @@ func TestLoadLocalIdentity(t *testing.T) {
 func TestSyncDataDir(t *testing.T) {
 	t.Run("with CAAM_HOME", func(t *testing.T) {
 		t.Setenv("CAAM_HOME", "/custom/caam")
-	t.Setenv("XDG_DATA_HOME", "/custom/data")
+		t.Setenv("XDG_DATA_HOME", "/custom/data")
 
 		dir := SyncDataDir()
 		if dir != "/custom/caam/data/sync" {
@@ -1026,7 +1026,7 @@ func TestSyncDataDir(t *testing.T) {
 
 	t.Run("with XDG_DATA_HOME", func(t *testing.T) {
 		t.Setenv("CAAM_HOME", "")
-	t.Setenv("XDG_DATA_HOME", "/custom/data")
+		t.Setenv("XDG_DATA_HOME", "/custom/data")
 
 		dir := SyncDataDir()
 		if !strings.Contains(dir, "/custom/data") {
@@ -1039,7 +1039,7 @@ func TestSyncDataDir(t *testing.T) {
 
 	t.Run("without XDG_DATA_HOME", func(t *testing.T) {
 		t.Setenv("CAAM_HOME", "")
-	t.Setenv("XDG_DATA_HOME", "")
+		t.Setenv("XDG_DATA_HOME", "")
 
 		dir := SyncDataDir()
 		// Should use home directory
@@ -1210,7 +1210,9 @@ func TestSyncPoolGetMachineNotFound(t *testing.T) {
 // TestSyncPoolGetMachineByNameNotFound tests GetMachineByName with non-existent name.
 func TestSyncPoolGetMachineByNameNotFound(t *testing.T) {
 	pool := NewSyncPool()
-	pool.AddMachine(NewMachine("test", "192.168.1.100"))
+	if err := pool.AddMachine(NewMachine("test", "192.168.1.100")); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
 
 	if m := pool.GetMachineByName("nonexistent"); m != nil {
 		t.Error("GetMachineByName should return nil for non-existent name")
@@ -1221,7 +1223,9 @@ func TestSyncPoolGetMachineByNameNotFound(t *testing.T) {
 func TestSyncPoolGetMachineByNameCaseInsensitive(t *testing.T) {
 	pool := NewSyncPool()
 	m := NewMachine("MyServer", "192.168.1.100")
-	pool.AddMachine(m)
+	if err := pool.AddMachine(m); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
 
 	tests := []string{"myserver", "MYSERVER", "MyServer", "mYsErVeR"}
 	for _, name := range tests {
@@ -1239,7 +1243,9 @@ func TestSyncPoolSaveWithBasePath(t *testing.T) {
 	pool.Enable()
 
 	m := NewMachine("test", "192.168.1.100")
-	pool.AddMachine(m)
+	if err := pool.AddMachine(m); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
 
 	if err := pool.Save(); err != nil {
 		t.Fatalf("Save failed: %v", err)
@@ -1260,8 +1266,12 @@ func TestSyncPoolLoadWithBasePath(t *testing.T) {
 	pool := NewSyncPool()
 	pool.SetBasePath(tmpDir)
 	pool.Enable()
-	pool.AddMachine(NewMachine("test", "192.168.1.100"))
-	pool.Save()
+	if err := pool.AddMachine(NewMachine("test", "192.168.1.100")); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
+	if err := pool.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
 
 	// Now load it
 	loaded := NewSyncPool()
@@ -1284,7 +1294,9 @@ func TestSyncPoolLoadInvalidJSON(t *testing.T) {
 
 	// Write invalid JSON
 	poolFile := filepath.Join(tmpDir, "pool.json")
-	os.WriteFile(poolFile, []byte("{invalid json"), 0600)
+	if err := os.WriteFile(poolFile, []byte("{invalid json"), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", poolFile, err)
+	}
 
 	pool := NewSyncPool()
 	pool.SetBasePath(tmpDir)
@@ -1302,8 +1314,12 @@ func TestSyncPoolLoadSyncPoolError(t *testing.T) {
 
 	// Write invalid JSON to pool file
 	syncDir := filepath.Join(tmpDir, "caam", "sync")
-	os.MkdirAll(syncDir, 0700)
-	os.WriteFile(filepath.Join(syncDir, "pool.json"), []byte("{invalid"), 0600)
+	if err := os.MkdirAll(syncDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", syncDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(syncDir, "pool.json"), []byte("{invalid"), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", filepath.Join(syncDir, "pool.json"), err)
+	}
 
 	_, err := LoadSyncPool()
 	if err == nil {
@@ -1319,8 +1335,12 @@ func TestSyncStateLoadInvalidIdentity(t *testing.T) {
 
 	// Create invalid identity file
 	syncDir := filepath.Join(tmpDir, "caam", "sync")
-	os.MkdirAll(syncDir, 0700)
-	os.WriteFile(filepath.Join(syncDir, "identity.json"), []byte("{invalid json"), 0600)
+	if err := os.MkdirAll(syncDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", syncDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(syncDir, "identity.json"), []byte("{invalid json"), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", filepath.Join(syncDir, "identity.json"), err)
+	}
 
 	state := NewSyncState(syncDir)
 	if err := state.Load(); err == nil {
@@ -1486,10 +1506,14 @@ func TestSyncStateLoadQueueMaxSizeDefault(t *testing.T) {
 
 	// Write queue file with MaxSize = 0
 	queueData := `{"entries": [], "max_size": 0}`
-	os.WriteFile(filepath.Join(tmpDir, "queue.json"), []byte(queueData), 0600)
+	if err := os.WriteFile(filepath.Join(tmpDir, "queue.json"), []byte(queueData), 0600); err != nil {
+		t.Fatalf("WriteFile(queue.json) error = %v", err)
+	}
 
 	state := NewSyncState(tmpDir)
-	state.loadQueue()
+	if err := state.loadQueue(); err != nil {
+		t.Fatalf("loadQueue() error = %v", err)
+	}
 
 	if state.Queue.MaxSize != DefaultQueueMaxSize {
 		t.Errorf("Queue.MaxSize = %d, want %d", state.Queue.MaxSize, DefaultQueueMaxSize)
@@ -1502,10 +1526,14 @@ func TestSyncStateLoadHistoryMaxSizeDefault(t *testing.T) {
 
 	// Write history file with MaxSize = 0
 	historyData := `{"entries": [], "max_size": 0}`
-	os.WriteFile(filepath.Join(tmpDir, "history.json"), []byte(historyData), 0600)
+	if err := os.WriteFile(filepath.Join(tmpDir, "history.json"), []byte(historyData), 0600); err != nil {
+		t.Fatalf("WriteFile(history.json) error = %v", err)
+	}
 
 	state := NewSyncState(tmpDir)
-	state.loadHistory()
+	if err := state.loadHistory(); err != nil {
+		t.Fatalf("loadHistory() error = %v", err)
+	}
 
 	if state.History.MaxSize != DefaultHistoryMaxSize {
 		t.Errorf("History.MaxSize = %d, want %d", state.History.MaxSize, DefaultHistoryMaxSize)
@@ -1670,8 +1698,12 @@ func TestLoadFromCSVEmptyFile(t *testing.T) {
 
 	// Create empty CSV
 	csvDir := filepath.Join(tmpDir, ".caam")
-	os.MkdirAll(csvDir, 0700)
-	os.WriteFile(filepath.Join(csvDir, CSVFileName), []byte(""), 0600)
+	if err := os.MkdirAll(csvDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", csvDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(csvDir, CSVFileName), []byte(""), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", filepath.Join(csvDir, CSVFileName), err)
+	}
 
 	machines, err := LoadFromCSV()
 	if err != nil {
@@ -1691,11 +1723,15 @@ func TestLoadFromCSVInvalidLines(t *testing.T) {
 machine_name,address,ssh_key_path
 only-one-field
 ,missing-name,path
-valid-machine,192.168.1.100,~/.ssh/id_rsa
+	valid-machine,192.168.1.100,~/.ssh/id_rsa
 `
 	csvDir := filepath.Join(tmpDir, ".caam")
-	os.MkdirAll(csvDir, 0700)
-	os.WriteFile(filepath.Join(csvDir, CSVFileName), []byte(csvContent), 0600)
+	if err := os.MkdirAll(csvDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", csvDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(csvDir, CSVFileName), []byte(csvContent), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", filepath.Join(csvDir, CSVFileName), err)
+	}
 
 	machines, err := LoadFromCSV()
 	if err != nil {
@@ -1922,14 +1958,22 @@ func TestGetSyncStatus(t *testing.T) {
 	// Create state with various settings
 	syncDir := filepath.Join(tmpDir, "caam", "sync")
 	state := NewSyncState(syncDir)
-	state.Load()
+	if err := state.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
 	state.Pool.Enable()
 	state.Pool.EnableAutoSync()
-	state.Pool.AddMachine(NewMachine("m1", "192.168.1.100"))
-	state.Pool.AddMachine(NewMachine("m2", "192.168.1.101"))
+	if err := state.Pool.AddMachine(NewMachine("m1", "192.168.1.100")); err != nil {
+		t.Fatalf("AddMachine(m1) error = %v", err)
+	}
+	if err := state.Pool.AddMachine(NewMachine("m2", "192.168.1.101")); err != nil {
+		t.Fatalf("AddMachine(m2) error = %v", err)
+	}
 	state.Pool.RecordFullSync()
 	state.AddToQueue("claude", "test", "m1", "error")
-	state.Save()
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	status, err := GetSyncStatus()
 	if err != nil {
@@ -1962,8 +2006,12 @@ func TestGetSyncStatusNilPool(t *testing.T) {
 	// Create state with empty pool
 	syncDir := filepath.Join(tmpDir, "caam", "sync")
 	state := NewSyncState(syncDir)
-	state.Load()
-	state.Save()
+	if err := state.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	status, err := GetSyncStatus()
 	if err != nil {

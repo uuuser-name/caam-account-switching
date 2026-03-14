@@ -192,8 +192,12 @@ func TestTeeWriter(t *testing.T) {
 		}
 
 		// Write "rate limit" in two parts to simulate split output
-		tw.Write([]byte("Error: rate li"))
-		tw.Write([]byte("mit exceeded\n"))
+		if _, err := tw.Write([]byte("Error: rate li")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if _, err := tw.Write([]byte("mit exceeded\n")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		tw.Flush()
 
 		if !detector.Detected() {
@@ -219,7 +223,9 @@ func TestTeeWriter(t *testing.T) {
 		}
 
 		// Write complete line with rate limit
-		tw.Write([]byte("429 Too Many Requests\n"))
+		if _, err := tw.Write([]byte("429 Too Many Requests\n")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		tw.Flush()
 
 		if !detector.Detected() {
@@ -240,8 +246,12 @@ func TestTeeWriter(t *testing.T) {
 		}
 
 		// Write normal output
-		tw.Write([]byte("Hello world\n"))
-		tw.Write([]byte("Everything is working fine\n"))
+		if _, err := tw.Write([]byte("Hello world\n")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if _, err := tw.Write([]byte("Everything is working fine\n")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		tw.Flush()
 
 		if detector.Detected() {
@@ -262,7 +272,9 @@ func TestTeeWriter(t *testing.T) {
 		}
 
 		// Write output without trailing newline (common in JSON errors)
-		tw.Write([]byte(`{"error": "rate limit exceeded"}`))
+		if _, err := tw.Write([]byte(`{"error": "rate limit exceeded"}`)); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		tw.Flush()
 
 		if !detector.Detected() {
@@ -611,7 +623,9 @@ func TestTeeWriter_MultipleLines(t *testing.T) {
 	}
 
 	// Write multiple lines at once
-	tw.Write([]byte("line1\nline2\nline3\n"))
+	if _, err := tw.Write([]byte("line1\nline2\nline3\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
 
 	// Verify output
 	if dest.String() != "line1\nline2\nline3\n" {

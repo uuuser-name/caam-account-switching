@@ -69,7 +69,7 @@ func TestAuthDetectFlags(t *testing.T) {
 	// Check --json flag exists
 	flag := authDetectCmd.Flags().Lookup("json")
 	if flag == nil {
-		t.Error("Expected --json flag")
+		t.Fatal("Expected --json flag")
 	}
 	if flag.DefValue != "false" {
 		t.Errorf("Expected default false, got %q", flag.DefValue)

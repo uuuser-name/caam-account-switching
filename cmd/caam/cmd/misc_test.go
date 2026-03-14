@@ -331,7 +331,11 @@ func TestCheckLocks(t *testing.T) {
 	if err := prof.Lock(); err != nil {
 		t.Fatalf("Lock failed: %v", err)
 	}
-	defer prof.Unlock()
+	defer func() {
+		if err := prof.Unlock(); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("Unlock() error = %v", err)
+		}
+	}()
 
 	// Check locks
 	// Note: This uses the global profileStore which may not be set up

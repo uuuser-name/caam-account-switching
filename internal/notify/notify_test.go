@@ -64,7 +64,9 @@ func TestWebhookNotifier(t *testing.T) {
 		}
 
 		var payload map[string]interface{}
-		json.NewDecoder(r.Body).Decode(&payload)
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
 
 		if payload["level"] != "CRITICAL" {
 			t.Errorf("Expected level CRITICAL, got %v", payload["level"])

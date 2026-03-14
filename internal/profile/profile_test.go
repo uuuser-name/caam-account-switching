@@ -211,7 +211,9 @@ func TestGetLockInfo(t *testing.T) {
 	}
 
 	// Clean up
-	prof.Unlock()
+	if err := prof.Unlock(); err != nil {
+		t.Fatalf("Unlock() error = %v", err)
+	}
 }
 
 func TestIsLockStale(t *testing.T) {
@@ -247,7 +249,9 @@ func TestIsLockStale(t *testing.T) {
 		t.Error("expected not stale when lock is from current process")
 	}
 
-	prof.Unlock()
+	if err := prof.Unlock(); err != nil {
+		t.Fatalf("Unlock() error = %v", err)
+	}
 
 	// Create lock with stale PID from a dead process
 	lockPath := filepath.Join(tmpDir, ".lock")
@@ -333,7 +337,9 @@ func TestLockWithCleanup(t *testing.T) {
 		t.Errorf("LockInfo.PID = %d, want %d", info.PID, os.Getpid())
 	}
 
-	prof.Unlock()
+	if err := prof.Unlock(); err != nil {
+		t.Fatalf("Unlock() error = %v", err)
+	}
 }
 
 func TestIsProcessAlive(t *testing.T) {
@@ -602,7 +608,9 @@ func TestStoreLoad(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 	created.AccountLabel = "work@company.com"
-	created.Save()
+	if err := created.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	// Load
 	loaded, err := store.Load("claude", "work")
@@ -664,7 +672,11 @@ func TestStoreDeleteLockedFails(t *testing.T) {
 	if err := prof.Lock(); err != nil {
 		t.Fatalf("Lock() error = %v", err)
 	}
-	defer prof.Unlock()
+	t.Cleanup(func() {
+		if err := prof.Unlock(); err != nil && !os.IsNotExist(err) {
+			t.Errorf("Unlock() cleanup error = %v", err)
+		}
+	})
 
 	// Delete should fail
 	if err := store.Delete("codex", "locked-profile"); err == nil {
@@ -677,9 +689,15 @@ func TestStoreList(t *testing.T) {
 	store := NewStore(tmpDir)
 
 	// Create some profiles
-	store.Create("claude", "work", "oauth")
-	store.Create("claude", "personal", "oauth")
-	store.Create("codex", "main", "api-key")
+	if _, err := store.Create("claude", "work", "oauth"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := store.Create("claude", "personal", "oauth"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := store.Create("codex", "main", "api-key"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 
 	// List claude profiles
 	profiles, err := store.List("claude")
@@ -714,9 +732,15 @@ func TestStoreListAll(t *testing.T) {
 	store := NewStore(tmpDir)
 
 	// Create profiles for multiple providers
-	store.Create("claude", "a", "oauth")
-	store.Create("claude", "b", "oauth")
-	store.Create("codex", "c", "api-key")
+	if _, err := store.Create("claude", "a", "oauth"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := store.Create("claude", "b", "oauth"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := store.Create("codex", "c", "api-key"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 
 	allProfiles, err := store.ListAll()
 	if err != nil {
@@ -744,7 +768,9 @@ func TestStoreExists(t *testing.T) {
 	}
 
 	// Create
-	store.Create("claude", "test", "oauth")
+	if _, err := store.Create("claude", "test", "oauth"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 
 	// Now exists
 	if !store.Exists("claude", "test") {
@@ -959,7 +985,9 @@ func TestStoreCloneErrors(t *testing.T) {
 	}
 
 	// Clone to existing target without --force
-	store.Create("claude", "target", "oauth")
+	if _, err := store.Create("claude", "target", "oauth"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	_, err = store.Clone("claude", "existing", "target", CloneOptions{})
 	if err == nil {
 		t.Error("expected Clone() to fail when target exists without Force")
@@ -982,7 +1010,9 @@ func TestStoreCloneIndependence(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 	source.Description = "Original"
-	source.Save()
+	if err := source.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	// Clone
 	_, err = store.Clone("codex", "source", "clone", CloneOptions{})
@@ -992,7 +1022,9 @@ func TestStoreCloneIndependence(t *testing.T) {
 
 	// Modify source
 	source.Description = "Modified"
-	source.Save()
+	if err := source.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	// Load clone and verify it's unchanged
 	clone, err := store.Load("codex", "clone")
@@ -1266,17 +1298,32 @@ func TestStoreListByTag(t *testing.T) {
 	store := NewStore(tmpDir)
 
 	// Create profiles with tags
-	p1, _ := store.Create("claude", "work1", "oauth")
+	p1, err := store.Create("claude", "work1", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p1.Tags = []string{"work", "client-a"}
-	p1.Save()
+	if err := p1.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
-	p2, _ := store.Create("claude", "work2", "oauth")
+	p2, err := store.Create("claude", "work2", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p2.Tags = []string{"work", "client-b"}
-	p2.Save()
+	if err := p2.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
-	p3, _ := store.Create("claude", "personal", "oauth")
+	p3, err := store.Create("claude", "personal", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p3.Tags = []string{"personal"}
-	p3.Save()
+	if err := p3.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	// List by "work" tag
 	workProfiles, err := store.ListByTag("claude", "work")
@@ -1311,17 +1358,32 @@ func TestStoreListAllByTag(t *testing.T) {
 	store := NewStore(tmpDir)
 
 	// Create profiles across providers
-	p1, _ := store.Create("claude", "work", "oauth")
+	p1, err := store.Create("claude", "work", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p1.Tags = []string{"work"}
-	p1.Save()
+	if err := p1.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
-	p2, _ := store.Create("codex", "work", "api-key")
+	p2, err := store.Create("codex", "work", "api-key")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p2.Tags = []string{"work"}
-	p2.Save()
+	if err := p2.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
-	p3, _ := store.Create("claude", "personal", "oauth")
+	p3, err := store.Create("claude", "personal", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p3.Tags = []string{"personal"}
-	p3.Save()
+	if err := p3.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	// List all by "work" tag
 	workProfiles, err := store.ListAllByTag("work")
@@ -1344,17 +1406,32 @@ func TestStoreAllTags(t *testing.T) {
 	store := NewStore(tmpDir)
 
 	// Create profiles with various tags
-	p1, _ := store.Create("claude", "p1", "oauth")
+	p1, err := store.Create("claude", "p1", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p1.Tags = []string{"work", "client-a"}
-	p1.Save()
+	if err := p1.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
-	p2, _ := store.Create("claude", "p2", "oauth")
+	p2, err := store.Create("claude", "p2", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p2.Tags = []string{"work", "client-b"}
-	p2.Save()
+	if err := p2.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
-	p3, _ := store.Create("claude", "p3", "oauth")
+	p3, err := store.Create("claude", "p3", "oauth")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
 	p3.Tags = []string{"personal"}
-	p3.Save()
+	if err := p3.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	tags, err := store.AllTags("claude")
 	if err != nil {

@@ -60,7 +60,9 @@ func TestE2E_ProjectAssociationWorkflow(t *testing.T) {
 	h.StartStep("directory_matching", "Testing subdirectory inheritance")
 
 	subDir := filepath.Join(projectDir, "subdir")
-	os.MkdirAll(subDir, 0700)
+	if err := os.MkdirAll(subDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", subDir, err)
+	}
 
 	resolvedSub, err := store.Resolve(subDir)
 	if err != nil {

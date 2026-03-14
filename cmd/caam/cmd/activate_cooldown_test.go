@@ -72,12 +72,9 @@ func TestActivate_CooldownPreventsSwitchUnlessForced(t *testing.T) {
 	denyCmd.Flags().Bool("backup-current", false, "")
 	denyCmd.Flags().Bool("force", false, "")
 
-	err = runActivate(denyCmd, []string{"codex", "target"})
-	if err == nil {
-		// In interactive runs, user answered "n"; still should not switch.
-	} else {
-		// In non-interactive runs, cooldown check returns an error to avoid blocking.
-	}
+	// In interactive runs the denial returns nil; in non-interactive runs cooldown
+	// enforcement may return an error instead. Either outcome is acceptable here.
+	_ = runActivate(denyCmd, []string{"codex", "target"})
 
 	gotActive, readErr := os.ReadFile(authPath)
 	if readErr != nil {

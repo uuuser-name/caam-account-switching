@@ -240,7 +240,7 @@ func TestRunCommand_Extended(t *testing.T) {
 		return cmd
 	}
 
-	runCmd.Flags().Set("quiet", "true")
+	require.NoError(t, runCmd.Flags().Set("quiet", "true"))
 	err := runWrap(runCmd, []string{"claude", "prompt"})
 	require.NoError(t, err)
 
@@ -249,13 +249,14 @@ func TestRunCommand_Extended(t *testing.T) {
 	// 3. Test Failover
 	h.StartStep("Failover", "Test rate limit failover")
 
-	runCmd.Flags().Set("max-retries", "1")
-	runCmd.Flags().Set("cooldown", "30m")
-	runCmd.Flags().Set("quiet", "true")
-	runCmd.Flags().Set("algorithm", "round_robin")
+	require.NoError(t, runCmd.Flags().Set("max-retries", "1"))
+	require.NoError(t, runCmd.Flags().Set("cooldown", "30m"))
+	require.NoError(t, runCmd.Flags().Set("quiet", "true"))
+	require.NoError(t, runCmd.Flags().Set("algorithm", "round_robin"))
 
 	db, _ := caamdb.Open()
-	db.ClearAllCooldowns()
+	_, err = db.ClearAllCooldowns()
+	require.NoError(t, err)
 	db.Close()
 
 	caamexec.ExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
@@ -668,7 +669,11 @@ func TestRunWrap_CodexExplicitResumeBypassesLockedProfileFallback(t *testing.T) 
 	activeProfile, err := profileStore.Create("codex", "active", "oauth")
 	require.NoError(t, err)
 	require.NoError(t, activeProfile.LockWithCleanup())
-	defer activeProfile.Unlock()
+	defer func() {
+		if err := activeProfile.Unlock(); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("Unlock() error = %v", err)
+		}
+	}()
 
 	require.NoError(t, runCmd.Flags().Set("quiet", "true"))
 	require.NoError(t, runCmd.Flags().Set("algorithm", "round_robin"))

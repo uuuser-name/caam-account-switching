@@ -149,10 +149,10 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-		t.Run("uses GEMINI_HOME if set", func(t *testing.T) {
-			setEnv(t, "GEMINI_HOME", "/custom/gemini/home")
-			p := New()
-			files := p.AuthFiles()
+	t.Run("uses GEMINI_HOME if set", func(t *testing.T) {
+		setEnv(t, "GEMINI_HOME", "/custom/gemini/home")
+		p := New()
+		files := p.AuthFiles()
 
 		expected := "/custom/gemini/home/settings.json"
 		if files[0].Path != expected {
@@ -160,12 +160,15 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-		t.Run("uses default .gemini if GEMINI_HOME not set", func(t *testing.T) {
-			unsetEnv(t, "GEMINI_HOME")
-			p := New()
-			files := p.AuthFiles()
+	t.Run("uses default .gemini if GEMINI_HOME not set", func(t *testing.T) {
+		unsetEnv(t, "GEMINI_HOME")
+		p := New()
+		files := p.AuthFiles()
 
-		homeDir, _ := os.UserHomeDir()
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
 		expected := filepath.Join(homeDir, ".gemini", "settings.json")
 		if files[0].Path != expected {
 			t.Errorf("AuthFiles()[0].Path = %q, want %q", files[0].Path, expected)
@@ -210,7 +213,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		geminiDir := filepath.Join(prof.HomePath(), ".gemini")
 		info, err := os.Stat(geminiDir)
@@ -231,10 +236,15 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		homePath := prof.HomePath()
-		info, _ := os.Stat(homePath)
+		info, err := os.Stat(homePath)
+		if err != nil {
+			t.Fatalf("Stat(%s) error = %v", homePath, err)
+		}
 		if info.Mode().Perm() != 0700 {
 			t.Errorf("home permissions = %o, want 0700", info.Mode().Perm())
 		}
@@ -249,7 +259,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 		if err := p.PrepareProfile(context.Background(), prof); err != nil {
 			t.Errorf("second PrepareProfile() error = %v", err)
 		}
@@ -295,7 +307,9 @@ func TestPrepareProfileWithVertexADC(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		gcloudDir := filepath.Join(tmpDir, "gcloud")
 		if _, err := os.Stat(gcloudDir); !os.IsNotExist(err) {
@@ -344,7 +358,10 @@ func TestEnv(t *testing.T) {
 		}
 
 		p := New()
-		env, _ := p.Env(context.Background(), prof)
+		env, err := p.Env(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Env() error = %v", err)
+		}
 
 		if len(env) != 1 {
 			t.Errorf("Env() returned %d vars for OAuth, want 1", len(env))
@@ -361,7 +378,10 @@ func TestEnv(t *testing.T) {
 		}
 
 		p := New()
-		env, _ := p.Env(context.Background(), prof)
+		env, err := p.Env(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Env() error = %v", err)
+		}
 
 		cloudsdk, ok := env["CLOUDSDK_CONFIG"]
 		if !ok {
@@ -384,7 +404,10 @@ func TestEnv(t *testing.T) {
 		}
 
 		p := New()
-		env, _ := p.Env(context.Background(), prof)
+		env, err := p.Env(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Env() error = %v", err)
+		}
 
 		if len(env) != 2 {
 			t.Errorf("Env() returned %d vars for VertexADC, want 2", len(env))
@@ -406,7 +429,9 @@ func TestLogout(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create .env file
 		envPath := filepath.Join(prof.HomePath(), ".gemini", ".env")
@@ -434,7 +459,9 @@ func TestLogout(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Don't create .env, just logout
 		if err := p.Logout(context.Background(), prof); err != nil {
@@ -458,7 +485,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create .env file
 		envPath := filepath.Join(prof.HomePath(), ".gemini", ".env")
@@ -485,7 +514,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		status, err := p.Status(context.Background(), prof)
 		if err != nil {
@@ -506,7 +537,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create ADC credentials file
 		adcPath := filepath.Join(tmpDir, "gcloud", "application_default_credentials.json")
@@ -533,7 +566,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		status, err := p.Status(context.Background(), prof)
 		if err != nil {
@@ -554,7 +589,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create settings.json
 		geminiDir := filepath.Join(prof.HomePath(), ".gemini")
@@ -584,7 +621,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		status, err := p.Status(context.Background(), prof)
 		if err != nil {
@@ -604,19 +643,33 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Initially not locked
-		status, _ := p.Status(context.Background(), prof)
+		status, err := p.Status(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Status() error = %v", err)
+		}
 		if status.HasLockFile {
 			t.Error("HasLockFile should be false initially")
 		}
 
 		// Lock the profile
-		prof.Lock()
-		defer prof.Unlock()
+		if err := prof.Lock(); err != nil {
+			t.Fatalf("Lock() error = %v", err)
+		}
+		defer func() {
+			if err := prof.Unlock(); err != nil {
+				t.Fatalf("Unlock() error = %v", err)
+			}
+		}()
 
-		status, _ = p.Status(context.Background(), prof)
+		status, err = p.Status(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Status() error = %v", err)
+		}
 		if !status.HasLockFile {
 			t.Error("HasLockFile should be true when locked")
 		}
@@ -637,7 +690,9 @@ func TestValidateProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		if err := p.ValidateProfile(context.Background(), prof); err != nil {
 			t.Errorf("ValidateProfile() error = %v", err)
@@ -671,7 +726,9 @@ func TestValidateProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		if err := p.ValidateProfile(context.Background(), prof); err != nil {
 			t.Errorf("ValidateProfile() error = %v", err)
@@ -688,7 +745,9 @@ func TestValidateProfile(t *testing.T) {
 		}
 
 		// Create home but not gcloud dir
-		os.MkdirAll(prof.HomePath(), 0700)
+		if err := os.MkdirAll(prof.HomePath(), 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", prof.HomePath(), err)
+		}
 
 		p := New()
 		err := p.ValidateProfile(context.Background(), prof)
@@ -721,20 +780,23 @@ func TestProviderInterface(t *testing.T) {
 // geminiHome Helper Tests
 // =============================================================================
 
-	func TestGeminiHome(t *testing.T) {
-		t.Run("respects GEMINI_HOME env var", func(t *testing.T) {
-			setEnv(t, "GEMINI_HOME", "/test/gemini")
-			result := geminiHome()
-			if result != "/test/gemini" {
-				t.Errorf("geminiHome() = %q, want /test/gemini", result)
+func TestGeminiHome(t *testing.T) {
+	t.Run("respects GEMINI_HOME env var", func(t *testing.T) {
+		setEnv(t, "GEMINI_HOME", "/test/gemini")
+		result := geminiHome()
+		if result != "/test/gemini" {
+			t.Errorf("geminiHome() = %q, want /test/gemini", result)
 		}
 	})
 
-		t.Run("falls back to ~/.gemini", func(t *testing.T) {
-			unsetEnv(t, "GEMINI_HOME")
-			result := geminiHome()
-			homeDir, _ := os.UserHomeDir()
-			expected := filepath.Join(homeDir, ".gemini")
+	t.Run("falls back to ~/.gemini", func(t *testing.T) {
+		unsetEnv(t, "GEMINI_HOME")
+		result := geminiHome()
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
+		expected := filepath.Join(homeDir, ".gemini")
 		if result != expected {
 			t.Errorf("geminiHome() = %q, want %s", result, expected)
 		}
@@ -767,7 +829,10 @@ func TestFullOAuthLifecycle(t *testing.T) {
 	}
 
 	// Status (not logged in yet)
-	status, _ := p.Status(context.Background(), prof)
+	status, err := p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in before login")
 	}
@@ -782,13 +847,19 @@ func TestFullOAuthLifecycle(t *testing.T) {
 	}
 
 	// Status (now logged in)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if !status.LoggedIn {
 		t.Error("should be logged in after settings.json created")
 	}
 
 	// Get env
-	env, _ := p.Env(context.Background(), prof)
+	env, err := p.Env(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Env() error = %v", err)
+	}
 	if env["HOME"] == "" {
 		t.Error("HOME should be set")
 	}
@@ -826,17 +897,25 @@ func TestFullAPIKeyLifecycle(t *testing.T) {
 	}
 
 	// Status (not logged in yet)
-	status, _ := p.Status(context.Background(), prof)
+	status, err := p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in before API key set")
 	}
 
 	// Simulate login by creating .env file
 	envPath := filepath.Join(prof.HomePath(), ".gemini", ".env")
-	os.WriteFile(envPath, []byte("GEMINI_API_KEY=test-key-12345"), 0600)
+	if err := os.WriteFile(envPath, []byte("GEMINI_API_KEY=test-key-12345"), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", envPath, err)
+	}
 
 	// Status (now logged in)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if !status.LoggedIn {
 		t.Error("should be logged in after .env created")
 	}
@@ -856,7 +935,10 @@ func TestFullAPIKeyLifecycle(t *testing.T) {
 	}
 
 	// Status (logged out)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in after logout")
 	}
@@ -920,28 +1002,38 @@ func TestFullVertexADCLifecycle(t *testing.T) {
 	}
 
 	// Status (not logged in yet)
-	status, _ := p.Status(context.Background(), prof)
+	status, err := p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in before ADC credentials")
 	}
 
 	// Simulate login by creating ADC credentials
 	adcPath := filepath.Join(gcloudDir, "application_default_credentials.json")
-	os.WriteFile(adcPath, []byte(`{"type":"authorized_user"}`), 0600)
+	if err := os.WriteFile(adcPath, []byte(`{"type":"authorized_user"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", adcPath, err)
+	}
 
 	// Status (now logged in)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if !status.LoggedIn {
 		t.Error("should be logged in after ADC created")
 	}
 
 	// Env should include CLOUDSDK_CONFIG
-	env, _ := p.Env(context.Background(), prof)
+	env, err := p.Env(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Env() error = %v", err)
+	}
 	if env["CLOUDSDK_CONFIG"] != gcloudDir {
 		t.Errorf("CLOUDSDK_CONFIG = %q, want %q", env["CLOUDSDK_CONFIG"], gcloudDir)
 	}
 }
-
 
 // =============================================================================
 // DetectExistingAuth Tests
@@ -961,7 +1053,9 @@ func TestDetectExistingAuth(t *testing.T) {
 		p := New()
 
 		geminiDir := filepath.Join(home, ".gemini")
-		os.MkdirAll(geminiDir, 0700)
+		if err := os.MkdirAll(geminiDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", geminiDir, err)
+		}
 		path := filepath.Join(geminiDir, "settings.json")
 		writeJSON(t, path, map[string]interface{}{"oauth": map[string]interface{}{}})
 
@@ -983,7 +1077,9 @@ func TestDetectExistingAuth(t *testing.T) {
 		p := New()
 
 		geminiDir := filepath.Join(home, ".gemini")
-		os.MkdirAll(geminiDir, 0700)
+		if err := os.MkdirAll(geminiDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", geminiDir, err)
+		}
 		path := filepath.Join(geminiDir, "oauth_credentials.json")
 		writeJSON(t, path, map[string]interface{}{"access_token": "valid"})
 
@@ -1005,9 +1101,13 @@ func TestDetectExistingAuth(t *testing.T) {
 		p := New()
 
 		geminiDir := filepath.Join(home, ".gemini")
-		os.MkdirAll(geminiDir, 0700)
+		if err := os.MkdirAll(geminiDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", geminiDir, err)
+		}
 		path := filepath.Join(geminiDir, ".env")
-		os.WriteFile(path, []byte("GEMINI_API_KEY=test"), 0600)
+		if err := os.WriteFile(path, []byte("GEMINI_API_KEY=test"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
 		detection, err := p.DetectExistingAuth()
 		if err != nil {
@@ -1027,7 +1127,9 @@ func TestDetectExistingAuth(t *testing.T) {
 		p := New()
 
 		gcloudDir := filepath.Join(xdg, "gcloud")
-		os.MkdirAll(gcloudDir, 0700)
+		if err := os.MkdirAll(gcloudDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", gcloudDir, err)
+		}
 		path := filepath.Join(gcloudDir, "application_default_credentials.json")
 		writeJSON(t, path, map[string]interface{}{"client_id": "test", "type": "authorized_user"})
 
@@ -1070,20 +1172,32 @@ func TestDetectExistingAuth(t *testing.T) {
 		home, _ := setupEnv(t)
 		p := New()
 		geminiDir := filepath.Join(home, ".gemini")
-		os.MkdirAll(geminiDir, 0700)
+		if err := os.MkdirAll(geminiDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", geminiDir, err)
+		}
 
 		// Invalid JSON settings
 		path := filepath.Join(geminiDir, "settings.json")
-		os.WriteFile(path, []byte("{invalid"), 0600)
-		detection, _ := p.DetectExistingAuth()
+		if err := os.WriteFile(path, []byte("{invalid"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
+		detection, err := p.DetectExistingAuth()
+		if err != nil {
+			t.Fatalf("DetectExistingAuth() error = %v", err)
+		}
 		if detection.Locations[0].IsValid {
 			t.Error("Should be invalid settings.json")
 		}
 
 		// Invalid .env
 		envPath := filepath.Join(geminiDir, ".env")
-		os.WriteFile(envPath, []byte("FOO=BAR"), 0600)
-		detection, _ = p.DetectExistingAuth()
+		if err := os.WriteFile(envPath, []byte("FOO=BAR"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", envPath, err)
+		}
+		detection, err = p.DetectExistingAuth()
+		if err != nil {
+			t.Fatalf("DetectExistingAuth() error = %v", err)
+		}
 		// .env location index depends on list order, checking all
 		for _, loc := range detection.Locations {
 			if filepath.Base(loc.Path) == ".env" && loc.IsValid {
@@ -1106,12 +1220,16 @@ func TestImportAuth(t *testing.T) {
 			BasePath: tmpDir,
 		}
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Source from .gemini structure
 		srcDir := t.TempDir()
 		srcGemini := filepath.Join(srcDir, ".gemini")
-		os.MkdirAll(srcGemini, 0700)
+		if err := os.MkdirAll(srcGemini, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", srcGemini, err)
+		}
 		srcPath := filepath.Join(srcGemini, "settings.json")
 		writeJSON(t, srcPath, map[string]interface{}{"oauth": true})
 
@@ -1135,12 +1253,16 @@ func TestImportAuth(t *testing.T) {
 			BasePath: tmpDir,
 		}
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Source from gcloud structure
 		srcDir := t.TempDir()
 		srcGcloud := filepath.Join(srcDir, "gcloud")
-		os.MkdirAll(srcGcloud, 0700)
+		if err := os.MkdirAll(srcGcloud, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", srcGcloud, err)
+		}
 		srcPath := filepath.Join(srcGcloud, "application_default_credentials.json")
 		writeJSON(t, srcPath, map[string]interface{}{"type": "authorized_user"})
 
@@ -1163,13 +1285,19 @@ func TestImportAuth(t *testing.T) {
 			BasePath: tmpDir,
 		}
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		srcDir := t.TempDir()
 		srcGemini := filepath.Join(srcDir, ".gemini")
-		os.MkdirAll(srcGemini, 0700)
+		if err := os.MkdirAll(srcGemini, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", srcGemini, err)
+		}
 		srcPath := filepath.Join(srcGemini, ".env")
-		os.WriteFile(srcPath, []byte("KEY=val"), 0600)
+		if err := os.WriteFile(srcPath, []byte("KEY=val"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", srcPath, err)
+		}
 
 		copied, err := p.ImportAuth(context.Background(), srcPath, prof)
 		if err != nil {

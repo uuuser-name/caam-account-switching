@@ -159,7 +159,10 @@ func TestAuthFiles(t *testing.T) {
 		if len(files) != 1 {
 			t.Fatal("expected 1 auth file")
 		}
-		homeDir, _ := os.UserHomeDir()
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
 		expected := filepath.Join(homeDir, ".codex", "auth.json")
 		if files[0].Path != expected {
 			t.Errorf("AuthFiles()[0].Path = %q, want %q", files[0].Path, expected)
@@ -215,7 +218,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		codexHomePath := prof.CodexHomePath()
 		info, err := os.Stat(codexHomePath)
@@ -238,7 +243,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 		if err := p.PrepareProfile(context.Background(), prof); err != nil {
 			t.Errorf("second PrepareProfile() error = %v", err)
 		}
@@ -304,7 +311,9 @@ func TestLogout(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create auth.json
 		authPath := filepath.Join(prof.CodexHomePath(), "auth.json")
@@ -332,7 +341,9 @@ func TestLogout(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Don't create auth.json, just logout
 		if err := p.Logout(context.Background(), prof); err != nil {
@@ -355,7 +366,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create auth.json
 		authPath := filepath.Join(prof.CodexHomePath(), "auth.json")
@@ -381,7 +394,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		status, err := p.Status(context.Background(), prof)
 		if err != nil {
@@ -403,16 +418,28 @@ func TestStatus(t *testing.T) {
 		p := New()
 
 		// Initially not locked
-		status, _ := p.Status(context.Background(), prof)
+		status, err := p.Status(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Status() error = %v", err)
+		}
 		if status.HasLockFile {
 			t.Error("HasLockFile should be false initially")
 		}
 
 		// Lock the profile
-		prof.Lock()
-		defer prof.Unlock()
+		if err := prof.Lock(); err != nil {
+			t.Fatalf("Lock() error = %v", err)
+		}
+		defer func() {
+			if err := prof.Unlock(); err != nil {
+				t.Fatalf("Unlock() error = %v", err)
+			}
+		}()
 
-		status, _ = p.Status(context.Background(), prof)
+		status, err = p.Status(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Status() error = %v", err)
+		}
 		if !status.HasLockFile {
 			t.Error("HasLockFile should be true when locked")
 		}
@@ -433,7 +460,9 @@ func TestValidateProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		if err := p.ValidateProfile(context.Background(), prof); err != nil {
 			t.Errorf("ValidateProfile() error = %v", err)
@@ -495,7 +524,10 @@ func TestCodexHomeHelper(t *testing.T) {
 		t.Setenv("CODEX_HOME", "")
 		p := New()
 		files := p.AuthFiles()
-		homeDir, _ := os.UserHomeDir()
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
 		expected := filepath.Join(homeDir, ".codex")
 		if !hasPrefix(files[0].Path, expected) {
 			t.Errorf("Path %q should use %s", files[0].Path, expected)
@@ -534,23 +566,34 @@ func TestFullProfileLifecycle(t *testing.T) {
 	}
 
 	// Status (not logged in yet)
-	status, _ := p.Status(context.Background(), prof)
+	status, err := p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in before login")
 	}
 
 	// Simulate login by creating auth.json
 	authPath := filepath.Join(prof.CodexHomePath(), "auth.json")
-	os.WriteFile(authPath, []byte(`{"token":"test"}`), 0600)
+	if err := os.WriteFile(authPath, []byte(`{"token":"test"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+	}
 
 	// Status (now logged in)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if !status.LoggedIn {
 		t.Error("should be logged in after auth.json created")
 	}
 
 	// Get env
-	env, _ := p.Env(context.Background(), prof)
+	env, err := p.Env(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Env() error = %v", err)
+	}
 	if env["CODEX_HOME"] == "" {
 		t.Error("CODEX_HOME should be set")
 	}
@@ -561,12 +604,14 @@ func TestFullProfileLifecycle(t *testing.T) {
 	}
 
 	// Status (logged out)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in after logout")
 	}
 }
-
 
 // =============================================================================
 // DetectExistingAuth Tests
@@ -585,7 +630,9 @@ func TestDetectExistingAuth(t *testing.T) {
 		p := New()
 
 		codexDir := filepath.Join(home, ".codex")
-		os.MkdirAll(codexDir, 0700)
+		if err := os.MkdirAll(codexDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+		}
 		authPath := filepath.Join(codexDir, "auth.json")
 
 		data := map[string]interface{}{"access_token": "valid"}
@@ -632,19 +679,29 @@ func TestDetectExistingAuth(t *testing.T) {
 		p := New()
 
 		codexDir := filepath.Join(home, ".codex")
-		os.MkdirAll(codexDir, 0700)
+		if err := os.MkdirAll(codexDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", codexDir, err)
+		}
 		authPath := filepath.Join(codexDir, "auth.json")
 
 		// Invalid JSON
-		os.WriteFile(authPath, []byte("{invalid"), 0600)
-		detection, _ := p.DetectExistingAuth()
+		if err := os.WriteFile(authPath, []byte("{invalid"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+		}
+		detection, err := p.DetectExistingAuth()
+		if err != nil {
+			t.Fatalf("DetectExistingAuth() error = %v", err)
+		}
 		if detection.Locations[0].IsValid {
 			t.Error("Should be invalid (json error)")
 		}
 
 		// Valid JSON but missing token
 		writeJSON(t, authPath, map[string]interface{}{"foo": "bar"})
-		detection, _ = p.DetectExistingAuth()
+		detection, err = p.DetectExistingAuth()
+		if err != nil {
+			t.Fatalf("DetectExistingAuth() error = %v", err)
+		}
 		if detection.Locations[0].IsValid {
 			t.Error("Should be invalid (missing token)")
 		}
@@ -653,7 +710,10 @@ func TestDetectExistingAuth(t *testing.T) {
 		validFields := []string{"access_token", "accessToken", "api_key", "token"}
 		for _, field := range validFields {
 			writeJSON(t, authPath, map[string]interface{}{field: "val"})
-			detection, _ = p.DetectExistingAuth()
+			detection, err = p.DetectExistingAuth()
+			if err != nil {
+				t.Fatalf("DetectExistingAuth() error = %v", err)
+			}
 			if !detection.Locations[0].IsValid {
 				t.Errorf("Should be valid with field %s", field)
 			}
@@ -668,17 +728,26 @@ func TestDetectExistingAuth(t *testing.T) {
 
 		// Old file in default location
 		defaultDir := filepath.Join(home, ".codex")
-		os.MkdirAll(defaultDir, 0700)
+		if err := os.MkdirAll(defaultDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", defaultDir, err)
+		}
 		defaultPath := filepath.Join(defaultDir, "auth.json")
 		writeJSON(t, defaultPath, map[string]interface{}{"token": "old"})
-		os.Chtimes(defaultPath, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour))
+		if err := os.Chtimes(defaultPath, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour)); err != nil {
+			t.Fatalf("Chtimes(%s) error = %v", defaultPath, err)
+		}
 
 		// New file in custom location
 		customPath := filepath.Join(customHome, "auth.json")
 		writeJSON(t, customPath, map[string]interface{}{"token": "new"})
-		os.Chtimes(customPath, time.Now(), time.Now())
+		if err := os.Chtimes(customPath, time.Now(), time.Now()); err != nil {
+			t.Fatalf("Chtimes(%s) error = %v", customPath, err)
+		}
 
-		detection, _ := p.DetectExistingAuth()
+		detection, err := p.DetectExistingAuth()
+		if err != nil {
+			t.Fatalf("DetectExistingAuth() error = %v", err)
+		}
 		if detection.Primary.Path != customPath {
 			t.Errorf("Should pick custom path (newer). Got %s", detection.Primary.Path)
 		}
@@ -701,7 +770,9 @@ func TestImportAuth(t *testing.T) {
 			BasePath: tmpDir,
 		}
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		srcDir := t.TempDir()
 		srcPath := filepath.Join(srcDir, "auth.json")

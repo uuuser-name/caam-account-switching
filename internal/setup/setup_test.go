@@ -167,7 +167,7 @@ func TestSetupResultFields(t *testing.T) {
 	if result.LocalConfigPath == "" {
 		t.Error("expected LocalConfigPath to be set")
 	}
-	if result.DeployResults != nil && len(result.DeployResults) > 0 {
+	if len(result.DeployResults) > 0 {
 		t.Error("expected empty DeployResults initially")
 	}
 }
@@ -558,7 +558,9 @@ func TestPrintDiscoveryResultsOutput(t *testing.T) {
 	os.Stdout = old
 
 	var buf strings.Builder
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("io.Copy() error = %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, "local-machine") {

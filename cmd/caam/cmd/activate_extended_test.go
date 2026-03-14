@@ -45,9 +45,15 @@ func TestActivateCommand_Extended(t *testing.T) {
 		vault = originalVault
 		tools = originalTools
 		// Reset flags that may have been modified during tests
-		activateCmd.Flags().Set("json", "false")
-		activateCmd.Flags().Set("auto", "false")
-		activateCmd.Flags().Set("force", "false")
+		if err := activateCmd.Flags().Set("json", "false"); err != nil {
+			t.Errorf("Flags().Set(json): %v", err)
+		}
+		if err := activateCmd.Flags().Set("auto", "false"); err != nil {
+			t.Errorf("Flags().Set(auto): %v", err)
+		}
+		if err := activateCmd.Flags().Set("force", "false"); err != nil {
+			t.Errorf("Flags().Set(force): %v", err)
+		}
 	}()
 
 	vault = authfile.NewVault(vaultDir)
@@ -78,8 +84,8 @@ func TestActivateCommand_Extended(t *testing.T) {
 	h.StartStep("Activate", "Activate 'work' profile")
 
 	// Set flags before capture
-	activateCmd.Flags().Set("json", "true")
-	activateCmd.Flags().Set("auto", "false")
+	require.NoError(t, activateCmd.Flags().Set("json", "true"))
+	require.NoError(t, activateCmd.Flags().Set("auto", "false"))
 
 	// Run with stdout capture (panic-safe)
 	outputStr, err := captureStdout(t, func() error {
@@ -105,7 +111,7 @@ func TestActivateCommand_Extended(t *testing.T) {
 	// 3. Test Unknown Tool
 	h.StartStep("Error", "Test unknown tool")
 
-	activateCmd.Flags().Set("json", "true")
+	require.NoError(t, activateCmd.Flags().Set("json", "true"))
 
 	// runActivate returns nil when json=true, but prints error in json
 	outputStr, err = captureStdout(t, func() error {
@@ -185,9 +191,15 @@ func TestRunActivate_CodexRepairsLiveConfig(t *testing.T) {
 	defer func() {
 		vault = originalVault
 		tools = originalTools
-		activateCmd.Flags().Set("json", "false")
-		activateCmd.Flags().Set("auto", "false")
-		activateCmd.Flags().Set("force", "false")
+		if err := activateCmd.Flags().Set("json", "false"); err != nil {
+			t.Errorf("Flags().Set(json): %v", err)
+		}
+		if err := activateCmd.Flags().Set("auto", "false"); err != nil {
+			t.Errorf("Flags().Set(auto): %v", err)
+		}
+		if err := activateCmd.Flags().Set("force", "false"); err != nil {
+			t.Errorf("Flags().Set(force): %v", err)
+		}
 	}()
 
 	vault = authfile.NewVault(vaultDir)

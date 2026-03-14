@@ -21,7 +21,9 @@ func TestRefreshCodexToken(t *testing.T) {
 		}
 
 		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
 
 		if body["grant_type"] != "refresh_token" {
 			t.Errorf("expected grant_type refresh_token, got %s", body["grant_type"])
@@ -79,7 +81,9 @@ func TestUpdateCodexAuth(t *testing.T) {
 		"token_type":    "Bearer",
 	}
 	data, _ := json.Marshal(initialAuth)
-	os.WriteFile(path, data, 0600)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	// Update
 	newResp := &TokenResponse{
@@ -93,9 +97,14 @@ func TestUpdateCodexAuth(t *testing.T) {
 	}
 
 	// Verify
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	if updatedAuth["access_token"] != "new-access" {
 		t.Errorf("access_token not updated")
@@ -137,9 +146,14 @@ func TestUpdateCodexAuth_TokensFormat(t *testing.T) {
 		t.Fatalf("UpdateCodexAuth failed: %v", err)
 	}
 
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	tokensRaw, ok := updatedAuth["tokens"]
 	if !ok {
@@ -181,7 +195,9 @@ func TestRefreshCodexToken_EmptyRefreshToken(t *testing.T) {
 func TestRefreshCodexToken_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Unauthorized"))
+		if _, err := w.Write([]byte("Unauthorized")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -197,7 +213,9 @@ func TestRefreshCodexToken_HTTPError(t *testing.T) {
 
 func TestRefreshCodexToken_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not valid json"))
+		if _, err := w.Write([]byte("not valid json")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -308,9 +326,14 @@ func TestUpdateCodexAuth_NoRefreshToken(t *testing.T) {
 		t.Fatalf("UpdateCodexAuth failed: %v", err)
 	}
 
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	if updatedAuth["access_token"] != "new-access" {
 		t.Errorf("access_token not updated")
@@ -342,9 +365,14 @@ func TestUpdateCodexAuth_NoExpiresIn(t *testing.T) {
 		t.Fatalf("UpdateCodexAuth failed: %v", err)
 	}
 
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	// expires_at should remain unchanged since ExpiresIn is 0
 	if val, ok := updatedAuth["expires_at"].(float64); ok && val != 1500000000 {

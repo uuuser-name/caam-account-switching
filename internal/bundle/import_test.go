@@ -299,7 +299,9 @@ func TestVaultImporter_Import_MergeMode(t *testing.T) {
 	// Verify local token was preserved
 	importedData, _ := os.ReadFile(filepath.Join(existingProfileDir, ".claude.json"))
 	var imported map[string]interface{}
-	json.Unmarshal(importedData, &imported)
+	if err := json.Unmarshal(importedData, &imported); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	oauthToken := imported["oauthToken"].(map[string]interface{})
 	if oauthToken["access_token"] != "local_token" {
@@ -379,7 +381,9 @@ func TestVaultImporter_Import_ReplaceMode(t *testing.T) {
 	// Verify bundle token replaced local
 	importedData, _ := os.ReadFile(filepath.Join(existingProfileDir, ".claude.json"))
 	var imported map[string]interface{}
-	json.Unmarshal(importedData, &imported)
+	if err := json.Unmarshal(importedData, &imported); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	oauthToken := imported["oauthToken"].(map[string]interface{})
 	if oauthToken["access_token"] != "bundle_token" {
@@ -459,7 +463,9 @@ func TestVaultImporter_Import_SmartMode_FresherBundle(t *testing.T) {
 	// Verify fresher bundle token replaced local
 	importedData, _ := os.ReadFile(filepath.Join(existingProfileDir, ".claude.json"))
 	var imported map[string]interface{}
-	json.Unmarshal(importedData, &imported)
+	if err := json.Unmarshal(importedData, &imported); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	oauthToken := imported["oauthToken"].(map[string]interface{})
 	if oauthToken["access_token"] != "bundle_token" {
@@ -539,7 +545,9 @@ func TestVaultImporter_Import_SmartMode_FresherLocal(t *testing.T) {
 	// Verify local token was preserved
 	importedData, _ := os.ReadFile(filepath.Join(existingProfileDir, ".claude.json"))
 	var imported map[string]interface{}
-	json.Unmarshal(importedData, &imported)
+	if err := json.Unmarshal(importedData, &imported); err != nil {
+		t.Fatalf("parse imported file: %v", err)
+	}
 
 	oauthToken := imported["oauthToken"].(map[string]interface{})
 	if oauthToken["access_token"] != "local_token" {
@@ -700,7 +708,9 @@ func TestVaultImporter_Import_WithEncryption(t *testing.T) {
 	}
 
 	var imported map[string]interface{}
-	json.Unmarshal(importedData, &imported)
+	if err := json.Unmarshal(importedData, &imported); err != nil {
+		t.Fatalf("parse imported file: %v", err)
+	}
 	oauthToken := imported["oauthToken"].(map[string]interface{})
 	if oauthToken["access_token"] != "secret_token" {
 		t.Error("decrypted token doesn't match")
@@ -817,7 +827,9 @@ func TestMergeJSONFile(t *testing.T) {
 		}
 
 		var merged map[string]interface{}
-		json.Unmarshal(result, &merged)
+		if err := json.Unmarshal(result, &merged); err != nil {
+			t.Fatalf("parse merged file: %v", err)
+		}
 		if merged["key"] != "value" {
 			t.Errorf("key = %v, want value", merged["key"])
 		}
@@ -843,9 +855,14 @@ func TestMergeJSONFile(t *testing.T) {
 		}
 
 		// Should have source values
-		result, _ := os.ReadFile(dstPath)
+		result, err := os.ReadFile(dstPath)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", dstPath, err)
+		}
 		var merged map[string]interface{}
-		json.Unmarshal(result, &merged)
+		if err := json.Unmarshal(result, &merged); err != nil {
+			t.Fatalf("Unmarshal() error = %v", err)
+		}
 		if merged["key"] != "value" {
 			t.Errorf("key = %v, want value", merged["key"])
 		}

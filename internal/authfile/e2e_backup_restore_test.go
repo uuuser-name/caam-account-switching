@@ -21,7 +21,7 @@ import (
 // - Verify profile directory structure created
 // - Verify auth files copied correctly
 func TestE2E_FullBackupWorkflow(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -129,7 +129,7 @@ func TestE2E_FullBackupWorkflow(t *testing.T) {
 // - Run restore command
 // - Verify auth files restored to correct locations
 func TestE2E_FullRestoreWorkflow(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -231,7 +231,7 @@ func TestE2E_FullRestoreWorkflow(t *testing.T) {
 
 // TestE2E_BackupOverwriteProtection tests that backup doesn't overwrite without explicit flag
 func TestE2E_BackupOverwriteProtection(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -298,7 +298,7 @@ func TestE2E_BackupOverwriteProtection(t *testing.T) {
 
 // TestE2E_CrossProviderWorkflows tests multiple providers don't interfere
 func TestE2E_CrossProviderWorkflows(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -337,8 +337,8 @@ func TestE2E_CrossProviderWorkflows(t *testing.T) {
 	}
 
 	h.Log.Info("Created auth files for multiple providers", map[string]interface{}{
-		"codex_path":        codexAuthPath,
-		"claude_path":       claudeAuthPath,
+		"codex_path":         codexAuthPath,
+		"claude_path":        claudeAuthPath,
 		"claude_config_path": claudeConfigAuthPath,
 	})
 
@@ -472,7 +472,7 @@ func TestE2E_CrossProviderWorkflows(t *testing.T) {
 
 // TestE2E_BackupRestoreRoundTrip tests complete backup-clear-restore cycle
 func TestE2E_BackupRestoreRoundTrip(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -577,7 +577,7 @@ func TestE2E_BackupRestoreRoundTrip(t *testing.T) {
 
 // TestE2E_MultipleProfilesSameProvider tests managing multiple profiles for one provider
 func TestE2E_MultipleProfilesSameProvider(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -690,7 +690,7 @@ func TestE2E_MultipleProfilesSameProvider(t *testing.T) {
 
 // TestE2E_RestoreNonExistentProfile tests error handling for missing profiles
 func TestE2E_RestoreNonExistentProfile(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -725,7 +725,7 @@ func TestE2E_RestoreNonExistentProfile(t *testing.T) {
 
 // TestE2E_BackupMissingRequiredFile tests error handling for missing required auth files
 func TestE2E_BackupMissingRequiredFile(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -760,7 +760,7 @@ func TestE2E_BackupMissingRequiredFile(t *testing.T) {
 
 // TestE2E_OptionalFilesHandling tests proper handling of optional auth files
 func TestE2E_OptionalFilesHandling(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")

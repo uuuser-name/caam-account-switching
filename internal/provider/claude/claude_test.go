@@ -157,11 +157,11 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-		t.Run("uses XDG_CONFIG_HOME if set", func(t *testing.T) {
-			setEnv(t, "XDG_CONFIG_HOME", "/custom/config")
+	t.Run("uses XDG_CONFIG_HOME if set", func(t *testing.T) {
+		setEnv(t, "XDG_CONFIG_HOME", "/custom/config")
 
-			p := New()
-			files := p.AuthFiles()
+		p := New()
+		files := p.AuthFiles()
 
 		expected := "/custom/config/claude-code/auth.json"
 		if files[2].Path != expected {
@@ -169,13 +169,16 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-		t.Run("uses default .config if XDG_CONFIG_HOME not set", func(t *testing.T) {
-			unsetEnv(t, "XDG_CONFIG_HOME")
+	t.Run("uses default .config if XDG_CONFIG_HOME not set", func(t *testing.T) {
+		unsetEnv(t, "XDG_CONFIG_HOME")
 
-			p := New()
-			files := p.AuthFiles()
+		p := New()
+		files := p.AuthFiles()
 
-		homeDir, _ := os.UserHomeDir()
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
 		expected := filepath.Join(homeDir, ".config", "claude-code", "auth.json")
 		if files[2].Path != expected {
 			t.Errorf("AuthFiles()[2].Path = %q, want %q", files[2].Path, expected)
@@ -220,7 +223,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		xdgPath := prof.XDGConfigPath()
 		info, err := os.Stat(xdgPath)
@@ -241,7 +246,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		claudeCodeDir := filepath.Join(prof.XDGConfigPath(), "claude-code")
 		info, err := os.Stat(claudeCodeDir)
@@ -262,7 +269,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		claudeDir := filepath.Join(prof.HomePath(), ".claude")
 		info, err := os.Stat(claudeDir)
@@ -283,18 +292,26 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Check home directory permissions
 		homePath := prof.HomePath()
-		info, _ := os.Stat(homePath)
+		info, err := os.Stat(homePath)
+		if err != nil {
+			t.Fatalf("Stat(%s) error = %v", homePath, err)
+		}
 		if info.Mode().Perm() != 0700 {
 			t.Errorf("home permissions = %o, want 0700", info.Mode().Perm())
 		}
 
 		// Check xdg_config permissions
 		xdgPath := prof.XDGConfigPath()
-		info, _ = os.Stat(xdgPath)
+		info, err = os.Stat(xdgPath)
+		if err != nil {
+			t.Fatalf("Stat(%s) error = %v", xdgPath, err)
+		}
 		if info.Mode().Perm() != 0700 {
 			t.Errorf("xdg_config permissions = %o, want 0700", info.Mode().Perm())
 		}
@@ -309,7 +326,9 @@ func TestPrepareProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 		if err := p.PrepareProfile(context.Background(), prof); err != nil {
 			t.Errorf("second PrepareProfile() error = %v", err)
 		}
@@ -356,7 +375,9 @@ func TestPrepareProfileWithAPIKey(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		settingsPath := filepath.Join(prof.HomePath(), ".claude", "settings.json")
 		data, err := os.ReadFile(settingsPath)
@@ -379,7 +400,9 @@ func TestPrepareProfileWithAPIKey(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		settingsPath := filepath.Join(prof.HomePath(), ".claude", "settings.json")
 		if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
@@ -427,7 +450,10 @@ func TestEnv(t *testing.T) {
 		}
 
 		p := New()
-		env, _ := p.Env(context.Background(), prof)
+		env, err := p.Env(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Env() error = %v", err)
+		}
 
 		xdg, ok := env["XDG_CONFIG_HOME"]
 		if !ok {
@@ -449,7 +475,10 @@ func TestEnv(t *testing.T) {
 		}
 
 		p := New()
-		env, _ := p.Env(context.Background(), prof)
+		env, err := p.Env(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Env() error = %v", err)
+		}
 
 		if len(env) != 2 {
 			t.Errorf("Env() returned %d vars, want 2", len(env))
@@ -471,11 +500,15 @@ func TestLogout(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create auth.json
 		authDir := filepath.Join(prof.XDGConfigPath(), "claude-code")
-		os.MkdirAll(authDir, 0700)
+		if err := os.MkdirAll(authDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", authDir, err)
+		}
 		authPath := filepath.Join(authDir, "auth.json")
 		if err := os.WriteFile(authPath, []byte(`{"token":"test"}`), 0600); err != nil {
 			t.Fatal(err)
@@ -501,7 +534,9 @@ func TestLogout(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create .claude.json
 		claudeJsonPath := filepath.Join(prof.HomePath(), ".claude.json")
@@ -529,7 +564,9 @@ func TestLogout(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Don't create auth files, just logout
 		if err := p.Logout(context.Background(), prof); err != nil {
@@ -552,11 +589,15 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create auth.json
 		authDir := filepath.Join(prof.XDGConfigPath(), "claude-code")
-		os.MkdirAll(authDir, 0700)
+		if err := os.MkdirAll(authDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", authDir, err)
+		}
 		authPath := filepath.Join(authDir, "auth.json")
 		if err := os.WriteFile(authPath, []byte(`{}`), 0600); err != nil {
 			t.Fatal(err)
@@ -580,7 +621,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create .claude.json
 		claudeJsonPath := filepath.Join(prof.HomePath(), ".claude.json")
@@ -606,7 +649,9 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		status, err := p.Status(context.Background(), prof)
 		if err != nil {
@@ -626,19 +671,33 @@ func TestStatus(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Initially not locked
-		status, _ := p.Status(context.Background(), prof)
+		status, err := p.Status(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Status() error = %v", err)
+		}
 		if status.HasLockFile {
 			t.Error("HasLockFile should be false initially")
 		}
 
 		// Lock the profile
-		prof.Lock()
-		defer prof.Unlock()
+		if err := prof.Lock(); err != nil {
+			t.Fatalf("Lock() error = %v", err)
+		}
+		defer func() {
+			if err := prof.Unlock(); err != nil {
+				t.Fatalf("Unlock() error = %v", err)
+			}
+		}()
 
-		status, _ = p.Status(context.Background(), prof)
+		status, err = p.Status(context.Background(), prof)
+		if err != nil {
+			t.Fatalf("Status() error = %v", err)
+		}
 		if !status.HasLockFile {
 			t.Error("HasLockFile should be true when locked")
 		}
@@ -659,7 +718,9 @@ func TestValidateProfile(t *testing.T) {
 		}
 
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		if err := p.ValidateProfile(context.Background(), prof); err != nil {
 			t.Errorf("ValidateProfile() error = %v", err)
@@ -692,7 +753,9 @@ func TestValidateProfile(t *testing.T) {
 		}
 
 		// Create home but not xdg_config
-		os.MkdirAll(prof.HomePath(), 0700)
+		if err := os.MkdirAll(prof.HomePath(), 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", prof.HomePath(), err)
+		}
 
 		p := New()
 		err := p.ValidateProfile(context.Background(), prof)
@@ -739,7 +802,10 @@ func TestXDGConfigHome(t *testing.T) {
 		unsetEnv(t, "XDG_CONFIG_HOME")
 
 		result := xdgConfigHome()
-		homeDir, _ := os.UserHomeDir()
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
 		expected := filepath.Join(homeDir, ".config")
 		if result != expected {
 			t.Errorf("xdgConfigHome() = %q, want %s", result, expected)
@@ -773,23 +839,34 @@ func TestFullProfileLifecycle(t *testing.T) {
 	}
 
 	// Status (not logged in yet)
-	status, _ := p.Status(context.Background(), prof)
+	status, err := p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in before login")
 	}
 
 	// Simulate login by creating .claude.json
 	claudeJsonPath := filepath.Join(prof.HomePath(), ".claude.json")
-	os.WriteFile(claudeJsonPath, []byte(`{"session":"test"}`), 0600)
+	if err := os.WriteFile(claudeJsonPath, []byte(`{"session":"test"}`), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", claudeJsonPath, err)
+	}
 
 	// Status (now logged in)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if !status.LoggedIn {
 		t.Error("should be logged in after .claude.json created")
 	}
 
 	// Get env
-	env, _ := p.Env(context.Background(), prof)
+	env, err := p.Env(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Env() error = %v", err)
+	}
 	if env["HOME"] == "" {
 		t.Error("HOME should be set")
 	}
@@ -803,7 +880,10 @@ func TestFullProfileLifecycle(t *testing.T) {
 	}
 
 	// Status (logged out)
-	status, _ = p.Status(context.Background(), prof)
+	status, err = p.Status(context.Background(), prof)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
 	if status.LoggedIn {
 		t.Error("should not be logged in after logout")
 	}
@@ -873,7 +953,6 @@ func TestAPIKeyModeLifecycle(t *testing.T) {
 	}
 }
 
-
 // =============================================================================
 // DetectExistingAuth Tests
 // =============================================================================
@@ -894,7 +973,9 @@ func TestDetectExistingAuth(t *testing.T) {
 
 		// Create .claude directory
 		claudeDir := filepath.Join(home, ".claude")
-		os.MkdirAll(claudeDir, 0700)
+		if err := os.MkdirAll(claudeDir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", claudeDir, err)
+		}
 
 		// Create valid credentials file
 		credsPath := filepath.Join(claudeDir, ".credentials.json")
@@ -955,7 +1036,9 @@ func TestDetectExistingAuth(t *testing.T) {
 
 		// Create claude-code directory
 		dir := filepath.Join(xdg, "claude-code")
-		os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", dir, err)
+		}
 
 		// Create valid auth.json
 		path := filepath.Join(dir, "auth.json")
@@ -982,7 +1065,9 @@ func TestDetectExistingAuth(t *testing.T) {
 		p := New()
 
 		dir := filepath.Join(home, ".claude")
-		os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", dir, err)
+		}
 
 		path := filepath.Join(dir, "settings.json")
 		data := map[string]interface{}{
@@ -1010,19 +1095,28 @@ func TestDetectExistingAuth(t *testing.T) {
 		// Create older .claude.json
 		oldPath := filepath.Join(home, ".claude.json")
 		writeJSON(t, oldPath, map[string]interface{}{"oauthToken": "old"})
-		os.Chtimes(oldPath, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour))
+		if err := os.Chtimes(oldPath, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour)); err != nil {
+			t.Fatalf("Chtimes(%s) error = %v", oldPath, err)
+		}
 
 		// Create newer .credentials.json
 		dir := filepath.Join(home, ".claude")
-		os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", dir, err)
+		}
 		newPath := filepath.Join(dir, ".credentials.json")
 		writeJSON(t, newPath, map[string]interface{}{
 			"claudeAiOauth": map[string]interface{}{"accessToken": "new"},
 		})
 		// Ensure it's newer
-		os.Chtimes(newPath, time.Now(), time.Now())
+		if err := os.Chtimes(newPath, time.Now(), time.Now()); err != nil {
+			t.Fatalf("Chtimes(%s) error = %v", newPath, err)
+		}
 
-		detection, _ := p.DetectExistingAuth()
+		detection, err := p.DetectExistingAuth()
+		if err != nil {
+			t.Fatalf("DetectExistingAuth() error = %v", err)
+		}
 		if detection.Primary.Path != newPath {
 			t.Errorf("Should prioritize newer file. Got %q, want %q", detection.Primary.Path, newPath)
 		}
@@ -1037,9 +1131,14 @@ func TestDetectExistingAuth(t *testing.T) {
 
 		// Create invalid JSON file
 		path := filepath.Join(home, ".claude.json")
-		os.WriteFile(path, []byte("{invalid-json"), 0600)
+		if err := os.WriteFile(path, []byte("{invalid-json"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
-		detection, _ := p.DetectExistingAuth()
+		detection, err := p.DetectExistingAuth()
+		if err != nil {
+			t.Fatalf("DetectExistingAuth() error = %v", err)
+		}
 		if len(detection.Locations) == 0 {
 			t.Fatal("Should detect file existence")
 		}
@@ -1067,7 +1166,9 @@ func TestImportAuth(t *testing.T) {
 			BasePath: tmpDir,
 		}
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		// Create source file
 		srcDir := t.TempDir()
@@ -1101,7 +1202,9 @@ func TestImportAuth(t *testing.T) {
 			BasePath: tmpDir,
 		}
 		p := New()
-		p.PrepareProfile(context.Background(), prof)
+		if err := p.PrepareProfile(context.Background(), prof); err != nil {
+			t.Fatalf("PrepareProfile() error = %v", err)
+		}
 
 		srcDir := t.TempDir()
 		srcPath := filepath.Join(srcDir, "auth.json")
@@ -1152,6 +1255,7 @@ func writeJSON(t *testing.T, path string, data interface{}) {
 		t.Fatal(err)
 	}
 }
+
 // =============================================================================
 // Fixture-Driven Realism Tests (bd-1r67.2.5)
 // =============================================================================

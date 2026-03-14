@@ -80,9 +80,9 @@ func TestLsCommand_Extended(t *testing.T) {
 
 	// 2. Execute ls --json
 	h.StartStep("Execute", "Run ls --json")
-	lsCmd.Flags().Set("json", "true")
-	lsCmd.Flags().Set("tag", "")
-	lsCmd.Flags().Set("all", "false")
+	require.NoError(t, lsCmd.Flags().Set("json", "true"))
+	require.NoError(t, lsCmd.Flags().Set("tag", ""))
+	require.NoError(t, lsCmd.Flags().Set("all", "false"))
 
 	buf := &bytes.Buffer{}
 	lsCmd.SetOut(buf)
@@ -155,8 +155,8 @@ func TestLsCommand_FilterByTool(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "claude", "leothehumanbeing.contact"), 0755))
 	require.NoError(t, writeClaudeProfileAuth(filepath.Join(vaultDir, "claude", "leothehumanbeing.contact", ".credentials.json"), "leothehumanbeing@gmail.com"))
 
-	lsCmd.Flags().Set("json", "true")
-	lsCmd.Flags().Set("all", "false")
+	require.NoError(t, lsCmd.Flags().Set("json", "true"))
+	require.NoError(t, lsCmd.Flags().Set("all", "false"))
 
 	buf := &bytes.Buffer{}
 	lsCmd.SetOut(buf)
@@ -219,8 +219,8 @@ func TestLsCommand_AllShowsHiddenProfiles(t *testing.T) {
 	require.NoError(t, writeCodexProfileAuth(filepath.Join(vaultDir, "codex", "badalias", "auth.json"), "work@gmail.com"))
 
 	buf := &bytes.Buffer{}
-	lsCmd.Flags().Set("json", "true")
-	lsCmd.Flags().Set("all", "false")
+	require.NoError(t, lsCmd.Flags().Set("json", "true"))
+	require.NoError(t, lsCmd.Flags().Set("all", "false"))
 	lsCmd.SetOut(buf)
 	err := runLs(lsCmd, []string{"codex"})
 	require.NoError(t, err)
@@ -234,7 +234,7 @@ func TestLsCommand_AllShowsHiddenProfiles(t *testing.T) {
 	assert.True(t, output.Profiles[0].Usable)
 
 	buf.Reset()
-	lsCmd.Flags().Set("all", "true")
+	require.NoError(t, lsCmd.Flags().Set("all", "true"))
 	lsCmd.SetOut(buf)
 	err = runLs(lsCmd, []string{"codex"})
 	require.NoError(t, err)

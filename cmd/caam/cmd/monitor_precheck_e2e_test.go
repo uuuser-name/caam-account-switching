@@ -19,7 +19,7 @@ import (
 // =============================================================================
 
 // setupMonitorE2ETest initializes test environment for monitor/precheck commands.
-func setupMonitorE2ETest(t *testing.T, h *testutil.TestHarness) {
+func setupMonitorE2ETest(t *testing.T, h *testutil.ExtendedHarness) {
 	t.Helper()
 
 	// Create vault directory
@@ -35,7 +35,7 @@ func setupMonitorE2ETest(t *testing.T, h *testutil.TestHarness) {
 }
 
 // createTestProfile creates a test profile with auth data.
-func createTestProfile(t *testing.T, h *testutil.TestHarness, provider, profileName, authContent string) {
+func createTestProfile(t *testing.T, h *testutil.ExtendedHarness, provider, profileName, authContent string) {
 	t.Helper()
 
 	profileDir := vault.ProfilePath(provider, profileName)
@@ -99,7 +99,7 @@ func executePrecheckCommand(args ...string) (string, error) {
 // =============================================================================
 
 func TestE2E_MonitorTableFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -128,7 +128,7 @@ func TestE2E_MonitorTableFormat(t *testing.T) {
 }
 
 func TestE2E_MonitorBriefFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -153,7 +153,7 @@ func TestE2E_MonitorBriefFormat(t *testing.T) {
 }
 
 func TestE2E_MonitorJSONFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -187,7 +187,7 @@ func TestE2E_MonitorJSONFormat(t *testing.T) {
 }
 
 func TestE2E_MonitorAlertsFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -215,7 +215,7 @@ func TestE2E_MonitorAlertsFormat(t *testing.T) {
 }
 
 func TestE2E_MonitorInvalidFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -230,7 +230,7 @@ func TestE2E_MonitorInvalidFormat(t *testing.T) {
 }
 
 func TestE2E_MonitorWithWidth(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -257,7 +257,7 @@ func TestE2E_MonitorWithWidth(t *testing.T) {
 }
 
 func TestE2E_MonitorNoEmoji(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -287,7 +287,7 @@ func TestE2E_MonitorNoEmoji(t *testing.T) {
 // =============================================================================
 
 func TestE2E_PrecheckTableFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -313,7 +313,7 @@ func TestE2E_PrecheckTableFormat(t *testing.T) {
 }
 
 func TestE2E_PrecheckBriefFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -340,7 +340,7 @@ func TestE2E_PrecheckBriefFormat(t *testing.T) {
 }
 
 func TestE2E_PrecheckJSONFormat(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -375,7 +375,7 @@ func TestE2E_PrecheckJSONFormat(t *testing.T) {
 }
 
 func TestE2E_PrecheckUnknownProvider(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -390,7 +390,7 @@ func TestE2E_PrecheckUnknownProvider(t *testing.T) {
 }
 
 func TestE2E_PrecheckNoProfiles(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -405,7 +405,7 @@ func TestE2E_PrecheckNoProfiles(t *testing.T) {
 }
 
 func TestE2E_PrecheckWithAlgorithmOverride(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -430,7 +430,7 @@ func TestE2E_PrecheckWithAlgorithmOverride(t *testing.T) {
 }
 
 func TestE2E_PrecheckCodexProvider(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -454,7 +454,7 @@ func TestE2E_PrecheckCodexProvider(t *testing.T) {
 }
 
 func TestE2E_PrecheckDefaultsToClaudeProvider(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -483,7 +483,7 @@ func TestE2E_PrecheckDefaultsToClaudeProvider(t *testing.T) {
 // =============================================================================
 
 func TestE2E_MonitorOutputPipeable(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -505,7 +505,7 @@ func TestE2E_MonitorOutputPipeable(t *testing.T) {
 }
 
 func TestE2E_PrecheckOutputPipeable(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")

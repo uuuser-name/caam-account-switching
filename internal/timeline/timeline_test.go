@@ -550,12 +550,20 @@ func TestMerger_SourceFileTracking(t *testing.T) {
 
 	content := `{"run_id":"run-001","scenario_id":"scenario-a","step_id":"step-1","timestamp":"2024-01-01T10:00:00Z","actor":"ci","component":"test","input_redacted":{},"output":{},"decision":"pass","duration_ms":100,"error":{"present":false}}
 `
-	os.WriteFile(file1, []byte(content), 0644)
-	os.WriteFile(file2, []byte(content), 0644)
+	if err := os.WriteFile(file1, []byte(content), 0644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", file1, err)
+	}
+	if err := os.WriteFile(file2, []byte(content), 0644); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", file2, err)
+	}
 
 	m := NewMerger()
-	m.AddFile(file1)
-	m.AddFile(file2)
+	if _, err := m.AddFile(file1); err != nil {
+		t.Fatalf("AddFile(%s) error = %v", file1, err)
+	}
+	if _, err := m.AddFile(file2); err != nil {
+		t.Fatalf("AddFile(%s) error = %v", file2, err)
+	}
 
 	timelines := m.Merge()
 	tl := timelines[0]
@@ -691,17 +699,17 @@ func BenchmarkMerger_AddReader(b *testing.B) {
 	for i := 0; i < 1000; i++ {
 		ts := time.Date(2024, 1, 1, 10, 0, i, 0, time.UTC)
 		entry := map[string]interface{}{
-			"run_id":        "run-001",
-			"scenario_id":   "scenario-a",
-			"step_id":       fmt.Sprintf("step-%d", i),
-			"timestamp":     ts.Format(time.RFC3339),
-			"actor":         "ci",
-			"component":     "test",
+			"run_id":         "run-001",
+			"scenario_id":    "scenario-a",
+			"step_id":        fmt.Sprintf("step-%d", i),
+			"timestamp":      ts.Format(time.RFC3339),
+			"actor":          "ci",
+			"component":      "test",
 			"input_redacted": map[string]interface{}{},
-			"output":        map[string]interface{}{},
-			"decision":      "pass",
-			"duration_ms":   i * 10,
-			"error":         map[string]interface{}{"present": false},
+			"output":         map[string]interface{}{},
+			"decision":       "pass",
+			"duration_ms":    i * 10,
+			"error":          map[string]interface{}{"present": false},
 		}
 		jsonBytes, _ := json.Marshal(entry)
 		sb.Write(jsonBytes)
@@ -712,6 +720,8 @@ func BenchmarkMerger_AddReader(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		m := NewMerger()
-		m.AddReader("test.jsonl", strings.NewReader(jsonl))
+		if _, err := m.AddReader("test.jsonl", strings.NewReader(jsonl)); err != nil {
+			b.Fatalf("AddReader() error = %v", err)
+		}
 	}
 }

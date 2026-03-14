@@ -20,7 +20,7 @@ import (
 
 // TestE2E_ClaudeAuthState tests Claude provider authentication state detection
 func TestE2E_ClaudeAuthState(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -97,7 +97,9 @@ func TestE2E_ClaudeAuthState(t *testing.T) {
 	h.Log.Info("With .credentials.json: LoggedIn correctly true")
 
 	// Remove credentials before testing legacy paths
-	os.Remove(credentialsPath)
+	if err := os.Remove(credentialsPath); err != nil {
+		t.Fatalf("Failed to remove .credentials.json: %v", err)
+	}
 
 	h.Log.SetStep("test_claude_json")
 
@@ -127,7 +129,9 @@ func TestE2E_ClaudeAuthState(t *testing.T) {
 	h.Log.SetStep("test_auth_json")
 
 	// Remove .claude.json, add auth.json
-	os.Remove(claudeJsonPath)
+	if err := os.Remove(claudeJsonPath); err != nil {
+		t.Fatalf("Failed to remove .claude.json: %v", err)
+	}
 
 	authJsonPath := filepath.Join(xdgConfigDir, "claude-code", "auth.json")
 	authJsonContent := `{
@@ -191,7 +195,7 @@ func TestE2E_ClaudeAuthState(t *testing.T) {
 
 // TestE2E_CodexAuthState tests Codex provider authentication state detection
 func TestE2E_CodexAuthState(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -296,7 +300,7 @@ func TestE2E_CodexAuthState(t *testing.T) {
 
 // TestE2E_GeminiAuthState tests Gemini provider authentication state detection
 func TestE2E_GeminiAuthState(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -386,7 +390,7 @@ func TestE2E_GeminiAuthState(t *testing.T) {
 
 // TestE2E_ProviderLogout tests logout functionality across providers
 func TestE2E_ProviderLogout(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup_claude")
@@ -429,7 +433,10 @@ func TestE2E_ProviderLogout(t *testing.T) {
 	h.Log.SetStep("test_claude_logout")
 
 	// Verify logged in
-	status, _ := claudeProv.Status(ctx, claudeProf)
+	status, err := claudeProv.Status(ctx, claudeProf)
+	if err != nil {
+		t.Fatalf("Claude status before logout failed: %v", err)
+	}
 	if !status.LoggedIn {
 		t.Errorf("Expected Claude to be logged in before logout")
 	}
@@ -440,7 +447,10 @@ func TestE2E_ProviderLogout(t *testing.T) {
 	}
 
 	// Verify logged out
-	status, _ = claudeProv.Status(ctx, claudeProf)
+	status, err = claudeProv.Status(ctx, claudeProf)
+	if err != nil {
+		t.Fatalf("Claude status after logout failed: %v", err)
+	}
 	if status.LoggedIn {
 		t.Errorf("Expected Claude to be logged out after logout")
 	}
@@ -482,7 +492,10 @@ func TestE2E_ProviderLogout(t *testing.T) {
 	h.Log.SetStep("test_codex_logout")
 
 	// Verify logged in
-	status, _ = codexProv.Status(ctx, codexProf)
+	status, err = codexProv.Status(ctx, codexProf)
+	if err != nil {
+		t.Fatalf("Codex status before logout failed: %v", err)
+	}
 	if !status.LoggedIn {
 		t.Errorf("Expected Codex to be logged in before logout")
 	}
@@ -493,7 +506,10 @@ func TestE2E_ProviderLogout(t *testing.T) {
 	}
 
 	// Verify logged out
-	status, _ = codexProv.Status(ctx, codexProf)
+	status, err = codexProv.Status(ctx, codexProf)
+	if err != nil {
+		t.Fatalf("Codex status after logout failed: %v", err)
+	}
 	if status.LoggedIn {
 		t.Errorf("Expected Codex to be logged out after logout")
 	}
@@ -505,7 +521,7 @@ func TestE2E_ProviderLogout(t *testing.T) {
 
 // TestE2E_ProviderEnvIsolation tests environment variable isolation
 func TestE2E_ProviderEnvIsolation(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
@@ -591,7 +607,7 @@ func TestE2E_ProviderEnvIsolation(t *testing.T) {
 
 // TestE2E_ProviderIdentity tests provider identity methods
 func TestE2E_ProviderIdentity(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_identities")
@@ -641,7 +657,7 @@ func TestE2E_ProviderIdentity(t *testing.T) {
 
 // TestE2E_RegistryOperations tests provider registry functionality
 func TestE2E_RegistryOperations(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_registry")

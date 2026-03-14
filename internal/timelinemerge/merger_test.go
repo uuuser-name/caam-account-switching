@@ -661,6 +661,8 @@ func BenchmarkParseJSONL_100Lines(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ParseJSONLReader(strings.NewReader(jsonl))
+		if _, err := ParseJSONLReader(strings.NewReader(jsonl)); err != nil {
+			b.Fatalf("ParseJSONLReader() error = %v", err)
+		}
 	}
 }

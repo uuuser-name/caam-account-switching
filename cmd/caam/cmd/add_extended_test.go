@@ -131,8 +131,8 @@ func TestAddExtended(t *testing.T) {
 	// We need to provide "claude" and "new-profile" as args
 	// We also set --force to skip confirmation prompts
 	// And --no-activate to simplify assertion
-	addCmd.Flags().Set("force", "true")
-	addCmd.Flags().Set("no-activate", "true")
+	require.NoError(t, addCmd.Flags().Set("force", "true"))
+	require.NoError(t, addCmd.Flags().Set("no-activate", "true"))
 
 	err := runAdd(addCmd, []string{"claude", "test-profile"})
 	require.NoError(t, err)

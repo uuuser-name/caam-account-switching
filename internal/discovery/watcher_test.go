@@ -87,7 +87,9 @@ func TestWatcher_Discovery(t *testing.T) {
 	defer cancel()
 
 	require.NoError(t, watcher.Start(ctx))
-	defer watcher.Stop()
+	defer func() {
+		require.NoError(t, watcher.Stop())
+	}()
 
 	// Give watcher time to set up
 	time.Sleep(200 * time.Millisecond)
@@ -220,7 +222,9 @@ func TestWatcher_AutoProfileOnIdentityError(t *testing.T) {
 	defer cancel()
 
 	require.NoError(t, watcher.Start(ctx))
-	defer watcher.Stop()
+	defer func() {
+		require.NoError(t, watcher.Stop())
+	}()
 
 	time.Sleep(200 * time.Millisecond)
 

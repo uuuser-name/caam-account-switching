@@ -259,7 +259,9 @@ func TestURLDetector(t *testing.T) {
 		})
 
 		input := []byte("Visit http://localhost:8080/auth to login")
-		detector.Write(input)
+		if _, err := detector.Write(input); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		detector.Flush()
 
 		if len(detectedURLs) != 1 {
@@ -280,7 +282,9 @@ func TestURLDetector(t *testing.T) {
 		})
 
 		input := []byte("http://localhost:3000/ or http://127.0.0.1:8080/callback")
-		detector.Write(input)
+		if _, err := detector.Write(input); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		detector.Flush()
 
 		if len(detectedURLs) != 2 {
@@ -321,7 +325,9 @@ func TestURLDetector(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				detector.Write([]byte("http://localhost:8080/\n"))
+				if _, err := detector.Write([]byte("http://localhost:8080/\n")); err != nil {
+					t.Errorf("Write() error = %v", err)
+				}
 			}()
 		}
 		wg.Wait()
@@ -343,8 +349,12 @@ func TestURLDetector(t *testing.T) {
 			return true
 		})
 
-		detector.Write([]byte("http://local"))
-		detector.Write([]byte("host:8080/\n"))
+		if _, err := detector.Write([]byte("http://local")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if _, err := detector.Write([]byte("host:8080/\n")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 
 		if len(detectedURLs) != 1 {
 			t.Fatalf("detected %d URLs, want 1", len(detectedURLs))
@@ -505,7 +515,9 @@ func TestOutputCapture(t *testing.T) {
 		capture := NewOutputCapture(&stdout, &stderr)
 
 		writer := capture.StdoutWriter()
-		writer.Write([]byte("http://localhost:8080/oauth"))
+		if _, err := writer.Write([]byte("http://localhost:8080/oauth")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		capture.Flush()
 
 		urls := capture.GetURLs()
@@ -525,7 +537,9 @@ func TestOutputCapture(t *testing.T) {
 		capture := NewOutputCapture(&stdout, &stderr)
 
 		writer := capture.StderrWriter()
-		writer.Write([]byte("Error: visit http://localhost:3000/"))
+		if _, err := writer.Write([]byte("Error: visit http://localhost:3000/")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		capture.Flush()
 
 		urls := capture.GetURLs()
@@ -541,8 +555,12 @@ func TestOutputCapture(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		capture := NewOutputCapture(&stdout, &stderr)
 
-		capture.StdoutWriter().Write([]byte("stdout content"))
-		capture.StderrWriter().Write([]byte("stderr content"))
+		if _, err := capture.StdoutWriter().Write([]byte("stdout content")); err != nil {
+			t.Fatalf("StdoutWriter.Write() error = %v", err)
+		}
+		if _, err := capture.StderrWriter().Write([]byte("stderr content")); err != nil {
+			t.Fatalf("StderrWriter.Write() error = %v", err)
+		}
 		capture.Flush()
 
 		if stdout.String() != "stdout content" {
@@ -564,8 +582,12 @@ func TestOutputCapture(t *testing.T) {
 			callbackSources = append(callbackSources, source)
 		}
 
-		capture.StdoutWriter().Write([]byte("http://localhost:8080/"))
-		capture.StderrWriter().Write([]byte("http://127.0.0.1:3000/"))
+		if _, err := capture.StdoutWriter().Write([]byte("http://localhost:8080/")); err != nil {
+			t.Fatalf("StdoutWriter.Write() error = %v", err)
+		}
+		if _, err := capture.StderrWriter().Write([]byte("http://127.0.0.1:3000/")); err != nil {
+			t.Fatalf("StderrWriter.Write() error = %v", err)
+		}
 		capture.Flush()
 
 		if len(callbackURLs) != 2 {
@@ -587,7 +609,10 @@ func TestOutputCapture(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				capture.StdoutWriter().Write([]byte("http://localhost:8080/\n"))
+				if _, err := capture.StdoutWriter().Write([]byte("http://localhost:8080/\n")); err != nil {
+					t.Errorf("StdoutWriter.Write() error = %v", err)
+					return
+				}
 			}
 			capture.Flush()
 		}()
@@ -613,7 +638,9 @@ func TestOutputCapture(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		capture := NewOutputCapture(&stdout, &stderr)
 
-		capture.StdoutWriter().Write([]byte("http://localhost:8080/"))
+		if _, err := capture.StdoutWriter().Write([]byte("http://localhost:8080/")); err != nil {
+			t.Fatalf("StdoutWriter.Write() error = %v", err)
+		}
 		capture.Flush()
 
 		urls1 := capture.GetURLs()
@@ -635,8 +662,12 @@ func TestOutputCapture(t *testing.T) {
 		capture := NewOutputCapture(&stdout, &stderr)
 
 		writer := capture.StdoutWriter()
-		writer.Write([]byte("http://local"))
-		writer.Write([]byte("host:8080/"))
+		if _, err := writer.Write([]byte("http://local")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if _, err := writer.Write([]byte("host:8080/")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 		capture.Flush()
 
 		urls := capture.GetURLs()

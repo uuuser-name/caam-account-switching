@@ -12,8 +12,7 @@ import (
 )
 
 func TestUsage_EmptyDatabase_Table(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CAAM_HOME", tmpDir)
+	newStartupLayout(t)
 
 	out, err := executeCommand("usage", "--days", "7")
 	if err != nil {
@@ -25,8 +24,7 @@ func TestUsage_EmptyDatabase_Table(t *testing.T) {
 }
 
 func TestUsage_Summary_JSON(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CAAM_HOME", tmpDir)
+	newStartupLayout(t)
 
 	dbPath := caamdb.DefaultPath()
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0700); err != nil {
@@ -86,8 +84,7 @@ func TestUsage_Summary_JSON(t *testing.T) {
 }
 
 func TestUsage_Detailed_JSON(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CAAM_HOME", tmpDir)
+	newStartupLayout(t)
 
 	db, err := caamdb.Open()
 	if err != nil {

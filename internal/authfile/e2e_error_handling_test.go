@@ -14,7 +14,7 @@ import (
 
 // TestE2E_ReadOnlyDirectoryBackup tests backup fails gracefully on read-only directory.
 func TestE2E_ReadOnlyDirectoryBackup(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_readonly_backup")
@@ -39,7 +39,11 @@ func TestE2E_ReadOnlyDirectoryBackup(t *testing.T) {
 	if err := os.Chmod(vaultDir, 0555); err != nil {
 		t.Skipf("Cannot set read-only permissions: %v", err)
 	}
-	defer os.Chmod(vaultDir, 0755) // Restore permissions for cleanup
+	t.Cleanup(func() {
+		if err := os.Chmod(vaultDir, 0755); err != nil {
+			t.Logf("Restore vault permissions: %v", err)
+		}
+	})
 
 	// Backup should fail gracefully
 	err := vault.Backup(fileSet, "test-profile")
@@ -54,7 +58,7 @@ func TestE2E_ReadOnlyDirectoryBackup(t *testing.T) {
 
 // TestE2E_PermissionDeniedRestore tests restore fails gracefully with permission denied.
 func TestE2E_PermissionDeniedRestore(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_permission_denied")
@@ -82,7 +86,11 @@ func TestE2E_PermissionDeniedRestore(t *testing.T) {
 	if err := os.Chmod(sourceDir, 0555); err != nil {
 		t.Skipf("Cannot set read-only permissions: %v", err)
 	}
-	defer os.Chmod(sourceDir, 0755)
+	t.Cleanup(func() {
+		if err := os.Chmod(sourceDir, 0755); err != nil {
+			t.Logf("Restore source permissions: %v", err)
+		}
+	})
 
 	// Restore should fail gracefully
 	err := vault.Restore(fileSet, "test-profile")
@@ -97,7 +105,7 @@ func TestE2E_PermissionDeniedRestore(t *testing.T) {
 
 // TestE2E_SymlinkHandling tests vault handles symlinks correctly.
 func TestE2E_SymlinkHandling(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_symlink_handling")
@@ -153,7 +161,7 @@ func TestE2E_SymlinkHandling(t *testing.T) {
 
 // TestE2E_BrokenSymlinkBackup tests backup handles broken symlinks.
 func TestE2E_BrokenSymlinkBackup(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_broken_symlink")
@@ -188,7 +196,7 @@ func TestE2E_BrokenSymlinkBackup(t *testing.T) {
 
 // TestE2E_ConcurrentBackups tests concurrent backup operations.
 func TestE2E_ConcurrentBackups(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_concurrent_backups")
@@ -263,7 +271,7 @@ func TestE2E_ConcurrentBackups(t *testing.T) {
 
 // TestE2E_ProfileLockingConcurrency tests concurrent profile access with locking.
 func TestE2E_ProfileLockingConcurrency(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_profile_locking")
@@ -314,7 +322,7 @@ func TestE2E_ProfileLockingConcurrency(t *testing.T) {
 
 // TestE2E_CorruptedProfileJSON tests handling of corrupted profile.json.
 func TestE2E_CorruptedProfileJSON(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_corrupted_profile")
@@ -347,7 +355,7 @@ func TestE2E_CorruptedProfileJSON(t *testing.T) {
 
 // TestE2E_InvalidAuthJSON tests handling of invalid auth file JSON.
 func TestE2E_InvalidAuthJSON(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_invalid_auth_json")
@@ -395,7 +403,7 @@ func TestE2E_InvalidAuthJSON(t *testing.T) {
 
 // TestE2E_MissingRequiredFile tests backup fails when required file is missing.
 func TestE2E_MissingRequiredFile(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_missing_required")
@@ -424,7 +432,7 @@ func TestE2E_MissingRequiredFile(t *testing.T) {
 
 // TestE2E_OptionalFileMissing tests backup succeeds when optional file is missing.
 func TestE2E_OptionalFileMissing(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_optional_missing")
@@ -456,7 +464,7 @@ func TestE2E_OptionalFileMissing(t *testing.T) {
 
 // TestE2E_RestoreNonExistentProfileError tests restore fails for non-existent profile.
 func TestE2E_RestoreNonExistentProfileError(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_restore_nonexistent")
@@ -484,7 +492,7 @@ func TestE2E_RestoreNonExistentProfileError(t *testing.T) {
 
 // TestE2E_InterruptedBackupRecovery tests recovery from interrupted backup.
 func TestE2E_InterruptedBackupRecovery(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_interrupted_backup")
@@ -540,7 +548,7 @@ func TestE2E_InterruptedBackupRecovery(t *testing.T) {
 
 // TestE2E_DeleteNonExistentProfile tests delete handles missing profile.
 func TestE2E_DeleteNonExistentProfile(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_delete_nonexistent")
@@ -562,7 +570,7 @@ func TestE2E_DeleteNonExistentProfile(t *testing.T) {
 
 // TestE2E_EmptyVaultList tests listing empty vault.
 func TestE2E_EmptyVaultList(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_empty_vault_list")
@@ -585,7 +593,7 @@ func TestE2E_EmptyVaultList(t *testing.T) {
 
 // TestE2E_LargeFileBackup tests backup of larger files.
 func TestE2E_LargeFileBackup(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_large_file")
@@ -638,7 +646,7 @@ func TestE2E_LargeFileBackup(t *testing.T) {
 
 // TestE2E_SpecialCharactersInProfileName tests profile names with special chars.
 func TestE2E_SpecialCharactersInProfileName(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_special_chars")
@@ -698,7 +706,7 @@ func TestE2E_SpecialCharactersInProfileName(t *testing.T) {
 
 // TestE2E_ClearAuthFilesError tests ClearAuthFiles handles errors.
 func TestE2E_ClearAuthFilesError(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_clear_auth_error")
@@ -724,7 +732,7 @@ func TestE2E_ClearAuthFilesError(t *testing.T) {
 
 // TestE2E_HasAuthFilesEmpty tests HasAuthFiles with no files.
 func TestE2E_HasAuthFilesEmpty(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_has_auth_empty")

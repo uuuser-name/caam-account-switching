@@ -160,7 +160,11 @@ func TestSyncerStateManagement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSyncer failed: %v", err)
 	}
-	defer syncer.Close()
+	t.Cleanup(func() {
+		if err := syncer.Close(); err != nil {
+			t.Fatalf("Close failed: %v", err)
+		}
+	})
 
 	// Test state is initialized
 	if syncer.state == nil {
@@ -735,18 +739,20 @@ func TestSyncPoolConcurrency(t *testing.T) {
 	pool := NewSyncPool()
 
 	// Add machines concurrently
-	done := make(chan bool)
+	done := make(chan error, 10)
 	for i := 0; i < 10; i++ {
 		go func(id int) {
 			m := NewMachine(string(rune('A'+id)), "192.168.1."+string(rune('0'+id)))
-			pool.AddMachine(m)
-			done <- true
+			err := pool.AddMachine(m)
+			done <- err
 		}(i)
 	}
 
 	// Wait for all goroutines
 	for i := 0; i < 10; i++ {
-		<-done
+		if err := <-done; err != nil {
+			t.Fatalf("AddMachine() error = %v", err)
+		}
 	}
 
 	// Verify pool state
@@ -866,7 +872,9 @@ func TestTriggerSyncWithDisabledPool(t *testing.T) {
 	// Create state with disabled pool
 	state := NewSyncState(tmpDir)
 	state.Pool.Disable()
-	state.Save()
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	// Should not trigger sync
 	TriggerSyncIfEnabledWithConfig("claude", "test", DefaultAutoSyncConfig())
@@ -881,8 +889,12 @@ func TestQueueFailedSync(t *testing.T) {
 
 	m1 := NewMachine("m1", "192.168.1.1")
 	m2 := NewMachine("m2", "192.168.1.2")
-	state.Pool.AddMachine(m1)
-	state.Pool.AddMachine(m2)
+	if err := state.Pool.AddMachine(m1); err != nil {
+		t.Fatalf("AddMachine(m1) error = %v", err)
+	}
+	if err := state.Pool.AddMachine(m2); err != nil {
+		t.Fatalf("AddMachine(m2) error = %v", err)
+	}
 
 	queueFailedSync(state, "claude", "test", "sync error")
 
@@ -923,7 +935,9 @@ func TestBackgroundSyncFunctions(t *testing.T) {
 	// Test ProcessQueueIfNeededWithConfig with disabled pool
 	state := NewSyncState(tmpDir)
 	state.Pool.Disable()
-	state.Save()
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	ProcessQueueIfNeededWithConfig(config)
 	// No assertion - just verifying no panic
@@ -1032,7 +1046,9 @@ func TestSSHClientIsConnected(t *testing.T) {
 	}
 
 	// Disconnect on unconnected client should be safe
-	client.Disconnect()
+	if err := client.Disconnect(); err != nil {
+		t.Fatalf("Disconnect failed: %v", err)
+	}
 }
 
 // TestSSHClientDisconnect tests Disconnect is safe.
@@ -1041,9 +1057,11 @@ func TestSSHClientDisconnect(t *testing.T) {
 	client := NewSSHClient(m)
 
 	// Multiple disconnects should be safe
-	client.Disconnect()
-	client.Disconnect()
-	client.Disconnect()
+	for i := 0; i < 3; i++ {
+		if err := client.Disconnect(); err != nil {
+			t.Fatalf("Disconnect #%d failed: %v", i+1, err)
+		}
+	}
 }
 
 // TestSSHErrorMethods tests SSHError helper methods.
@@ -1195,8 +1213,12 @@ func TestRunBackgroundSync(t *testing.T) {
 	state.Pool.Enable()
 	state.Pool.AutoSync = true
 	m := NewMachine("test", "192.168.1.100")
-	state.Pool.AddMachine(m)
-	state.Save()
+	if err := state.Pool.AddMachine(m); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	config := AutoSyncConfig{
 		ThrottleInterval: 1 * time.Second,
@@ -1219,10 +1241,14 @@ func TestProcessQueueWithEntries(t *testing.T) {
 	state := NewSyncState(tmpDir)
 	state.Pool.Enable()
 	m := NewMachine("test", "192.168.1.100")
-	state.Pool.AddMachine(m)
+	if err := state.Pool.AddMachine(m); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
 
 	state.AddToQueue("claude", "test", m.ID, "previous error")
-	state.Save()
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	config := AutoSyncConfig{
 		ThrottleInterval: 1 * time.Second,
@@ -1541,8 +1567,12 @@ func TestTriggerSyncIfEnabledWithEnabledPool(t *testing.T) {
 	state.Pool.Enable()
 	state.Pool.AutoSync = true
 	m := NewMachine("test", "192.168.1.100")
-	state.Pool.AddMachine(m)
-	state.Save()
+	if err := state.Pool.AddMachine(m); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	config := DefaultAutoSyncConfig()
 	config.VaultPath = tmpDir
@@ -1567,9 +1597,13 @@ func TestProcessQueueIfNeededWithQueue(t *testing.T) {
 	state.Pool.Enable()
 	state.Pool.AutoSync = true
 	m := NewMachine("test", "192.168.1.100")
-	state.Pool.AddMachine(m)
+	if err := state.Pool.AddMachine(m); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
 	state.AddToQueue("claude", "test", m.ID, "previous error")
-	state.Save()
+	if err := state.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	ProcessQueueIfNeeded()
 	time.Sleep(100 * time.Millisecond)

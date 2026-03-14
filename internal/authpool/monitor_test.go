@@ -139,16 +139,22 @@ func TestMonitor_RefreshesExpiringSoon(t *testing.T) {
 
 	// Add profile expiring soon (within threshold)
 	pool.AddProfile("claude", "expiring")
-	pool.SetStatus("claude", "expiring", PoolStatusReady)
+	if err := pool.SetStatus("claude", "expiring", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	pool.UpdateTokenExpiry("claude", "expiring", time.Now().Add(5*time.Minute))
 
 	// Add profile not expiring soon
 	pool.AddProfile("claude", "fresh")
-	pool.SetStatus("claude", "fresh", PoolStatusReady)
+	if err := pool.SetStatus("claude", "fresh", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	pool.UpdateTokenExpiry("claude", "fresh", time.Now().Add(time.Hour))
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	// Wait for check cycle
 	time.Sleep(100 * time.Millisecond)
@@ -186,10 +192,14 @@ func TestMonitor_RefreshesExpired(t *testing.T) {
 
 	// Add expired profile
 	pool.AddProfile("claude", "expired")
-	pool.SetStatus("claude", "expired", PoolStatusExpired)
+	if err := pool.SetStatus("claude", "expired", PoolStatusExpired); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	monitor.Stop()
 
@@ -217,10 +227,14 @@ func TestMonitor_RefreshesError(t *testing.T) {
 
 	// Add error profile
 	pool.AddProfile("claude", "error")
-	pool.SetStatus("claude", "error", PoolStatusError)
+	if err := pool.SetStatus("claude", "error", PoolStatusError); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	monitor.Stop()
 
@@ -249,10 +263,14 @@ func TestMonitor_SkipsRefreshing(t *testing.T) {
 
 	// Add profile already refreshing
 	pool.AddProfile("claude", "refreshing")
-	pool.SetStatus("claude", "refreshing", PoolStatusRefreshing)
+	if err := pool.SetStatus("claude", "refreshing", PoolStatusRefreshing); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	monitor.Stop()
 
@@ -281,10 +299,14 @@ func TestMonitor_Callbacks(t *testing.T) {
 	monitor := NewMonitor(pool, refresher, config)
 
 	pool.AddProfile("claude", "test")
-	pool.SetStatus("claude", "test", PoolStatusExpired)
+	if err := pool.SetStatus("claude", "test", PoolStatusExpired); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	monitor.Stop()
 
@@ -307,10 +329,14 @@ func TestMonitor_HandleRefreshError(t *testing.T) {
 	monitor := NewMonitor(pool, refresher, config)
 
 	pool.AddProfile("claude", "failing")
-	pool.SetStatus("claude", "failing", PoolStatusExpired)
+	if err := pool.SetStatus("claude", "failing", PoolStatusExpired); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	monitor.Stop()
 
@@ -334,7 +360,9 @@ func TestMonitor_ForceRefresh(t *testing.T) {
 	monitor := NewMonitor(pool, refresher, config)
 
 	pool.AddProfile("claude", "test")
-	pool.SetStatus("claude", "test", PoolStatusReady)
+	if err := pool.SetStatus("claude", "test", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
 	err := monitor.ForceRefresh(ctx, "claude", "test")
@@ -376,7 +404,9 @@ func TestMonitor_ForceRefresh_AlreadyRefreshing(t *testing.T) {
 	monitor := NewMonitor(pool, refresher, config)
 
 	pool.AddProfile("claude", "test")
-	pool.SetStatus("claude", "test", PoolStatusRefreshing)
+	if err := pool.SetStatus("claude", "test", PoolStatusRefreshing); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
 	err := monitor.ForceRefresh(ctx, "claude", "test")
@@ -400,11 +430,15 @@ func TestMonitor_MaxConcurrent(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		name := string(rune('a' + i))
 		pool.AddProfile("claude", name)
-		pool.SetStatus("claude", name, PoolStatusExpired)
+		if err := pool.SetStatus("claude", name, PoolStatusExpired); err != nil {
+			t.Fatalf("SetStatus(%q) error = %v", name, err)
+		}
 	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	// Wait for a check cycle
 	time.Sleep(50 * time.Millisecond)
@@ -443,7 +477,9 @@ func TestMonitor_Stats(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	stats = monitor.Stats()
 	if !stats.Running {
 		t.Error("Running should be true after Start")
@@ -460,9 +496,13 @@ func TestMonitor_RefreshAll(t *testing.T) {
 
 	// Add expired profiles
 	pool.AddProfile("claude", "a")
-	pool.SetStatus("claude", "a", PoolStatusExpired)
+	if err := pool.SetStatus("claude", "a", PoolStatusExpired); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	pool.AddProfile("claude", "b")
-	pool.SetStatus("claude", "b", PoolStatusExpired)
+	if err := pool.SetStatus("claude", "b", PoolStatusExpired); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
 	monitor.RefreshAll(ctx)
@@ -491,7 +531,9 @@ func TestMonitor_ClearsCooldowns(t *testing.T) {
 	pool.mu.Unlock()
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	monitor.Stop()
 
@@ -512,7 +554,9 @@ func TestMonitor_ContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	// Cancel context should stop monitor
 	cancel()
@@ -532,10 +576,14 @@ func TestMonitor_NoRefresher(t *testing.T) {
 	monitor := NewMonitor(pool, nil, config)
 
 	pool.AddProfile("claude", "test")
-	pool.SetStatus("claude", "test", PoolStatusExpired)
+	if err := pool.SetStatus("claude", "test", PoolStatusExpired); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	ctx := context.Background()
-	monitor.Start(ctx)
+	if err := monitor.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	monitor.Stop()
 

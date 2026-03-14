@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -365,6 +367,51 @@ func TestMockCLI_Handoff(t *testing.T) {
 			return
 		}
 	}
+	if mode == "rate_limit_hang_then_restart_original_args" {
+		counterFile := strings.TrimSpace(os.Getenv("MOCK_CLI_COUNTER_FILE"))
+		expectedPrompt := strings.TrimSpace(os.Getenv("MOCK_EXPECT_ORIGINAL_PROMPT"))
+		count := 0
+		if counterFile != "" {
+			if data, err := os.ReadFile(counterFile); err == nil {
+				if parsed, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
+					count = parsed
+				}
+			}
+		}
+		count++
+		if counterFile != "" {
+			_ = os.WriteFile(counterFile, []byte(strconv.Itoa(count)), 0o600)
+		}
+
+		if count == 1 {
+			fmt.Println("Processing...")
+			time.Sleep(100 * time.Millisecond)
+			fmt.Println("■ You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again")
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+			defer signal.Stop(sigCh)
+
+			select {
+			case <-sigCh:
+				fmt.Println("Exhausted session interrupted for seamless resume")
+				os.Exit(130)
+			case <-time.After(10 * time.Second):
+				fmt.Println("Timed out waiting for seamless-resume interrupt")
+				os.Exit(1)
+			}
+		}
+
+		joinedArgs := strings.Join(os.Args, " ")
+		if expectedPrompt != "" && !strings.Contains(joinedArgs, expectedPrompt) {
+			fmt.Printf("Missing expected prompt replay: %s\n", expectedPrompt)
+			os.Exit(1)
+			return
+		}
+
+		fmt.Println("Replayed original command on switched profile")
+		os.Exit(0)
+	}
 	if mode == "codex_rate_limit_no_login_needed" {
 		fmt.Println("Processing...")
 		time.Sleep(100 * time.Millisecond)
@@ -669,13 +716,13 @@ func TestSmartRunner_E2E(t *testing.T) {
 	// Check DB for Activation Event
 	activations, err := db.GetEvents("claude", "active", time.Now().Add(-1*time.Hour), 10)
 	require.NoError(t, err)
-	assert.NotEmpty(t, activations, "Should have logged activation event")
+	require.NotEmpty(t, activations, "Should have logged activation event")
 	assert.Equal(t, caamdb.EventActivate, activations[0].Type)
 
 	// Check DB for Wrap Session
 	sessions, err := db.GetWrapSessions("claude", time.Now().Add(-1*time.Hour), 10)
 	require.NoError(t, err)
-	assert.NotEmpty(t, sessions, "Should have recorded wrap session")
+	require.NotEmpty(t, sessions, "Should have recorded wrap session")
 	assert.Equal(t, "backup", sessions[0].ProfileName, "Session should record final profile")
 	assert.True(t, sessions[0].RateLimitHit, "Session should mark rate limit hit")
 
@@ -1794,6 +1841,105 @@ func TestSmartRunner_E2E_CodexRateLimitExitZeroStillSeamlesslyResumes(t *testing
 		require.NoError(t, promptErr)
 		assert.Contains(t, strings.ToLower(strings.TrimSpace(string(continuationData))), "continue exactly where you left off")
 		assert.Equal(t, "backup", sr.currentProfile)
+	})
+
+	validateCanonicalLogsWithFailureCheck(t, h, canonicalLogPath)
+}
+
+func TestSmartRunner_E2E_CodexRateLimitHangRestartsOriginalCommand(t *testing.T) {
+	h := testutil.NewExtendedHarness(t)
+	defer h.Close()
+	canonicalLogPath := configureCanonicalLogPath(t, h)
+
+	rootDir := h.TempDir
+	vaultDir := filepath.Join(rootDir, "vault")
+	dbPath := filepath.Join(rootDir, "caam.db")
+	profilesDir := filepath.Join(rootDir, "profiles")
+	codexHome := filepath.Join(rootDir, ".codex")
+	counterFile := filepath.Join(rootDir, "restart_count.txt")
+	expectedPrompt := "Reply with the single word READY and nothing else."
+
+	var (
+		db     *caamdb.DB
+		err    error
+		prof   *profile.Profile
+		runErr error
+		sr     *SmartRunner
+	)
+
+	originalExec := ExecCommand
+	defer func() { ExecCommand = originalExec }()
+
+	runHarnessStep(h, "setup", "Prepare Codex hung rate-limit fixture that requires original command replay", func() {
+		h.SetEnv("HOME", rootDir)
+		h.SetEnv("CODEX_HOME", codexHome)
+
+		require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "active"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(vaultDir, "codex", "backup"), 0o755))
+		require.NoError(t, os.MkdirAll(codexHome, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "active", "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(vaultDir, "codex", "backup", "auth.json"), []byte(`{"tokens":{"access_token":"token-b"}}`), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(codexHome, "auth.json"), []byte(`{"tokens":{"access_token":"token-a"}}`), 0o600))
+
+		vault := authfile.NewVault(vaultDir)
+		db, err = caamdb.OpenAt(dbPath)
+		require.NoError(t, err)
+		t.Cleanup(func() { db.Close() })
+
+		ExecCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+			cs := []string{"-test.run=^TestMockCLI_Handoff$", "--"}
+			cs = append(cs, args...)
+			cmd := exec.CommandContext(ctx, os.Args[0], cs...)
+			cmd.Env = append(os.Environ(),
+				"GO_WANT_MOCK_CLI=1",
+				"MOCK_CLI_MODE=rate_limit_hang_then_restart_original_args",
+				"MOCK_CLI_COUNTER_FILE="+counterFile,
+				"MOCK_EXPECT_ORIGINAL_PROMPT="+expectedPrompt,
+			)
+			return cmd
+		}
+
+		cfg := config.DefaultSPMConfig().Handoff
+		cfg.MaxRetries = 2
+		sr = NewSmartRunner(&Runner{}, SmartRunnerOptions{
+			HandoffConfig: &cfg,
+			Vault:         vault,
+			DB:            db,
+			Rotation:      rotation.NewSelector(rotation.AlgorithmRoundRobin, nil, db),
+			Notifier:      &MockNotifier{},
+		})
+
+		store := profile.NewStore(profilesDir)
+		prof, err = store.Create("codex", "active", "oauth")
+		require.NoError(t, err)
+	})
+
+	runHarnessStep(h, "run", "Run SmartRunner through a hung Codex rate-limit session and replay the original command", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), smartRunnerE2ETimeout)
+		defer cancel()
+		runErr = sr.Run(ctx, RunOptions{
+			Profile:  prof,
+			Provider: &MockProvider{id: "codex"},
+			Args:     []string{expectedPrompt},
+			Env: map[string]string{
+				"GO_WANT_MOCK_CLI":            "1",
+				"MOCK_CLI_MODE":               "rate_limit_hang_then_restart_original_args",
+				"MOCK_CLI_COUNTER_FILE":       counterFile,
+				"MOCK_EXPECT_ORIGINAL_PROMPT": expectedPrompt,
+			},
+		})
+	})
+
+	runHarnessStep(h, "verify", "Verify the original command is replayed on the switched profile after interrupting the exhausted session", func() {
+		require.NoError(t, runErr)
+		countData, readErr := os.ReadFile(counterFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "2", strings.TrimSpace(string(countData)), "expected the original command to run twice (initial + replay)")
+		assert.Equal(t, "backup", sr.currentProfile, "runner should preserve the switched profile after replaying the original command")
+
+		activeProfile, activeErr := authfile.NewVault(vaultDir).ActiveProfile(authfile.CodexAuthFiles())
+		require.NoError(t, activeErr)
+		assert.Equal(t, "backup", activeProfile, "vault active profile should remain on backup after replay")
 	})
 
 	validateCanonicalLogsWithFailureCheck(t, h, canonicalLogPath)

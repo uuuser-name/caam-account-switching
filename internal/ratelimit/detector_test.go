@@ -295,10 +295,18 @@ func TestObservingWriter_PartialLines(t *testing.T) {
 	})
 
 	// Write partial data
-	w.Write([]byte("Hello "))
-	w.Write([]byte("rate "))
-	w.Write([]byte("limit\n"))
-	w.Write([]byte("Done"))
+	if _, err := w.Write([]byte("Hello ")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if _, err := w.Write([]byte("rate ")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if _, err := w.Write([]byte("limit\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	if _, err := w.Write([]byte("Done")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
 	w.Flush()
 
 	// Should have detected rate limit

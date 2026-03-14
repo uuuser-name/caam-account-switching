@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateBashInit(t *testing.T) {
@@ -277,8 +279,8 @@ func TestShellInitOutput(t *testing.T) {
 	cmd.SetErr(&buf)
 
 	// Reset flags
-	cmd.Flags().Set("tools", "claude")
-	cmd.Flags().Set("no-wrap", "false")
+	require.NoError(t, cmd.Flags().Set("tools", "claude"))
+	require.NoError(t, cmd.Flags().Set("no-wrap", "false"))
 
 	// We can't easily test runShellInit directly since it writes to stdout,
 	// but we can test the generators

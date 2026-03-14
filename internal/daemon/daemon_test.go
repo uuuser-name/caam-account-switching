@@ -13,6 +13,21 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/health"
 )
 
+func cleanupDaemon(t *testing.T, d *Daemon) {
+	t.Helper()
+	if err := d.Stop(); err != nil {
+		t.Errorf("Stop() error = %v", err)
+	}
+}
+
+func startDaemonAsync(d *Daemon) <-chan error {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Start()
+	}()
+	return errCh
+}
+
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
@@ -304,7 +319,7 @@ func TestNewDaemon_WithLogPath(t *testing.T) {
 	}
 
 	d := New(v, hs, cfg)
-	defer d.Stop()
+	t.Cleanup(func() { cleanupDaemon(t, d) })
 
 	if d == nil {
 		t.Fatal("expected daemon to be created")
@@ -546,7 +561,9 @@ func TestDaemon_GetProfileHealth_FallbackToParsing(t *testing.T) {
 
 	// Create a Claude profile with auth file
 	profileDir := filepath.Join(tmpDir, "claude", "test")
-	os.MkdirAll(profileDir, 0700)
+	if err := os.MkdirAll(profileDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", profileDir, err)
+	}
 	// Create an auth file that health.ParseClaudeExpiry can parse
 	// (the function looks for specific files)
 
@@ -633,7 +650,7 @@ func TestDaemonDoubleStart(t *testing.T) {
 
 	// Wait for it to start
 	time.Sleep(100 * time.Millisecond)
-	defer d.Stop()
+	t.Cleanup(func() { cleanupDaemon(t, d) })
 
 	// Second start should fail
 	err := d.Start()
@@ -860,7 +877,9 @@ func TestDaemon_AcquirePIDLock_StalePID(t *testing.T) {
 	defer SetPIDFilePath(originalPath)
 
 	// Write a stale PID (non-existent process)
-	os.WriteFile(pidPath, []byte("999999999\n"), 0600)
+	if err := os.WriteFile(pidPath, []byte("999999999\n"), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", pidPath, err)
+	}
 
 	v := authfile.NewVault(tmpDir)
 	hs := health.NewStorage(filepath.Join(tmpDir, "health.json"))
@@ -874,9 +893,14 @@ func TestDaemon_AcquirePIDLock_StalePID(t *testing.T) {
 	}
 
 	// Verify our PID was written
-	data, _ := os.ReadFile(pidPath)
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("failed to read pid file: %v", err)
+	}
 	var pid int
-	fmt.Sscanf(string(data), "%d", &pid)
+	if _, err := fmt.Sscanf(string(data), "%d", &pid); err != nil {
+		t.Fatalf("failed to parse pid: %v", err)
+	}
 	if pid != os.Getpid() {
 		t.Errorf("PID = %d, want %d", pid, os.Getpid())
 	}
@@ -971,8 +995,12 @@ func TestDaemon_CheckAndBackup_SchedulerTriggersBackup(t *testing.T) {
 	tmpDir := t.TempDir()
 	vaultDir := filepath.Join(tmpDir, "vault")
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(vaultDir, 0700)
-	os.MkdirAll(backupDir, 0700)
+	if err := os.MkdirAll(vaultDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", vaultDir, err)
+	}
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", backupDir, err)
+	}
 
 	v := authfile.NewVault(vaultDir)
 	hs := health.NewStorage(filepath.Join(tmpDir, "health.json"))
@@ -1007,8 +1035,12 @@ func TestDaemon_CheckAndBackup_NotDue(t *testing.T) {
 	tmpDir := t.TempDir()
 	vaultDir := filepath.Join(tmpDir, "vault")
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(vaultDir, 0700)
-	os.MkdirAll(backupDir, 0700)
+	if err := os.MkdirAll(vaultDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", vaultDir, err)
+	}
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", backupDir, err)
+	}
 
 	v := authfile.NewVault(vaultDir)
 	hs := health.NewStorage(filepath.Join(tmpDir, "health.json"))
@@ -1047,8 +1079,12 @@ func TestDaemon_CheckAndRefresh_WithProfiles(t *testing.T) {
 	hs := health.NewStorage(filepath.Join(tmpDir, "health.json"))
 
 	// Create some profile directories (empty, but they'll be listed)
-	os.MkdirAll(filepath.Join(tmpDir, "claude", "test@example.com"), 0700)
-	os.MkdirAll(filepath.Join(tmpDir, "codex", "work@company.com"), 0700)
+	if err := os.MkdirAll(filepath.Join(tmpDir, "claude", "test@example.com"), 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", filepath.Join(tmpDir, "claude", "test@example.com"), err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmpDir, "codex", "work@company.com"), 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", filepath.Join(tmpDir, "codex", "work@company.com"), err)
+	}
 
 	cfg := &Config{
 		CheckInterval:    50 * time.Millisecond,
@@ -1153,7 +1189,9 @@ func TestDaemon_RunLoop_MultipleIterations(t *testing.T) {
 	}
 
 	// Stop daemon
-	d.Stop()
+	if err := d.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
 
 	<-errCh
 }
@@ -1178,8 +1216,13 @@ func TestDaemon_GetStats_AfterRunning(t *testing.T) {
 	d := New(v, hs, cfg)
 
 	// Start daemon
-	go d.Start()
+	errCh := startDaemonAsync(d)
 	time.Sleep(100 * time.Millisecond)
+
+	if err := d.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	<-errCh
 
 	stats := d.GetStats()
 
@@ -1198,7 +1241,9 @@ func TestDaemon_GetStats_AfterRunning(t *testing.T) {
 		t.Error("LastCheck should be set after running")
 	}
 
-	d.Stop()
+	if err := d.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
 }
 
 func TestDaemon_checkProfile_Concurrent(t *testing.T) {
@@ -1238,7 +1283,9 @@ func TestDaemon_checkProfile_Concurrent(t *testing.T) {
 func TestBackupScheduler_SaveState_Successful(t *testing.T) {
 	tmpDir := t.TempDir()
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupDir, 0700)
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", backupDir, err)
+	}
 
 	cfg := &config.BackupConfig{
 		Enabled:  true,
@@ -1320,13 +1367,16 @@ func TestDaemon_ReloadConfig_WhileRunning(t *testing.T) {
 	d := New(v, hs, cfg)
 
 	// Start daemon
-	go d.Start()
+	errCh := startDaemonAsync(d)
 	time.Sleep(100 * time.Millisecond)
 
 	// ReloadConfig while running should not panic
 	d.ReloadConfig()
 
-	d.Stop()
+	if err := d.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	<-errCh
 }
 
 func TestBackupScheduler_SaveState_ErrorOnWrite(t *testing.T) {
@@ -1375,7 +1425,7 @@ func TestDaemon_Stop_WithPIDFile(t *testing.T) {
 	d := New(v, hs, cfg)
 
 	// Start daemon
-	go d.Start()
+	errCh := startDaemonAsync(d)
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify PID file exists
@@ -1384,7 +1434,10 @@ func TestDaemon_Stop_WithPIDFile(t *testing.T) {
 	}
 
 	// Stop should clean up PID file
-	d.Stop()
+	if err := d.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	<-errCh
 
 	// PID file should be removed
 	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
@@ -1452,7 +1505,9 @@ func TestDaemon_Start_SignalHandling(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Use Stop() to terminate (simulates graceful shutdown)
-	d.Stop()
+	if err := d.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
 
 	select {
 	case err := <-errCh:
@@ -1482,14 +1537,22 @@ func TestDaemon_Start_ConfigChangedChannel(t *testing.T) {
 
 	d := New(v, hs, cfg)
 
-	go d.Start()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- d.Start()
+	}()
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger config reload (exercises runLoop config change handling)
 	d.ReloadConfig()
 	time.Sleep(50 * time.Millisecond)
 
-	d.Stop()
+	if err := d.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if err := <-errCh; err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 }
 
 func TestDaemon_getProfileHealth_ParseClaudeExpiry(t *testing.T) {
@@ -1499,7 +1562,9 @@ func TestDaemon_getProfileHealth_ParseClaudeExpiry(t *testing.T) {
 
 	// Create a profile directory but no valid auth file
 	profilePath := v.ProfilePath("claude", "test@example.com")
-	os.MkdirAll(profilePath, 0700)
+	if err := os.MkdirAll(profilePath, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", profilePath, err)
+	}
 
 	cfg := &Config{
 		CheckInterval: 50 * time.Millisecond,
@@ -1521,7 +1586,9 @@ func TestDaemon_getProfileHealth_ParseCodexExpiry(t *testing.T) {
 
 	// Create a codex profile directory but no valid auth file
 	profilePath := v.ProfilePath("codex", "test@example.com")
-	os.MkdirAll(profilePath, 0700)
+	if err := os.MkdirAll(profilePath, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", profilePath, err)
+	}
 
 	cfg := &Config{
 		CheckInterval: 50 * time.Millisecond,
@@ -1543,7 +1610,9 @@ func TestDaemon_getProfileHealth_ParseGeminiExpiry(t *testing.T) {
 
 	// Create a gemini profile directory but no valid auth file
 	profilePath := v.ProfilePath("gemini", "test@example.com")
-	os.MkdirAll(profilePath, 0700)
+	if err := os.MkdirAll(profilePath, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", profilePath, err)
+	}
 
 	cfg := &Config{
 		CheckInterval: 50 * time.Millisecond,

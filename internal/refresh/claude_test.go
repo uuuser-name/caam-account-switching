@@ -79,8 +79,13 @@ func TestUpdateClaudeAuth(t *testing.T) {
 		"expires_at":    "2020-01-01T00:00:00Z",
 		"other_field":   "preserve-me",
 	}
-	data, _ := json.Marshal(initialAuth)
-	os.WriteFile(path, data, 0600)
+	data, err := json.Marshal(initialAuth)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	// Update
 	newResp := &TokenResponse{
@@ -94,9 +99,14 @@ func TestUpdateClaudeAuth(t *testing.T) {
 	}
 
 	// Verify
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	if updatedAuth["access_token"] != "new-access" {
 		t.Errorf("access_token not updated")
@@ -126,7 +136,10 @@ func TestUpdateClaudeAuth_CredentialsFormat(t *testing.T) {
 		},
 		"other_field": "preserve-me",
 	}
-	data, _ := json.Marshal(initialAuth)
+	data, err := json.Marshal(initialAuth)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatalf("write credentials.json: %v", err)
 	}
@@ -141,9 +154,14 @@ func TestUpdateClaudeAuth_CredentialsFormat(t *testing.T) {
 		t.Fatalf("UpdateClaudeAuth failed: %v", err)
 	}
 
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	oauthRaw, ok := updatedAuth["claudeAiOauth"]
 	if !ok {
@@ -203,7 +221,9 @@ func TestRefreshClaudeToken_HTTPError(t *testing.T) {
 
 func TestRefreshClaudeToken_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not valid json"))
+		if _, err := w.Write([]byte("not valid json")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -261,7 +281,10 @@ func TestClaudeExpiryFromResponse_ExpiresAt(t *testing.T) {
 	}
 
 	result := claudeExpiryFromResponse(resp)
-	expected, _ := time.Parse(time.RFC3339, expiryStr)
+	expected, err := time.Parse(time.RFC3339, expiryStr)
+	if err != nil {
+		t.Fatalf("time.Parse() error = %v", err)
+	}
 	if !result.Equal(expected) {
 		t.Errorf("claudeExpiryFromResponse = %v, want %v", result, expected)
 	}
@@ -344,13 +367,16 @@ func TestUpdateClaudeAuth_InvalidClaudeAiOauth(t *testing.T) {
 	initialAuth := map[string]interface{}{
 		"claudeAiOauth": "not a map",
 	}
-	data, _ := json.Marshal(initialAuth)
+	data, err := json.Marshal(initialAuth)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	resp := &TokenResponse{AccessToken: "token"}
-	err := UpdateClaudeAuth(path, resp)
+	err = UpdateClaudeAuth(path, resp)
 	if err == nil {
 		t.Error("UpdateClaudeAuth should error on invalid claudeAiOauth format")
 	}
@@ -365,7 +391,10 @@ func TestUpdateClaudeAuth_CamelCaseFormat(t *testing.T) {
 		"refreshToken": "old-refresh",
 		"expiresAt":    "2020-01-01T00:00:00Z",
 	}
-	data, _ := json.Marshal(initialAuth)
+	data, err := json.Marshal(initialAuth)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -380,9 +409,14 @@ func TestUpdateClaudeAuth_CamelCaseFormat(t *testing.T) {
 		t.Fatalf("UpdateClaudeAuth failed: %v", err)
 	}
 
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	if updatedAuth["accessToken"] != "new-access" {
 		t.Errorf("accessToken not updated")
@@ -400,7 +434,10 @@ func TestUpdateClaudeAuth_NoRefreshToken(t *testing.T) {
 		"access_token":  "old-access",
 		"refresh_token": "old-refresh",
 	}
-	data, _ := json.Marshal(initialAuth)
+	data, err := json.Marshal(initialAuth)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -415,9 +452,14 @@ func TestUpdateClaudeAuth_NoRefreshToken(t *testing.T) {
 		t.Fatalf("UpdateClaudeAuth failed: %v", err)
 	}
 
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	// refresh_token should be preserved (not updated to empty)
 	if updatedAuth["refresh_token"] != "old-refresh" {
@@ -433,7 +475,10 @@ func TestUpdateClaudeAuth_NewFileFields(t *testing.T) {
 	initialAuth := map[string]interface{}{
 		"other_field": "value",
 	}
-	data, _ := json.Marshal(initialAuth)
+	data, err := json.Marshal(initialAuth)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -448,9 +493,14 @@ func TestUpdateClaudeAuth_NewFileFields(t *testing.T) {
 		t.Fatalf("UpdateClaudeAuth failed: %v", err)
 	}
 
-	updatedData, _ := os.ReadFile(path)
+	updatedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updatedAuth map[string]interface{}
-	json.Unmarshal(updatedData, &updatedAuth)
+	if err := json.Unmarshal(updatedData, &updatedAuth); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	// Should default to snake_case for new fields
 	if updatedAuth["access_token"] != "new-access" {

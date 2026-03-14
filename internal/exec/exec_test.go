@@ -483,7 +483,11 @@ func TestRun_LockError(t *testing.T) {
 	if err := prof.LockWithCleanup(); err != nil {
 		t.Fatalf("Failed to acquire lock: %v", err)
 	}
-	defer prof.Unlock()
+	t.Cleanup(func() {
+		if err := prof.Unlock(); err != nil && !os.IsNotExist(err) {
+			t.Errorf("Unlock() cleanup error = %v", err)
+		}
+	})
 
 	// Create a second profile pointing to same location
 	prof2 := &profile.Profile{

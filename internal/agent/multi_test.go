@@ -15,9 +15,10 @@ func TestCoordinatorEndpointHealth(t *testing.T) {
 		Name: "test",
 		URL:  "http://localhost:7890",
 	}
+	var errMsg string
 
 	// Initially unhealthy (never checked)
-	healthy, errMsg, lastCheck := coord.GetHealth()
+	healthy, _, lastCheck := coord.GetHealth()
 	if healthy {
 		t.Error("expected initially unhealthy")
 	}

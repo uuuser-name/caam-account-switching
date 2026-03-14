@@ -1,6 +1,7 @@
 package health
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -471,7 +472,9 @@ func TestParseClaudeCredentialsFile(t *testing.T) {
 				"subscriptionType": "max"
 			}
 		}`
-		os.WriteFile(path, []byte(data), 0600)
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
 		info, err := parseClaudeCredentialsFile(path)
 		if err != nil {
@@ -488,7 +491,9 @@ func TestParseClaudeCredentialsFile(t *testing.T) {
 	t.Run("missing claudeAiOauth", func(t *testing.T) {
 		path := filepath.Join(tmpDir, "no_oauth.json")
 		data := `{"other": "data"}`
-		os.WriteFile(path, []byte(data), 0600)
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
 		_, err := parseClaudeCredentialsFile(path)
 		if err != ErrNoExpiry {
@@ -503,7 +508,9 @@ func TestParseClaudeCredentialsFile(t *testing.T) {
 				"accessToken": "test_access"
 			}
 		}`
-		os.WriteFile(path, []byte(data), 0600)
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
 		info, err := parseClaudeCredentialsFile(path)
 		if err != nil {
@@ -519,7 +526,9 @@ func TestParseClaudeCredentialsFile(t *testing.T) {
 		data := `{
 			"claudeAiOauth": {}
 		}`
-		os.WriteFile(path, []byte(data), 0600)
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
 		_, err := parseClaudeCredentialsFile(path)
 		if err != ErrNoExpiry {
@@ -529,7 +538,9 @@ func TestParseClaudeCredentialsFile(t *testing.T) {
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		path := filepath.Join(tmpDir, "invalid.json")
-		os.WriteFile(path, []byte("{invalid json"), 0600)
+		if err := os.WriteFile(path, []byte("{invalid json"), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
 		_, err := parseClaudeCredentialsFile(path)
 		if err == nil {
@@ -570,7 +581,10 @@ func TestGetADCPath(t *testing.T) {
 
 		path := getADCPath()
 		// On non-Windows, should use ~/.config/gcloud/...
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatalf("UserHomeDir() error = %v", err)
+		}
 		expected := filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
 		if path != expected {
 			t.Errorf("expected %s, got %s", expected, path)
@@ -612,7 +626,9 @@ func TestParseCodexExpiryDefaultPath(t *testing.T) {
 		"refresh_token": "test_refresh",
 		"expires_at": 1734523200
 	}`
-	os.WriteFile(authPath, []byte(authData), 0600)
+	if err := os.WriteFile(authPath, []byte(authData), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+	}
 
 	// Test with empty path (should use CODEX_HOME)
 	info, err := ParseCodexExpiry("")
@@ -635,7 +651,9 @@ func TestParseGeminiExpiryDefaultPath(t *testing.T) {
 		"refresh_token": "test_refresh",
 		"expiry": "2025-12-18T14:00:00Z"
 	}`
-	os.WriteFile(settingsPath, []byte(settingsData), 0600)
+	if err := os.WriteFile(settingsPath, []byte(settingsData), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", settingsPath, err)
+	}
 
 	// Test with empty path (should use GEMINI_HOME)
 	info, err := ParseGeminiExpiry("")
@@ -659,7 +677,9 @@ func TestParseClaudeExpiry_CredentialsFile(t *testing.T) {
 			"expiresAt": 1768042451877
 		}
 	}`
-	os.WriteFile(credPath, []byte(credData), 0600)
+	if err := os.WriteFile(credPath, []byte(credData), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", credPath, err)
+	}
 
 	info, err := ParseClaudeExpiry(tmpDir)
 	if err != nil {
@@ -675,14 +695,18 @@ func TestParseClaudeExpiry_NestedAuthJson(t *testing.T) {
 
 	// Create nested auth.json
 	nestedDir := filepath.Join(tmpDir, "claude-code")
-	os.MkdirAll(nestedDir, 0700)
+	if err := os.MkdirAll(nestedDir, 0700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", nestedDir, err)
+	}
 	authPath := filepath.Join(nestedDir, "auth.json")
 	authData := `{
 		"access_token": "test_access",
 		"refresh_token": "test_refresh",
 		"expires_at": 1734523200
 	}`
-	os.WriteFile(authPath, []byte(authData), 0600)
+	if err := os.WriteFile(authPath, []byte(authData), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", authPath, err)
+	}
 
 	info, err := ParseClaudeExpiry(tmpDir)
 	if err != nil {
@@ -723,7 +747,9 @@ func TestParseADCFile_NoRefreshToken(t *testing.T) {
 		"client_secret": "test_secret",
 		"type": "authorized_user"
 	}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	_, err := parseADCFile(path)
 	if err != ErrNoExpiry {
@@ -735,7 +761,9 @@ func TestParseADCFile_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "invalid_adc.json")
 
-	os.WriteFile(path, []byte("{invalid json"), 0600)
+	if err := os.WriteFile(path, []byte("{invalid json"), 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	_, err := parseADCFile(path)
 	if err == nil {
@@ -750,19 +778,15 @@ func TestParseOAuthFile_ExpiresInWithIssuedAt(t *testing.T) {
 		path := filepath.Join(tmpDir, "expires_in.json")
 		// 3600 seconds (1 hour) from a known timestamp
 		issuedAt := time.Now().Add(-30 * time.Minute).Unix()
-		data := `{
+		data := fmt.Sprintf(`{
 			"access_token": "test",
 			"refresh_token": "test_refresh",
 			"expires_in": 3600,
-			"issued_at": ` + string(rune(issuedAt)) + `
-		}`
-		// Use a simple numeric value
-		data = `{
-			"access_token": "test",
-			"refresh_token": "test_refresh",
-			"expiresIn": 3600
-		}`
-		os.WriteFile(path, []byte(data), 0600)
+			"issued_at": %d
+		}`, issuedAt)
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", path, err)
+		}
 
 		info, err := parseOAuthFile(path)
 		if err != nil {

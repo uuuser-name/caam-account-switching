@@ -124,7 +124,7 @@ func TestWait_NilContext(t *testing.T) {
 	skip := make(chan struct{})
 	close(skip)
 
-	skipped, err := Wait(nil, 10*time.Second, WaitOptions{
+	skipped, err := Wait(context.TODO(), 10*time.Second, WaitOptions{
 		Skip: skip,
 	})
 	if err != nil {

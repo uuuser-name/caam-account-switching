@@ -188,7 +188,9 @@ func TestBackupScheduler_StatePersistence(t *testing.T) {
 func TestBackupScheduler_RotateBackups(t *testing.T) {
 	tmpDir := t.TempDir()
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupDir, 0700)
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
+		t.Fatalf("failed to create backup dir: %v", err)
+	}
 
 	// Create test backup files
 	for i := 1; i <= 7; i++ {
@@ -232,7 +234,9 @@ func TestBackupScheduler_RotateBackups(t *testing.T) {
 func TestBackupScheduler_ListBackups(t *testing.T) {
 	tmpDir := t.TempDir()
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupDir, 0700)
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
+		t.Fatalf("failed to create backup dir: %v", err)
+	}
 
 	// Create test backup files with different timestamps
 	// Pattern matches VaultExporter output: caam_export_YYYY-MM-DD_HHMM.zip
@@ -248,11 +252,15 @@ func TestBackupScheduler_ListBackups(t *testing.T) {
 		}
 		// Set different mod times so sorting works
 		modTime := time.Now().Add(time.Duration(-i) * time.Hour)
-		os.Chtimes(path, modTime, modTime)
+		if err := os.Chtimes(path, modTime, modTime); err != nil {
+			t.Fatalf("failed to update mod time for %s: %v", path, err)
+		}
 	}
 
 	// Create a non-backup file
-	os.WriteFile(filepath.Join(backupDir, "other.txt"), []byte("other"), 0600)
+	if err := os.WriteFile(filepath.Join(backupDir, "other.txt"), []byte("other"), 0600); err != nil {
+		t.Fatalf("failed to create non-backup file: %v", err)
+	}
 
 	cfg := &config.BackupConfig{
 		Enabled:  true,
@@ -389,9 +397,13 @@ func TestBackupScheduler_LoadState_InvalidJSON(t *testing.T) {
 	// Create invalid JSON file
 	t.Setenv("CAAM_HOME", "")
 	stateDir := filepath.Join(config.DefaultDataPath())
-	os.MkdirAll(stateDir, 0700)
+	if err := os.MkdirAll(stateDir, 0700); err != nil {
+		t.Fatalf("failed to create state dir: %v", err)
+	}
 	statePath := filepath.Join(stateDir, "backup_state.json")
-	os.WriteFile(statePath, []byte("{invalid json"), 0600)
+	if err := os.WriteFile(statePath, []byte("{invalid json"), 0600); err != nil {
+		t.Fatalf("failed to write invalid state file: %v", err)
+	}
 	defer os.Remove(statePath)
 
 	err := scheduler.LoadState()
@@ -420,12 +432,16 @@ func TestBackupScheduler_ListBackups_NoDir(t *testing.T) {
 func TestBackupScheduler_RotateBackups_DefaultKeepLast(t *testing.T) {
 	tmpDir := t.TempDir()
 	backupDir := filepath.Join(tmpDir, "backups")
-	os.MkdirAll(backupDir, 0700)
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
+		t.Fatalf("failed to create backup dir: %v", err)
+	}
 
 	// Create test backup files with proper names
 	for i := 1; i <= 10; i++ {
 		name := filepath.Join(backupDir, fmt.Sprintf("caam_export_2025-02-%02d_1200.zip", i))
-		os.WriteFile(name, []byte("test"), 0600)
+		if err := os.WriteFile(name, []byte("test"), 0600); err != nil {
+			t.Fatalf("failed to create test backup: %v", err)
+		}
 	}
 
 	cfg := &config.BackupConfig{

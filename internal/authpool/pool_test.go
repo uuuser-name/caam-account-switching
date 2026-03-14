@@ -161,7 +161,9 @@ func TestAuthPool_SetStatus_ClearsErrorOnReady(t *testing.T) {
 	}
 
 	// Set status to ready should clear error
-	p.SetStatus("claude", "test", PoolStatusReady)
+	if err := p.SetStatus("claude", "test", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	profile = p.GetProfile("claude", "test")
 	if profile.ErrorCount != 0 {
 		t.Errorf("ErrorCount = %d after SetStatus(Ready), want 0", profile.ErrorCount)
@@ -283,7 +285,9 @@ func TestAuthPool_ClearCooldown(t *testing.T) {
 func TestAuthPool_UpdateTokenExpiry(t *testing.T) {
 	p := NewAuthPool()
 	p.AddProfile("claude", "test")
-	p.SetStatus("claude", "test", PoolStatusReady)
+	if err := p.SetStatus("claude", "test", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	// Set future expiry
 	future := time.Now().Add(time.Hour)
@@ -359,16 +363,22 @@ func TestAuthPool_GetReadyProfiles(t *testing.T) {
 
 	// Add profiles with different statuses
 	p.AddProfile("claude", "ready1")
-	p.SetStatus("claude", "ready1", PoolStatusReady)
+	if err := p.SetStatus("claude", "ready1", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	p.AddProfile("claude", "ready2")
-	p.SetStatus("claude", "ready2", PoolStatusReady)
+	if err := p.SetStatus("claude", "ready2", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	p.AddProfile("claude", "cooldown")
 	p.SetCooldown("claude", "cooldown", time.Hour)
 
 	p.AddProfile("codex", "ready")
-	p.SetStatus("codex", "ready", PoolStatusReady)
+	if err := p.SetStatus("codex", "ready", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	// Get all ready profiles
 	ready := p.GetReadyProfiles("")
@@ -388,10 +398,14 @@ func TestAuthPool_GetReadyProfiles_SortOrder(t *testing.T) {
 
 	// Add profiles with different priorities
 	p.AddProfile("claude", "low")
-	p.SetStatus("claude", "low", PoolStatusReady)
+	if err := p.SetStatus("claude", "low", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	p.AddProfile("claude", "high")
-	p.SetStatus("claude", "high", PoolStatusReady)
+	if err := p.SetStatus("claude", "high", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	// Manually set priority (normally done through vault or other means)
 	p.mu.Lock()
@@ -415,20 +429,28 @@ func TestAuthPool_GetProfilesNeedingRefresh(t *testing.T) {
 
 	// Ready profile with distant expiry
 	p.AddProfile("claude", "ok")
-	p.SetStatus("claude", "ok", PoolStatusReady)
+	if err := p.SetStatus("claude", "ok", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	p.UpdateTokenExpiry("claude", "ok", time.Now().Add(time.Hour))
 
 	// Expired profile
 	p.AddProfile("claude", "expired")
-	p.SetStatus("claude", "expired", PoolStatusExpired)
+	if err := p.SetStatus("claude", "expired", PoolStatusExpired); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	// Error profile
 	p.AddProfile("claude", "error")
-	p.SetStatus("claude", "error", PoolStatusError)
+	if err := p.SetStatus("claude", "error", PoolStatusError); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	// Profile expiring soon
 	p.AddProfile("claude", "soon")
-	p.SetStatus("claude", "soon", PoolStatusReady)
+	if err := p.SetStatus("claude", "soon", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	p.UpdateTokenExpiry("claude", "soon", time.Now().Add(5*time.Minute))
 
 	needsRefresh := p.GetProfilesNeedingRefresh("claude")
@@ -442,7 +464,9 @@ func TestAuthPool_GetProfilesInCooldown(t *testing.T) {
 	p := NewAuthPool()
 
 	p.AddProfile("claude", "ready")
-	p.SetStatus("claude", "ready", PoolStatusReady)
+	if err := p.SetStatus("claude", "ready", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	p.AddProfile("claude", "cool1")
 	p.SetCooldown("claude", "cool1", time.Hour)
@@ -494,7 +518,9 @@ func TestAuthPool_SelectBest(t *testing.T) {
 
 	// Add ready profile
 	p.AddProfile("claude", "ready")
-	p.SetStatus("claude", "ready", PoolStatusReady)
+	if err := p.SetStatus("claude", "ready", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	best = p.SelectBest("claude")
 	if best == nil {
@@ -509,16 +535,22 @@ func TestAuthPool_CountByStatus(t *testing.T) {
 	p := NewAuthPool()
 
 	p.AddProfile("claude", "ready1")
-	p.SetStatus("claude", "ready1", PoolStatusReady)
+	if err := p.SetStatus("claude", "ready1", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	p.AddProfile("claude", "ready2")
-	p.SetStatus("claude", "ready2", PoolStatusReady)
+	if err := p.SetStatus("claude", "ready2", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	p.AddProfile("claude", "cooldown")
 	p.SetCooldown("claude", "cooldown", time.Hour)
 
 	p.AddProfile("claude", "error")
-	p.SetStatus("claude", "error", PoolStatusError)
+	if err := p.SetStatus("claude", "error", PoolStatusError); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	counts := p.CountByStatus()
 	if counts[PoolStatusReady] != 2 {
@@ -603,13 +635,17 @@ func TestAuthPool_Summary(t *testing.T) {
 	p := NewAuthPool()
 
 	p.AddProfile("claude", "ready")
-	p.SetStatus("claude", "ready", PoolStatusReady)
+	if err := p.SetStatus("claude", "ready", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	p.AddProfile("claude", "cooldown")
 	p.SetCooldown("claude", "cooldown", time.Hour)
 
 	p.AddProfile("codex", "error")
-	p.SetStatus("codex", "error", PoolStatusError)
+	if err := p.SetStatus("codex", "error", PoolStatusError); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	summary := p.Summary()
 	if summary.TotalProfiles != 3 {
@@ -650,7 +686,9 @@ func TestAuthPool_OnStateChangeCallback(t *testing.T) {
 	)
 
 	p.AddProfile("claude", "test")
-	p.SetStatus("claude", "test", PoolStatusReady)
+	if err := p.SetStatus("claude", "test", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	// Wait for callback (it's async)
 	wg.Wait()
@@ -672,7 +710,9 @@ func TestAuthPool_OnStateChangeCallback(t *testing.T) {
 func TestAuthPool_Concurrency(t *testing.T) {
 	p := NewAuthPool()
 	p.AddProfile("claude", "test")
-	p.SetStatus("claude", "test", PoolStatusReady)
+	if err := p.SetStatus("claude", "test", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	var wg sync.WaitGroup
 	const goroutines = 100
@@ -696,7 +736,9 @@ func TestAuthPool_Concurrency(t *testing.T) {
 			defer wg.Done()
 			p.MarkUsed("claude", "test")
 			if n%2 == 0 {
-				p.SetStatus("claude", "test", PoolStatusReady)
+				if err := p.SetStatus("claude", "test", PoolStatusReady); err != nil {
+					t.Errorf("SetStatus() error = %v", err)
+				}
 			}
 		}(i)
 	}
@@ -762,9 +804,9 @@ func TestPooledProfile_IsExpiringSoon(t *testing.T) {
 
 func TestPooledProfile_IsInCooldown(t *testing.T) {
 	tests := []struct {
-		name    string
-		until   time.Time
-		want    bool
+		name  string
+		until time.Time
+		want  bool
 	}{
 		{"zero", time.Time{}, false},
 		{"future", time.Now().Add(time.Hour), true},

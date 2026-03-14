@@ -81,8 +81,13 @@ func TestReadADC(t *testing.T) {
 		RefreshToken: "test-refresh",
 		Type:         "authorized_user",
 	}
-	data, _ := json.Marshal(adc)
-	os.WriteFile(path, data, 0600)
+	data, err := json.Marshal(adc)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	readAdc, err := ReadADC(path)
 	if err != nil {
@@ -108,7 +113,10 @@ func TestUpdateGeminiHealth(t *testing.T) {
 	}
 
 	// Verify
-	h, _ := store.GetProfile("gemini", "default")
+	h, err := store.GetProfile("gemini", "default")
+	if err != nil {
+		t.Fatalf("GetProfile() error = %v", err)
+	}
 	if h == nil {
 		t.Fatal("health profile not created")
 	}
@@ -185,7 +193,9 @@ func TestRefreshGeminiToken_EmptyRefreshToken(t *testing.T) {
 func TestRefreshGeminiToken_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Unauthorized"))
+		if _, err := w.Write([]byte("Unauthorized")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -201,7 +211,9 @@ func TestRefreshGeminiToken_HTTPError(t *testing.T) {
 
 func TestRefreshGeminiToken_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not valid json"))
+		if _, err := w.Write([]byte("not valid json")); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -248,10 +260,15 @@ func TestReadADC_IncompleteCredentials(t *testing.T) {
 		ClientID: "test-client",
 		// Missing client_secret and refresh_token
 	}
-	data, _ := json.Marshal(adc)
-	os.WriteFile(path, data, 0600)
+	data, err := json.Marshal(adc)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
-	_, err := ReadADC(path)
+	_, err = ReadADC(path)
 	if err == nil {
 		t.Error("ReadADC should error on incomplete credentials")
 	}
@@ -292,8 +309,13 @@ func TestUpdateGeminiAuth_CamelCaseFormat(t *testing.T) {
 		"accessToken": "old-access",
 		"expiresAt":   "2020-01-01T00:00:00Z",
 	}
-	raw, _ := json.Marshal(original)
-	os.WriteFile(path, raw, 0600)
+	raw, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	resp := &GoogleTokenResponse{
 		AccessToken: "new-access",
@@ -304,9 +326,14 @@ func TestUpdateGeminiAuth_CamelCaseFormat(t *testing.T) {
 		t.Fatalf("UpdateGeminiAuth failed: %v", err)
 	}
 
-	updatedRaw, _ := os.ReadFile(path)
+	updatedRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updated map[string]any
-	json.Unmarshal(updatedRaw, &updated)
+	if err := json.Unmarshal(updatedRaw, &updated); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	if updated["accessToken"] != "new-access" {
 		t.Errorf("accessToken not updated: %v", updated["accessToken"])
@@ -324,8 +351,13 @@ func TestUpdateGeminiAuth_ExpiresAtFormat(t *testing.T) {
 		"access_token": "old-access",
 		"expires_at":   "2020-01-01T00:00:00Z",
 	}
-	raw, _ := json.Marshal(original)
-	os.WriteFile(path, raw, 0600)
+	raw, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	resp := &GoogleTokenResponse{
 		AccessToken: "new-access",
@@ -336,9 +368,14 @@ func TestUpdateGeminiAuth_ExpiresAtFormat(t *testing.T) {
 		t.Fatalf("UpdateGeminiAuth failed: %v", err)
 	}
 
-	updatedRaw, _ := os.ReadFile(path)
+	updatedRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updated map[string]any
-	json.Unmarshal(updatedRaw, &updated)
+	if err := json.Unmarshal(updatedRaw, &updated); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	if updated["expires_at"] == "2020-01-01T00:00:00Z" {
 		t.Error("expires_at should be updated to new value")
@@ -353,8 +390,13 @@ func TestUpdateGeminiAuth_NoExpiresIn(t *testing.T) {
 		"access_token": "old-access",
 		"expiry":       "2020-01-01T00:00:00Z",
 	}
-	raw, _ := json.Marshal(original)
-	os.WriteFile(path, raw, 0600)
+	raw, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	resp := &GoogleTokenResponse{
 		AccessToken: "new-access",
@@ -365,9 +407,14 @@ func TestUpdateGeminiAuth_NoExpiresIn(t *testing.T) {
 		t.Fatalf("UpdateGeminiAuth failed: %v", err)
 	}
 
-	updatedRaw, _ := os.ReadFile(path)
+	updatedRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updated map[string]any
-	json.Unmarshal(updatedRaw, &updated)
+	if err := json.Unmarshal(updatedRaw, &updated); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	// expiry should remain unchanged when ExpiresIn is 0
 	if updated["expiry"] != "2020-01-01T00:00:00Z" {
@@ -383,8 +430,13 @@ func TestUpdateGeminiAuth_NewFileFields(t *testing.T) {
 	original := map[string]any{
 		"other_field": "value",
 	}
-	raw, _ := json.Marshal(original)
-	os.WriteFile(path, raw, 0600)
+	raw, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 
 	resp := &GoogleTokenResponse{
 		AccessToken: "new-access",
@@ -395,9 +447,14 @@ func TestUpdateGeminiAuth_NewFileFields(t *testing.T) {
 		t.Fatalf("UpdateGeminiAuth failed: %v", err)
 	}
 
-	updatedRaw, _ := os.ReadFile(path)
+	updatedRaw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
 	var updated map[string]any
-	json.Unmarshal(updatedRaw, &updated)
+	if err := json.Unmarshal(updatedRaw, &updated); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
 
 	// Should default to snake_case for new fields
 	if updated["access_token"] != "new-access" {
@@ -426,7 +483,10 @@ func TestUpdateGeminiHealth_NoExpiresIn(t *testing.T) {
 		t.Fatalf("UpdateGeminiHealth failed: %v", err)
 	}
 
-	h, _ := store.GetProfile("gemini", "default")
+	h, err := store.GetProfile("gemini", "default")
+	if err != nil {
+		t.Fatalf("GetProfile() error = %v", err)
+	}
 	if h == nil {
 		t.Fatal("health profile not created")
 	}

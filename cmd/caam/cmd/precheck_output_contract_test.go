@@ -264,9 +264,9 @@ func TestPrecheckBriefContract(t *testing.T) {
 func TestPrecheckTableContract(t *testing.T) {
 	// Contract: table format must contain specific section headers
 	result := &PrecheckResult{
-		Provider:   "claude",
-		Algorithm:  "smart",
-		FetchedAt:  time.Now(),
+		Provider:  "claude",
+		Algorithm: "smart",
+		FetchedAt: time.Now(),
 		Recommended: &ProfileRecommendation{
 			Name:         "work",
 			HealthStatus: "healthy",
@@ -300,15 +300,15 @@ func TestPrecheckTableContract(t *testing.T) {
 // TestProfileRecommendationContract verifies ProfileRecommendation struct contracts.
 func TestProfileRecommendationContract(t *testing.T) {
 	rec := ProfileRecommendation{
-		Name:           "test-profile",
-		Score:          85.0,
-		UsagePercent:   30,
-		AvailScore:     80,
-		HealthStatus:   "healthy",
-		TokenExpiry:    "5h30m",
+		Name:            "test-profile",
+		Score:           85.0,
+		UsagePercent:    30,
+		AvailScore:      80,
+		HealthStatus:    "healthy",
+		TokenExpiry:     "5h30m",
 		TimeToDepletion: "2h",
-		Reasons:        []string{"+ high score"},
-		PoolStatus:     "active",
+		Reasons:         []string{"+ high score"},
+		PoolStatus:      "active",
 	}
 
 	data, err := json.Marshal(rec)
@@ -409,12 +409,4 @@ func formatTableOutput(result *PrecheckResult) string {
 	output += "    caam activate ...\n"
 
 	return output
-}
-
-func mustParseTime(s string) time.Time {
-	tm, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		panic(err)
-	}
-	return tm
 }

@@ -63,10 +63,10 @@ func TestE2E_MultiMachineSyncWorkflow(t *testing.T) {
 	}
 
 	h.LogInfo("Freshness comparison result", map[string]interface{}{
-		"local_expiry":    localFreshness.ExpiresAt.Format(time.RFC3339),
-		"remote_expiry":   remoteFreshness.ExpiresAt.Format(time.RFC3339),
+		"local_expiry":     localFreshness.ExpiresAt.Format(time.RFC3339),
+		"remote_expiry":    remoteFreshness.ExpiresAt.Format(time.RFC3339),
 		"local_is_fresher": localIsFresher,
-		"direction":       "push",
+		"direction":        "push",
 	})
 	h.EndStep("compare_freshness")
 
@@ -115,10 +115,10 @@ func TestE2E_MultiMachineSyncWorkflow(t *testing.T) {
 	}
 
 	h.LogInfo("Freshness comparison result", map[string]interface{}{
-		"local_expiry":     localFreshness.ExpiresAt.Format(time.RFC3339),
-		"remote_expiry":    remoteFreshness.ExpiresAt.Format(time.RFC3339),
+		"local_expiry":      localFreshness.ExpiresAt.Format(time.RFC3339),
+		"remote_expiry":     remoteFreshness.ExpiresAt.Format(time.RFC3339),
 		"remote_is_fresher": remoteIsFresher,
-		"direction":        "pull",
+		"direction":         "pull",
 	})
 	h.EndStep("compare_freshness_pull")
 
@@ -212,7 +212,9 @@ func TestE2E_MultiMachineSyncWorkflow(t *testing.T) {
 	// Create a sync state for testing queue operations
 	state := sync.NewSyncState(syncStateDir)
 	machine := sync.NewMachine("test-server", "192.168.1.100")
-	state.Pool.AddMachine(machine)
+	if err := state.Pool.AddMachine(machine); err != nil {
+		t.Fatalf("AddMachine() error = %v", err)
+	}
 	h.LogInfo("Created sync state", map[string]interface{}{
 		"machine_id":   machine.ID,
 		"machine_name": machine.Name,
@@ -438,8 +440,12 @@ func TestE2E_SyncQueueManagement(t *testing.T) {
 	// Create multiple machines
 	machine1 := sync.NewMachine("server-1", "192.168.1.1")
 	machine2 := sync.NewMachine("server-2", "192.168.1.2")
-	state.Pool.AddMachine(machine1)
-	state.Pool.AddMachine(machine2)
+	if err := state.Pool.AddMachine(machine1); err != nil {
+		t.Fatalf("AddMachine(machine1) error = %v", err)
+	}
+	if err := state.Pool.AddMachine(machine2); err != nil {
+		t.Fatalf("AddMachine(machine2) error = %v", err)
+	}
 	h.EndStep("setup")
 
 	h.StartStep("add_entries", "Adding multiple queue entries")

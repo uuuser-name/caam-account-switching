@@ -8,6 +8,13 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/sync"
 )
 
+func mustAddMachine(t *testing.T, pool *sync.SyncPool, machine *sync.Machine) {
+	t.Helper()
+	if err := pool.AddMachine(machine); err != nil {
+		t.Fatalf("AddMachine(%s) error = %v", machine.Name, err)
+	}
+}
+
 // =============================================================================
 // sync_model.go Tests
 // =============================================================================
@@ -179,7 +186,7 @@ func TestSyncPanelSetState(t *testing.T) {
 	}
 	// Add a machine to the pool
 	machine := sync.NewMachine("test-machine", "192.168.1.100")
-	state.Pool.AddMachine(machine)
+	mustAddMachine(t, state.Pool, machine)
 
 	panel.SetState(state)
 	if panel.state != state {
@@ -246,8 +253,8 @@ func TestSyncPanelSelectedMachine(t *testing.T) {
 	state := &sync.SyncState{Pool: pool}
 	m1 := sync.NewMachine("machine1", "192.168.1.1")
 	m2 := sync.NewMachine("machine2", "192.168.1.2")
-	state.Pool.AddMachine(m1)
-	state.Pool.AddMachine(m2)
+	mustAddMachine(t, state.Pool, m1)
+	mustAddMachine(t, state.Pool, m2)
 	panel.SetState(state)
 
 	selected := panel.SelectedMachine()
@@ -282,9 +289,9 @@ func TestSyncPanelMoveUp(t *testing.T) {
 	// Setup with multiple machines
 	pool := sync.NewSyncPool()
 	state := &sync.SyncState{Pool: pool}
-	state.Pool.AddMachine(sync.NewMachine("m1", "1.1.1.1"))
-	state.Pool.AddMachine(sync.NewMachine("m2", "2.2.2.2"))
-	state.Pool.AddMachine(sync.NewMachine("m3", "3.3.3.3"))
+	mustAddMachine(t, state.Pool, sync.NewMachine("m1", "1.1.1.1"))
+	mustAddMachine(t, state.Pool, sync.NewMachine("m2", "2.2.2.2"))
+	mustAddMachine(t, state.Pool, sync.NewMachine("m3", "3.3.3.3"))
 	panel.SetState(state)
 
 	panel.selectedIdx = 2 // Start at bottom
@@ -324,9 +331,9 @@ func TestSyncPanelMoveDown(t *testing.T) {
 	// Setup with multiple machines
 	pool := sync.NewSyncPool()
 	state := &sync.SyncState{Pool: pool}
-	state.Pool.AddMachine(sync.NewMachine("m1", "1.1.1.1"))
-	state.Pool.AddMachine(sync.NewMachine("m2", "2.2.2.2"))
-	state.Pool.AddMachine(sync.NewMachine("m3", "3.3.3.3"))
+	mustAddMachine(t, state.Pool, sync.NewMachine("m1", "1.1.1.1"))
+	mustAddMachine(t, state.Pool, sync.NewMachine("m2", "2.2.2.2"))
+	mustAddMachine(t, state.Pool, sync.NewMachine("m3", "3.3.3.3"))
 	panel.SetState(state)
 
 	panel.selectedIdx = 0 // Start at top
@@ -588,7 +595,7 @@ func TestSyncPanelViewWithMachines(t *testing.T) {
 	}
 	m := sync.NewMachine("test-server", "192.168.1.100")
 	m.Status = sync.StatusOnline
-	state.Pool.AddMachine(m)
+	mustAddMachine(t, state.Pool, m)
 	panel.SetState(state)
 
 	view := panel.View()
@@ -613,8 +620,8 @@ func TestSyncPanelViewWithSelectedMachine(t *testing.T) {
 	}
 	m1 := sync.NewMachine("server1", "1.1.1.1")
 	m2 := sync.NewMachine("server2", "2.2.2.2")
-	state.Pool.AddMachine(m1)
-	state.Pool.AddMachine(m2)
+	mustAddMachine(t, state.Pool, m1)
+	mustAddMachine(t, state.Pool, m2)
 	panel.SetState(state)
 
 	view := panel.View()
@@ -635,7 +642,7 @@ func TestSyncPanelViewWithError(t *testing.T) {
 	m := sync.NewMachine("error-server", "192.168.1.100")
 	m.Status = sync.StatusError
 	m.LastError = "Connection refused"
-	state.Pool.AddMachine(m)
+	mustAddMachine(t, state.Pool, m)
 	panel.SetState(state)
 
 	view := panel.View()
@@ -674,7 +681,7 @@ func TestSyncPanelViewKeyHints(t *testing.T) {
 		},
 	}
 	m := sync.NewMachine("server", "1.1.1.1")
-	state.Pool.AddMachine(m)
+	mustAddMachine(t, state.Pool, m)
 	panel.SetState(state)
 
 	view := panel.View()
@@ -700,7 +707,7 @@ func TestSyncPanelViewWithNonDefaultPort(t *testing.T) {
 	}
 	m := sync.NewMachine("server", "192.168.1.100")
 	m.Port = 2222 // Non-default SSH port
-	state.Pool.AddMachine(m)
+	mustAddMachine(t, state.Pool, m)
 	panel.SetState(state)
 
 	view := panel.View()

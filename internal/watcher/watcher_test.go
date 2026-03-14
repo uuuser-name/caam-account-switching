@@ -203,7 +203,7 @@ func TestWatcher_Close_Twice(t *testing.T) {
 	}
 
 	// Second close should not panic
-	err = w.Close()
+	_ = w.Close()
 	// Errors are acceptable on second close, just ensure no panic
 }
 

@@ -1370,8 +1370,8 @@ func TestRenderProviderTabsWithCounts(t *testing.T) {
 	// Test with wide width (counts shown)
 	m.width = 100
 	view = m.renderProviderTabs()
-	if !strings.Contains(view, "2") { // Should show count
-		// This may depend on styling, so just check it renders
+	if !strings.Contains(view, "Claude 2") {
+		t.Errorf("expected wide tabs to show profile count, got %q", view)
 	}
 }
 

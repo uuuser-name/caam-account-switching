@@ -37,13 +37,13 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("BrowserProfile should be empty, got %q", cfg.BrowserProfile)
 	}
 
-	if cfg.Passthroughs != nil && len(cfg.Passthroughs) != 0 {
+	if len(cfg.Passthroughs) != 0 {
 		t.Errorf("Passthroughs should be nil or empty, got %v", cfg.Passthroughs)
 	}
 }
 
 func TestConfigPath(t *testing.T) {
-	
+
 	t.Run("with XDG_CONFIG_HOME set", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		t.Setenv("XDG_CONFIG_HOME", tmpDir)
@@ -197,7 +197,7 @@ func TestMigrateDataToCAAMHomeRefusesNestedTarget(t *testing.T) {
 }
 
 func TestLoadNonExistent(t *testing.T) {
-	
+
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -222,7 +222,7 @@ func TestLoadNonExistent(t *testing.T) {
 }
 
 func TestLoadValidConfig(t *testing.T) {
-	
+
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -286,7 +286,7 @@ func TestLoadValidConfig(t *testing.T) {
 }
 
 func TestLoadInvalidJSON(t *testing.T) {
-	
+
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -309,7 +309,7 @@ func TestLoadInvalidJSON(t *testing.T) {
 }
 
 func TestSave(t *testing.T) {
-	
+
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -525,7 +525,7 @@ func TestRemovePassthroughNilSlice(t *testing.T) {
 }
 
 func TestSaveRoundtrip(t *testing.T) {
-	
+
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 

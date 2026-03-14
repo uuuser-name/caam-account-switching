@@ -166,9 +166,14 @@ func TestE2E_BundleExportImportWorkflow(t *testing.T) {
 	if !fileExists(importedCodexWork) {
 		t.Errorf("Imported codex work profile not found")
 	} else {
-		content, _ := os.ReadFile(importedCodexWork)
+		content, err := os.ReadFile(importedCodexWork)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", importedCodexWork, err)
+		}
 		var auth map[string]interface{}
-		json.Unmarshal(content, &auth)
+		if err := json.Unmarshal(content, &auth); err != nil {
+			t.Fatalf("Unmarshal() error = %v", err)
+		}
 		if auth["access_token"] != "codex-work-token" {
 			t.Errorf("Imported profile has wrong token")
 		}
@@ -208,9 +213,14 @@ func TestE2E_BundleExportImportWorkflow(t *testing.T) {
 	if !fileExists(decryptedProfile) {
 		t.Errorf("Decrypted profile not found")
 	} else {
-		content, _ := os.ReadFile(decryptedProfile)
+		content, err := os.ReadFile(decryptedProfile)
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", decryptedProfile, err)
+		}
 		var auth map[string]interface{}
-		json.Unmarshal(content, &auth)
+		if err := json.Unmarshal(content, &auth); err != nil {
+			t.Fatalf("Unmarshal() error = %v", err)
+		}
 		if auth["access_token"] != "codex-personal-token" {
 			t.Errorf("Decrypted profile has wrong token")
 		}
@@ -377,8 +387,14 @@ func TestE2E_BundleRoundTrip(t *testing.T) {
 
 		// Compare JSON content (not byte-for-byte, as formatting may differ)
 		var original, imported map[string]interface{}
-		json.Unmarshal(originalContent[key], &original)
-		json.Unmarshal(importedContent, &imported)
+		if err := json.Unmarshal(originalContent[key], &original); err != nil {
+			t.Errorf("Failed to unmarshal original profile %s: %v", key, err)
+			continue
+		}
+		if err := json.Unmarshal(importedContent, &imported); err != nil {
+			t.Errorf("Failed to unmarshal imported profile %s: %v", key, err)
+			continue
+		}
 
 		// Check specific fields
 		for k, v := range original {

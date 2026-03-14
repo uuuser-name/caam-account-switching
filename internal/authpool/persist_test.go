@@ -22,7 +22,9 @@ func TestSaveAndLoad(t *testing.T) {
 	// Create pool with some profiles
 	pool := NewAuthPool()
 	pool.AddProfile("claude", "alice")
-	pool.SetStatus("claude", "alice", PoolStatusReady)
+	if err := pool.SetStatus("claude", "alice", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	pool.UpdateTokenExpiry("claude", "alice", time.Now().Add(time.Hour))
 	pool.MarkUsed("claude", "alice")
 
@@ -393,7 +395,9 @@ func TestSaveAndLoad_AllStatuses(t *testing.T) {
 
 	for _, s := range statuses {
 		pool.AddProfile("claude", s.name)
-		pool.SetStatus("claude", s.name, s.status)
+		if err := pool.SetStatus("claude", s.name, s.status); err != nil {
+			t.Fatalf("SetStatus() error = %v", err)
+		}
 	}
 
 	// Save
@@ -512,7 +516,9 @@ func TestLoad_ClearsExistingProfiles(t *testing.T) {
 	// Create and save pool with one profile
 	pool := NewAuthPool()
 	pool.AddProfile("claude", "saved")
-	pool.SetStatus("claude", "saved", PoolStatusReady)
+	if err := pool.SetStatus("claude", "saved", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 	if err := pool.Save(opts); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -520,7 +526,9 @@ func TestLoad_ClearsExistingProfiles(t *testing.T) {
 	// Create new pool with different profile
 	pool2 := NewAuthPool()
 	pool2.AddProfile("codex", "existing")
-	pool2.SetStatus("codex", "existing", PoolStatusReady)
+	if err := pool2.SetStatus("codex", "existing", PoolStatusReady); err != nil {
+		t.Fatalf("SetStatus() error = %v", err)
+	}
 
 	if pool2.Count() != 1 {
 		t.Fatalf("pool2 should have 1 profile before Load, got %d", pool2.Count())

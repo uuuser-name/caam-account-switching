@@ -99,7 +99,7 @@ func TestConfigResetCommand(t *testing.T) {
 	// Check --force flag
 	forceFlag := configResetCmd.Flags().Lookup("force")
 	if forceFlag == nil {
-		t.Error("Expected --force flag")
+		t.Fatal("Expected --force flag")
 	}
 	if forceFlag.DefValue != "false" {
 		t.Errorf("Expected force default false, got %q", forceFlag.DefValue)

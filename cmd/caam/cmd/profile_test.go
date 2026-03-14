@@ -176,7 +176,7 @@ func TestProfileUnlockCommand(t *testing.T) {
 	// Check force flag with shorthand
 	flag := profileUnlockCmd.Flags().Lookup("force")
 	if flag == nil {
-		t.Error("Expected --force flag")
+		t.Fatal("Expected --force flag")
 	}
 	if flag.Shorthand != "f" {
 		t.Errorf("Expected shorthand 'f', got %q", flag.Shorthand)
@@ -328,7 +328,11 @@ func TestProfileLocking(t *testing.T) {
 	if err := prof.Lock(); err != nil {
 		t.Fatalf("Lock failed: %v", err)
 	}
-	t.Cleanup(func() { _ = prof.Unlock() })
+	t.Cleanup(func() {
+		if err := prof.Unlock(); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("Unlock cleanup failed: %v", err)
+		}
+	})
 
 	// Now locked
 	if !prof.IsLocked() {
@@ -371,7 +375,11 @@ func TestProfileIsLockStale(t *testing.T) {
 	if err := prof.Lock(); err != nil {
 		t.Fatalf("Lock failed: %v", err)
 	}
-	t.Cleanup(func() { _ = prof.Unlock() })
+	t.Cleanup(func() {
+		if err := prof.Unlock(); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("Unlock cleanup failed: %v", err)
+		}
+	})
 
 	// Current process lock should not be stale
 	stale, err := prof.IsLockStale()
@@ -384,7 +392,9 @@ func TestProfileIsLockStale(t *testing.T) {
 	}
 
 	// Clean up
-	prof.Unlock()
+	if err := prof.Unlock(); err != nil {
+		t.Fatalf("Unlock failed: %v", err)
+	}
 }
 
 // TestProfileHomePath tests home path generation.
@@ -512,7 +522,7 @@ func TestExecCommand(t *testing.T) {
 	// Check no-lock flag
 	flag := execCmd.Flags().Lookup("no-lock")
 	if flag == nil {
-		t.Error("Expected --no-lock flag")
+		t.Fatal("Expected --no-lock flag")
 	}
 	if flag.DefValue != "false" {
 		t.Errorf("Expected default false, got %q", flag.DefValue)
@@ -560,7 +570,9 @@ func TestProfileEnvironmentSetup(t *testing.T) {
 			}
 
 			// Clean up for next iteration
-			store.Delete(prov, "envtest")
+			if err := store.Delete(prov, "envtest"); err != nil {
+				t.Fatalf("Delete(%s, envtest) failed: %v", prov, err)
+			}
 		})
 	}
 }
@@ -630,7 +642,9 @@ func TestProfileLsCommand_Empty(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -663,7 +677,9 @@ func TestProfileLsCommand_WithProfiles(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -701,7 +717,9 @@ func TestProfileLsCommand_FilterByTool(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -738,7 +756,9 @@ func TestProfileDescribeCommand_SetAndGet(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -763,7 +783,9 @@ func TestProfileDescribeCommand_SetAndGet(t *testing.T) {
 	os.Stdout = origStdout
 
 	buf.Reset()
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output = buf.String()
 
 	if err != nil {
@@ -784,7 +806,9 @@ func TestProfileDescribeCommand_Clear(t *testing.T) {
 	// Create a profile with description
 	prof, _ := profileStore.Create("codex", "work", "oauth")
 	prof.Description = "To be cleared"
-	prof.Save()
+	if err := prof.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	// Clear description using --clear flag
 	var buf bytes.Buffer
@@ -796,12 +820,18 @@ func TestProfileDescribeCommand_Clear(t *testing.T) {
 	if err := profileDescribeCmd.Flags().Set("clear", "true"); err != nil {
 		t.Fatalf("set --clear: %v", err)
 	}
-	t.Cleanup(func() { _ = profileDescribeCmd.Flags().Set("clear", "false") })
+	t.Cleanup(func() {
+		if err := profileDescribeCmd.Flags().Set("clear", "false"); err != nil {
+			t.Fatalf("reset --clear: %v", err)
+		}
+	})
 	err := profileDescribeCmd.RunE(profileDescribeCmd, []string{"codex", "work"})
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -847,7 +877,9 @@ func TestProfileCloneCommand(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -900,7 +932,11 @@ func TestProfileCloneCommand_Overwrite(t *testing.T) {
 	if err := profileCloneCmd.Flags().Set("force", "true"); err != nil {
 		t.Fatalf("set --force: %v", err)
 	}
-	t.Cleanup(func() { _ = profileCloneCmd.Flags().Set("force", "false") })
+	t.Cleanup(func() {
+		if err := profileCloneCmd.Flags().Set("force", "false"); err != nil {
+			t.Fatalf("reset --force: %v", err)
+		}
+	})
 	var buf bytes.Buffer
 	origStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -910,7 +946,9 @@ func TestProfileCloneCommand_Overwrite(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -952,12 +990,18 @@ func TestProfileDeleteCommand_Confirmation(t *testing.T) {
 	if err := profileDeleteCmd.Flags().Set("force", "true"); err != nil {
 		t.Fatalf("set --force: %v", err)
 	}
-	t.Cleanup(func() { _ = profileDeleteCmd.Flags().Set("force", "false") })
+	t.Cleanup(func() {
+		if err := profileDeleteCmd.Flags().Set("force", "false"); err != nil {
+			t.Fatalf("reset --force: %v", err)
+		}
+	})
 	err := profileDeleteCmd.RunE(profileDeleteCmd, []string{"codex", "to-delete"})
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -993,7 +1037,9 @@ func TestProfileUnlockCommand_NotLocked(t *testing.T) {
 	w.Close()
 	os.Stdout = origStdout
 
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("ReadFrom() error = %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {

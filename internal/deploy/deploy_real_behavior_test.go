@@ -23,6 +23,8 @@ import (
 
 // generateTestHostKey generates an RSA key for testing.
 func generateTestHostKey(t *testing.T) *rsa.PrivateKey {
+	t.Helper()
+
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("failed to generate host key: %v", err)
@@ -40,6 +42,8 @@ type mockSSHServer struct {
 
 // newMockSSHServer creates a new mock SSH server.
 func newMockSSHServer(t *testing.T) *mockSSHServer {
+	t.Helper()
+
 	// Generate a test host key
 	key := generateTestHostKey(t)
 
@@ -66,31 +70,34 @@ func (s *mockSSHServer) setCommand(pattern, response string) {
 
 // start starts the mock SSH server.
 func (s *mockSSHServer) start(t *testing.T) string {
+	t.Helper()
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
 	s.listener = listener
 	s.started = true
+	t.Cleanup(s.stop)
 
-	go s.serve(t)
+	go s.serve(listener)
 
 	return listener.Addr().String()
 }
 
 // serve handles incoming connections.
-func (s *mockSSHServer) serve(t *testing.T) {
+func (s *mockSSHServer) serve(listener net.Listener) {
 	for {
-		conn, err := s.listener.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			return // Listener closed
 		}
-		go s.handleConn(t, conn)
+		go s.handleConn(conn)
 	}
 }
 
 // handleConn handles a single connection.
-func (s *mockSSHServer) handleConn(t *testing.T, conn net.Conn) {
+func (s *mockSSHServer) handleConn(conn net.Conn) {
 	defer conn.Close()
 
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, s.config)
@@ -103,7 +110,7 @@ func (s *mockSSHServer) handleConn(t *testing.T, conn net.Conn) {
 
 	for newChannel := range chans {
 		if newChannel.ChannelType() != "session" {
-			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
+			_ = newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
 		}
 
@@ -112,12 +119,12 @@ func (s *mockSSHServer) handleConn(t *testing.T, conn net.Conn) {
 			continue
 		}
 
-		go s.handleSession(t, channel, requests)
+		go s.handleSession(channel, requests)
 	}
 }
 
 // handleSession handles a session channel.
-func (s *mockSSHServer) handleSession(t *testing.T, channel ssh.Channel, requests <-chan *ssh.Request) {
+func (s *mockSSHServer) handleSession(channel ssh.Channel, requests <-chan *ssh.Request) {
 	defer channel.Close()
 
 	for req := range requests {
@@ -128,7 +135,7 @@ func (s *mockSSHServer) handleSession(t *testing.T, channel ssh.Channel, request
 				Command string
 			}
 			if err := ssh.Unmarshal(req.Payload, &execReq); err != nil {
-				req.Reply(false, nil)
+				_ = req.Reply(false, nil)
 				continue
 			}
 
@@ -161,14 +168,14 @@ func (s *mockSSHServer) handleSession(t *testing.T, channel ssh.Channel, request
 				response = "ID=ubuntu\n"
 			}
 
-			channel.Write([]byte(response))
-			req.Reply(true, nil)
-			channel.SendRequest("exit-status", false, ssh.Marshal(struct{ ExitStatus uint32 }{0}))
+			_, _ = channel.Write([]byte(response))
+			_ = req.Reply(true, nil)
+			_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ ExitStatus uint32 }{0}))
 			return
 
 		case "shell":
-			req.Reply(true, nil)
-			channel.Write([]byte("$ "))
+			_ = req.Reply(true, nil)
+			_, _ = channel.Write([]byte("$ "))
 			// Keep shell open until closed
 			buf := make([]byte, 1024)
 			for {
@@ -176,12 +183,12 @@ func (s *mockSSHServer) handleSession(t *testing.T, channel ssh.Channel, request
 				if err != nil {
 					return
 				}
-				channel.Write(buf[:n])
-				channel.Write([]byte("\n$ "))
+				_, _ = channel.Write(buf[:n])
+				_, _ = channel.Write([]byte("\n$ "))
 			}
 
 		default:
-			req.Reply(false, nil)
+			_ = req.Reply(false, nil)
 		}
 	}
 }
@@ -189,7 +196,8 @@ func (s *mockSSHServer) handleSession(t *testing.T, channel ssh.Channel, request
 // stop stops the mock SSH server.
 func (s *mockSSHServer) stop() {
 	if s.listener != nil {
-		s.listener.Close()
+		_ = s.listener.Close()
+		s.listener = nil
 	}
 	s.started = false
 }
@@ -207,7 +215,9 @@ func TestDeployerConnect(t *testing.T) {
 	// Parse address
 	host, port, _ := net.SplitHostPort(addr)
 	var portInt int
-	fmt.Sscanf(port, "%d", &portInt)
+	if _, err := fmt.Sscanf(port, "%d", &portInt); err != nil {
+		t.Fatalf("failed to parse port %q: %v", port, err)
+	}
 
 	machine := &sync.Machine{
 		ID:      "test-1",

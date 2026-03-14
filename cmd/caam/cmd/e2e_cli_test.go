@@ -49,11 +49,11 @@ func executeCommand(args ...string) (string, error) {
 
 // TestE2E_ListCommand tests the caam ls command workflow
 func TestE2E_ListCommand(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	setupCLITest(t, h.TestHarness)
 
 	h.Log.SetStep("test_empty_list")
 
@@ -133,11 +133,11 @@ func TestE2E_ListCommand(t *testing.T) {
 
 // TestE2E_BackupCommand tests the caam backup command workflow
 func TestE2E_BackupCommand(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	setupCLITest(t, h.TestHarness)
 
 	// Create mock auth environment
 	homeDir := h.SubDir("home")
@@ -282,11 +282,11 @@ func TestE2E_RestoreCommand(t *testing.T) {
 
 // TestE2E_DeleteCommand tests the delete workflow
 func TestE2E_DeleteCommand(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	setupCLITest(t, h.TestHarness)
 
 	// Create auth file and profile
 	homeDir := h.SubDir("home")
@@ -352,11 +352,11 @@ func TestE2E_DeleteCommand(t *testing.T) {
 
 // TestE2E_StatusCommand tests the status workflow
 func TestE2E_StatusCommand(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	setupCLITest(t, h.TestHarness)
 
 	// Create home directory
 	homeDir := h.SubDir("home")
@@ -432,11 +432,11 @@ func TestE2E_StatusCommand(t *testing.T) {
 
 // TestE2E_InvalidToolError tests error handling for invalid tools
 func TestE2E_InvalidToolError(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	setupCLITest(t, h.TestHarness)
 
 	h.Log.SetStep("test_invalid_tool_backup")
 
@@ -460,11 +460,11 @@ func TestE2E_InvalidToolError(t *testing.T) {
 
 // TestE2E_ProfileWorkflow tests the isolated profile workflow
 func TestE2E_ProfileWorkflow(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	setupCLITest(t, h.TestHarness)
 
 	h.Log.SetStep("create_profile")
 
@@ -506,31 +506,31 @@ func TestE2E_ProfileWorkflow(t *testing.T) {
 	h.Log.SetStep("test_locking")
 
 	// Test lock/unlock
-		if err := prof.Lock(); err != nil {
-			t.Fatalf("Failed to lock profile: %v", err)
+	if err := prof.Lock(); err != nil {
+		t.Fatalf("Failed to lock profile: %v", err)
+	}
+	locked := true
+	defer func() {
+		if !locked {
+			return
 		}
-		locked := true
-		defer func() {
-			if !locked {
-				return
-			}
-			if err := prof.Unlock(); err != nil {
-				t.Errorf("Failed to unlock profile during cleanup: %v", err)
-			}
-		}()
-
-		if !prof.IsLocked() {
-			t.Errorf("Profile should be locked")
-		}
-
 		if err := prof.Unlock(); err != nil {
-			t.Fatalf("Failed to unlock profile: %v", err)
+			t.Errorf("Failed to unlock profile during cleanup: %v", err)
 		}
-		locked = false
+	}()
 
-		if prof.IsLocked() {
-			t.Errorf("Profile should be unlocked")
-		}
+	if !prof.IsLocked() {
+		t.Errorf("Profile should be locked")
+	}
+
+	if err := prof.Unlock(); err != nil {
+		t.Fatalf("Failed to unlock profile: %v", err)
+	}
+	locked = false
+
+	if prof.IsLocked() {
+		t.Errorf("Profile should be unlocked")
+	}
 
 	h.Log.SetStep("test_list_profiles")
 
@@ -560,11 +560,11 @@ func TestE2E_ProfileWorkflow(t *testing.T) {
 
 // TestE2E_ClearAuthFiles tests the clear workflow
 func TestE2E_ClearAuthFiles(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("setup")
-	setupCLITest(t, h)
+	setupCLITest(t, h.TestHarness)
 
 	// Create auth file
 	homeDir := h.SubDir("home")

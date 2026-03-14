@@ -14,7 +14,7 @@ import (
 
 // TestE2E_NavigationWithArrowKeys tests navigation using arrow keys.
 func TestE2E_NavigationWithArrowKeys(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_navigation")
@@ -76,7 +76,7 @@ func TestE2E_NavigationWithArrowKeys(t *testing.T) {
 
 // TestE2E_NavigationWithTabKey tests navigation using Tab key.
 func TestE2E_NavigationWithTabKey(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_tab_navigation")
@@ -120,7 +120,7 @@ func TestE2E_NavigationWithTabKey(t *testing.T) {
 
 // TestE2E_ProfileSelectionWithJK tests profile selection using j/k keys.
 func TestE2E_ProfileSelectionWithJK(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_jk_navigation")
@@ -172,7 +172,7 @@ func TestE2E_ProfileSelectionWithJK(t *testing.T) {
 
 // TestE2E_DeleteConfirmationWorkflow tests delete with y/n confirmation.
 func TestE2E_DeleteConfirmationWorkflow(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_delete_workflow")
@@ -230,7 +230,7 @@ func TestE2E_DeleteConfirmationWorkflow(t *testing.T) {
 
 // TestE2E_SearchModeWorkflow tests search mode entry and exit.
 func TestE2E_SearchModeWorkflow(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_search_workflow")
@@ -272,7 +272,7 @@ func TestE2E_SearchModeWorkflow(t *testing.T) {
 
 // TestE2E_HelpScreenToggle tests help screen display.
 func TestE2E_HelpScreenToggle(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_help_screen")
@@ -304,7 +304,7 @@ func TestE2E_HelpScreenToggle(t *testing.T) {
 
 // TestE2E_ActionKeyBindings tests various action key bindings.
 func TestE2E_ActionKeyBindings(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_action_keys")
@@ -355,7 +355,7 @@ func TestE2E_ActionKeyBindings(t *testing.T) {
 
 // TestE2E_QuitKeyBinding tests quit key binding.
 func TestE2E_QuitKeyBinding(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_quit")
@@ -377,7 +377,7 @@ func TestE2E_QuitKeyBinding(t *testing.T) {
 
 // TestE2E_CtrlCKeyBinding tests Ctrl+C key binding.
 func TestE2E_CtrlCKeyBinding(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_ctrl_c")
@@ -399,7 +399,7 @@ func TestE2E_CtrlCKeyBinding(t *testing.T) {
 
 // TestE2E_WindowResizing tests window resize handling.
 func TestE2E_WindowResizing(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_resize")
@@ -434,7 +434,7 @@ func TestE2E_WindowResizing(t *testing.T) {
 
 // TestE2E_ProfilesLoadedMessage tests profile loading.
 func TestE2E_ProfilesLoadedMessage(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_profiles_load")
@@ -477,7 +477,7 @@ func TestE2E_ProfilesLoadedMessage(t *testing.T) {
 
 // TestE2E_LoadingSpinnerVisible ensures the loading spinner renders during async operations.
 func TestE2E_LoadingSpinnerVisible(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_loading_spinner")
@@ -516,7 +516,7 @@ func TestE2E_LoadingSpinnerVisible(t *testing.T) {
 
 // TestE2E_EmptyProviderHandling tests handling of providers with no profiles.
 func TestE2E_EmptyProviderHandling(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_empty_provider")
@@ -553,7 +553,7 @@ func TestE2E_EmptyProviderHandling(t *testing.T) {
 
 // TestE2E_ViewRendering tests that View() produces output.
 func TestE2E_ViewRendering(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_view_render")
@@ -581,7 +581,7 @@ func TestE2E_ViewRendering(t *testing.T) {
 
 // TestE2E_StateTransitions tests state transitions.
 func TestE2E_StateTransitions(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_state_transitions")
@@ -627,7 +627,7 @@ func TestE2E_StateTransitions(t *testing.T) {
 
 // TestE2E_ProfilesPanelNavigation tests profiles panel navigation limits.
 func TestE2E_ProfilesPanelNavigation(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_profiles_panel_nav")
@@ -672,7 +672,7 @@ func TestE2E_ProfilesPanelNavigation(t *testing.T) {
 
 // TestE2E_ProviderPanelSync tests provider panel synchronization.
 func TestE2E_ProviderPanelSync(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_provider_sync")
@@ -700,7 +700,7 @@ func TestE2E_ProviderPanelSync(t *testing.T) {
 
 // TestE2E_DetailPanelUpdate tests detail panel updates.
 func TestE2E_DetailPanelUpdate(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_detail_panel")
@@ -727,7 +727,7 @@ func TestE2E_DetailPanelUpdate(t *testing.T) {
 
 // TestE2E_KeyBindingsHelp tests that help displays key bindings.
 func TestE2E_KeyBindingsHelp(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_keybindings_help")
@@ -761,7 +761,7 @@ func TestE2E_KeyBindingsHelp(t *testing.T) {
 
 // TestE2E_EnterKeyActivatesProfile tests Enter key activates profile.
 func TestE2E_EnterKeyActivatesProfile(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_enter_activate")
@@ -786,7 +786,7 @@ func TestE2E_EnterKeyActivatesProfile(t *testing.T) {
 
 // TestE2E_UpDownArrowNavigation tests up/down arrow keys for profile selection.
 func TestE2E_UpDownArrowNavigation(t *testing.T) {
-	h := testutil.NewHarness(t)
+	h := testutil.NewExtendedHarness(t)
 	defer h.Close()
 
 	h.Log.SetStep("test_arrow_profile_nav")

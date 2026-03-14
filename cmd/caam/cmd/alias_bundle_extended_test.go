@@ -97,7 +97,7 @@ func TestAliasAndFavoriteCommandFlows(t *testing.T) {
 	createVaultProfileFile(t, "claude", "personal")
 
 	aliasCmd := newAliasTestCmd()
-	aliasCmd.Flags().Set("list", "true")
+	require.NoError(t, aliasCmd.Flags().Set("list", "true"))
 	out, err := captureStdout(t, func() error { return runAlias(aliasCmd, nil) })
 	require.NoError(t, err)
 	require.Contains(t, out, "No aliases configured")
@@ -114,7 +114,7 @@ func TestAliasAndFavoriteCommandFlows(t *testing.T) {
 	require.Contains(t, out, "wk")
 
 	aliasCmd = newAliasTestCmd()
-	aliasCmd.Flags().Set("remove", "wk")
+	require.NoError(t, aliasCmd.Flags().Set("remove", "wk"))
 	out, err = captureStdout(t, func() error { return runAlias(aliasCmd, nil) })
 	require.NoError(t, err)
 	require.Contains(t, out, "Removed alias: wk")
@@ -136,7 +136,7 @@ func TestAliasAndFavoriteCommandFlows(t *testing.T) {
 	require.Contains(t, out, "1. work")
 
 	favCmd = newFavoriteTestCmd()
-	favCmd.Flags().Set("clear", "true")
+	require.NoError(t, favCmd.Flags().Set("clear", "true"))
 	out, err = captureStdout(t, func() error { return runFavorite(favCmd, []string{"claude"}) })
 	require.NoError(t, err)
 	require.Contains(t, out, "Cleared favorites for claude")
@@ -227,15 +227,15 @@ func TestBundlePrintContracts(t *testing.T) {
 	require.Contains(t, out.String(), "Bundle contains OAuth tokens")
 
 	importResult := &bundle.ImportResult{
-		Manifest:            manifest,
-		Encrypted:           true,
-		VerificationResult:  &bundle.VerificationResult{Valid: false, Missing: []string{"x"}, Extra: []string{"y"}},
-		ProfileActions:      []bundle.ProfileAction{{Provider: "claude", Profile: "work", Action: "add", Reason: "new"}},
-		OptionalActions:     []bundle.OptionalAction{{Name: "config", Action: "import", Reason: "included"}},
-		NewProfiles:         1,
-		UpdatedProfiles:     0,
-		SkippedProfiles:     0,
-		Errors:              []string{"sample error"},
+		Manifest:           manifest,
+		Encrypted:          true,
+		VerificationResult: &bundle.VerificationResult{Valid: false, Missing: []string{"x"}, Extra: []string{"y"}},
+		ProfileActions:     []bundle.ProfileAction{{Provider: "claude", Profile: "work", Action: "add", Reason: "new"}},
+		OptionalActions:    []bundle.OptionalAction{{Name: "config", Action: "import", Reason: "included"}},
+		NewProfiles:        1,
+		UpdatedProfiles:    0,
+		SkippedProfiles:    0,
+		Errors:             []string{"sample error"},
 	}
 	out.Reset()
 	printImportResult(c, importResult)

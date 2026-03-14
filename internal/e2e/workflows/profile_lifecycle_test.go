@@ -104,7 +104,7 @@ func TestProfileLifecycle(t *testing.T) {
 		mockScript := "#!/bin/sh\nprintf '%s\\n' \"$HOME\" > \"$CAAM_EXEC_CAPTURE\"\nprintf '%s\\n' \"$*\" >> \"$CAAM_EXEC_CAPTURE\"\n"
 		require.NoError(t, os.WriteFile(mockBinary, []byte(mockScript), 0755))
 
-		out, err = runCLI("exec", "claude", "test-work", "--", "--print-home")
+			_, err = runCLI("exec", "claude", "test-work", "--", "--print-home")
 		require.NoError(t, err)
 
 		captureData, err := os.ReadFile(capturePath)

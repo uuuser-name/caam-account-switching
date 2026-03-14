@@ -292,7 +292,7 @@ func TestDiscoverChromiumProfilesMalformed(t *testing.T) {
 	profiles := discoverChromiumProfiles(tempDir)
 
 	// Even with malformed Local State, should return empty (no profile dirs)
-	if profiles != nil && len(profiles) > 0 {
+	if len(profiles) > 0 {
 		t.Errorf("expected no profiles from malformed Local State, got %d", len(profiles))
 	}
 }
