@@ -160,7 +160,7 @@ func runWorkspaceCreate(cmd *cobra.Command, args []string) error {
 	// Check if workspace already exists
 	existing := cfg.GetWorkspace(workspaceName)
 	if existing != nil {
-		fmt.Printf("Updating existing workspace '%s'\n", workspaceName)
+		fmt.Printf("Updating existing workspace '%s'\n", sanitizeTerminalText(workspaceName))
 	}
 
 	// Create workspace
@@ -170,7 +170,7 @@ func runWorkspaceCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	fmt.Printf("Created workspace '%s':\n", workspaceName)
+	fmt.Printf("Created workspace '%s':\n", sanitizeTerminalText(workspaceName))
 	// Sort tools for consistent output order
 	sortedTools := make([]string, 0, len(profiles))
 	for tool := range profiles {
@@ -178,7 +178,7 @@ func runWorkspaceCreate(cmd *cobra.Command, args []string) error {
 	}
 	sort.Strings(sortedTools)
 	for _, tool := range sortedTools {
-		fmt.Printf("  %s: %s\n", tool, profiles[tool])
+		fmt.Printf("  %s: %s\n", sanitizeTerminalText(tool), sanitizeTerminalText(profiles[tool]))
 	}
 
 	return nil
@@ -201,7 +201,7 @@ func runWorkspaceDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	fmt.Printf("Deleted workspace '%s'\n", workspaceName)
+	fmt.Printf("Deleted workspace '%s'\n", sanitizeTerminalText(workspaceName))
 	return nil
 }
 
@@ -255,7 +255,7 @@ func runWorkspaceList(cmd *cobra.Command, args []string) error {
 		if name == current {
 			marker = "* "
 		}
-		fmt.Printf("%s%s\n", marker, name)
+		fmt.Printf("%s%s\n", marker, sanitizeTerminalText(name))
 		// Sort tools for consistent output order
 		sortedTools := make([]string, 0, len(profiles))
 		for tool := range profiles {
@@ -263,12 +263,12 @@ func runWorkspaceList(cmd *cobra.Command, args []string) error {
 		}
 		sort.Strings(sortedTools)
 		for _, tool := range sortedTools {
-			fmt.Printf("    %s: %s\n", tool, profiles[tool])
+			fmt.Printf("    %s: %s\n", sanitizeTerminalText(tool), sanitizeTerminalText(profiles[tool]))
 		}
 	}
 
 	if current != "" {
-		fmt.Printf("\nCurrent: %s\n", current)
+		fmt.Printf("\nCurrent: %s\n", sanitizeTerminalText(current))
 	}
 
 	return nil
@@ -285,7 +285,7 @@ func switchWorkspace(cfg *config.Config, workspaceName string) error {
 		vault = authfile.NewVault(authfile.DefaultVaultPath())
 	}
 
-	fmt.Printf("Switching to workspace '%s'\n", workspaceName)
+	fmt.Printf("Switching to workspace '%s'\n", sanitizeTerminalText(workspaceName))
 
 	// Sort tools for consistent activation order
 	sortedTools := make([]string, 0, len(profiles))
@@ -300,7 +300,7 @@ func switchWorkspace(cfg *config.Config, workspaceName string) error {
 		profile := profiles[tool]
 		getFileSet, ok := tools[tool]
 		if !ok {
-			fmt.Printf("  Warning: unknown tool '%s', skipping\n", tool)
+			fmt.Printf("  Warning: unknown tool '%s', skipping\n", sanitizeTerminalText(tool))
 			continue
 		}
 
@@ -308,34 +308,51 @@ func switchWorkspace(cfg *config.Config, workspaceName string) error {
 
 		// Backup original on first use
 		if did, err := vault.BackupOriginal(fileSet); err != nil {
-			fmt.Printf("  Warning: could not backup original %s auth: %v\n", tool, err)
+			fmt.Printf(
+				"  Warning: could not backup original %s auth: %s\n",
+				sanitizeTerminalText(tool),
+				sanitizeTerminalText(err.Error()),
+			)
 		} else if did {
-			fmt.Printf("  Backed up original %s auth\n", tool)
+			fmt.Printf("  Backed up original %s auth\n", sanitizeTerminalText(tool))
 		}
 
 		// Restore profile
 		if err := prepareToolActivation(tool); err != nil {
-			fmt.Printf("  Error preparing %s/%s: %v\n", tool, profile, err)
+			fmt.Printf(
+				"  Error preparing %s/%s: %s\n",
+				sanitizeTerminalText(tool),
+				sanitizeTerminalText(profile),
+				sanitizeTerminalText(err.Error()),
+			)
 			continue
 		}
 		if err := vault.Restore(fileSet, profile); err != nil {
-			fmt.Printf("  Error activating %s/%s: %v\n", tool, profile, err)
+			fmt.Printf(
+				"  Error activating %s/%s: %s\n",
+				sanitizeTerminalText(tool),
+				sanitizeTerminalText(profile),
+				sanitizeTerminalText(err.Error()),
+			)
 			continue
 		}
 
-		activated = append(activated, fmt.Sprintf("%s: %s", tool, profile))
+		activated = append(
+			activated,
+			fmt.Sprintf("%s: %s", sanitizeTerminalText(tool), sanitizeTerminalText(profile)),
+		)
 	}
 
 	// Update current workspace in config
 	cfg.SetCurrentWorkspace(workspaceName)
 	if err := cfg.Save(); err != nil {
-		fmt.Printf("Warning: could not save current workspace: %v\n", err)
+		fmt.Printf("Warning: could not save current workspace: %s\n", sanitizeTerminalText(err.Error()))
 	}
 
 	fmt.Println()
-	fmt.Printf("Switched to workspace '%s':\n", workspaceName)
+	fmt.Printf("Switched to workspace '%s':\n", sanitizeTerminalText(workspaceName))
 	for _, a := range activated {
-		fmt.Printf("  %s\n", a)
+		fmt.Printf("  %s\n", sanitizeTerminalText(a))
 	}
 
 	return nil

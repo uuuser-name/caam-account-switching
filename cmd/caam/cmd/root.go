@@ -123,7 +123,7 @@ Run 'caam' without arguments to launch the interactive TUI.`,
 	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := config.MigrateDataToCAAMHome(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: data migration skipped: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: data migration skipped: %s\n", sanitizeTerminalText(err.Error()))
 		}
 
 		// Initialize vault
@@ -703,14 +703,14 @@ func runBackup(cmd *cobra.Command, args []string) error {
 
 	getFileSet, ok := tools[tool]
 	if !ok {
-		return emitJSONError(fmt.Errorf("unknown tool: %s (supported: codex, claude, gemini)", tool))
+		return emitJSONError(fmt.Errorf("unknown tool: %s (supported: codex, claude, gemini)", sanitizeTerminalText(tool)))
 	}
 
 	fileSet := getFileSet()
 
 	// Check if auth files exist
 	if !authfile.HasAuthFiles(fileSet) {
-		return emitJSONError(fmt.Errorf("no auth files found for %s - login first using the tool's login command", tool))
+		return emitJSONError(fmt.Errorf("no auth files found for %s - login first using the tool's login command", sanitizeTerminalText(tool)))
 	}
 
 	if err := preventDuplicateUserProfile(tool, fileSet, profileName); err != nil {
@@ -790,7 +790,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		tool := strings.ToLower(args[0])
 		if _, ok := tools[tool]; !ok {
-			return fmt.Errorf("unknown tool: %s", tool)
+			return fmt.Errorf("unknown tool: %s", sanitizeTerminalText(tool))
 		}
 		toolsToCheck = []string{tool}
 	}
@@ -1012,7 +1012,7 @@ func runLs(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		tool := strings.ToLower(args[0])
 		if _, ok := tools[tool]; !ok {
-			return fmt.Errorf("unknown tool: %s", tool)
+			return fmt.Errorf("unknown tool: %s", sanitizeTerminalText(tool))
 		}
 
 		profiles, err := vault.List(tool)
@@ -1332,12 +1332,16 @@ Examples:
 		profileName := args[1]
 
 		if _, ok := tools[tool]; !ok {
-			return fmt.Errorf("unknown tool: %s", tool)
+			return fmt.Errorf("unknown tool: %s", sanitizeTerminalText(tool))
 		}
 
 		force, _ := cmd.Flags().GetBool("force")
 		if authfile.IsSystemProfile(profileName) && !force {
-			return fmt.Errorf("refusing to delete system profile %s/%s without --force", tool, profileName)
+			return fmt.Errorf(
+				"refusing to delete system profile %s/%s without --force",
+				sanitizeTerminalText(tool),
+				sanitizeTerminalText(profileName),
+			)
 		}
 		if !force {
 			fmt.Printf("Delete profile %s/%s? [y/N]: ", tool, profileName)
@@ -1385,7 +1389,7 @@ Examples:
 		if len(args) > 0 {
 			tool := strings.ToLower(args[0])
 			if _, ok := tools[tool]; !ok {
-				return fmt.Errorf("unknown tool: %s", tool)
+				return fmt.Errorf("unknown tool: %s", sanitizeTerminalText(tool))
 			}
 			toolsToShow = []string{tool}
 		}
@@ -1429,7 +1433,7 @@ Examples:
 
 		getFileSet, ok := tools[tool]
 		if !ok {
-			return fmt.Errorf("unknown tool: %s", tool)
+			return fmt.Errorf("unknown tool: %s", sanitizeTerminalText(tool))
 		}
 
 		fileSet := getFileSet()
@@ -1508,7 +1512,7 @@ Examples:
 
 		prov, ok := registry.Get(tool)
 		if !ok {
-			return fmt.Errorf("unknown provider: %s", tool)
+			return fmt.Errorf("unknown provider: %s", sanitizeTerminalText(tool))
 		}
 
 		authMode, _ := cmd.Flags().GetString("auth-mode")
@@ -1557,17 +1561,17 @@ Examples:
 			return fmt.Errorf("prepare profile: %w", err)
 		}
 
-		fmt.Printf("Created profile %s/%s\n", tool, name)
-		fmt.Printf("  Path: %s\n", prof.BasePath)
+		fmt.Printf("Created profile %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
+		fmt.Printf("  Path: %s\n", sanitizeTerminalText(prof.BasePath))
 		if prof.Description != "" {
-			fmt.Printf("  Description: %s\n", prof.Description)
+			fmt.Printf("  Description: %s\n", sanitizeTerminalText(prof.Description))
 		}
 		if prof.HasBrowserConfig() {
-			fmt.Printf("  Browser: %s\n", prof.BrowserDisplayName())
+			fmt.Printf("  Browser: %s\n", sanitizeTerminalText(prof.BrowserDisplayName()))
 		}
 		fmt.Printf("\nNext steps:\n")
-		fmt.Printf("  caam login %s %s    # Authenticate\n", tool, name)
-		fmt.Printf("  caam exec %s %s     # Run with this profile\n", tool, name)
+		fmt.Printf("  caam login %s %s    # Authenticate\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
+		fmt.Printf("  caam exec %s %s     # Run with this profile\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 		return nil
 	},
 }
@@ -1594,7 +1598,7 @@ var profileLsCmd = &cobra.Command{
 			}
 
 			if len(profiles) == 0 {
-				fmt.Printf("No isolated profiles for %s\n", tool)
+				fmt.Printf("No isolated profiles for %s\n", sanitizeTerminalText(tool))
 				return nil
 			}
 
@@ -1605,9 +1609,9 @@ var profileLsCmd = &cobra.Command{
 				}
 				desc := truncateDescription(p.Description, 40)
 				if desc != "" {
-					fmt.Printf("  %s/%s%s  %s\n", p.Provider, p.Name, status, desc)
+					fmt.Printf("  %s/%s%s  %s\n", sanitizeTerminalText(p.Provider), sanitizeTerminalText(p.Name), status, sanitizeTerminalText(desc))
 				} else {
-					fmt.Printf("  %s/%s%s\n", p.Provider, p.Name, status)
+					fmt.Printf("  %s/%s%s\n", sanitizeTerminalText(p.Provider), sanitizeTerminalText(p.Name), status)
 				}
 			}
 			return nil
@@ -1625,7 +1629,7 @@ var profileLsCmd = &cobra.Command{
 		}
 
 		for tool, profiles := range allProfiles {
-			fmt.Printf("%s:\n", tool)
+			fmt.Printf("%s:\n", sanitizeTerminalText(tool))
 			for _, p := range profiles {
 				status := ""
 				if p.IsLocked() {
@@ -1633,9 +1637,9 @@ var profileLsCmd = &cobra.Command{
 				}
 				desc := truncateDescription(p.Description, 40)
 				if desc != "" {
-					fmt.Printf("  %-20s%s  %s\n", p.Name, status, desc)
+					fmt.Printf("  %-20s%s  %s\n", sanitizeTerminalText(p.Name), status, sanitizeTerminalText(desc))
 				} else {
-					fmt.Printf("  %s%s\n", p.Name, status)
+					fmt.Printf("  %s%s\n", sanitizeTerminalText(p.Name), status)
 				}
 			}
 		}
@@ -1655,7 +1659,7 @@ var profileDeleteCmd = &cobra.Command{
 
 		force, _ := cmd.Flags().GetBool("force")
 		if !force {
-			fmt.Printf("Delete isolated profile %s/%s? [y/N]: ", tool, name)
+			fmt.Printf("Delete isolated profile %s/%s? [y/N]: ", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 			var confirm string
 			fmt.Scanln(&confirm)
 			if strings.ToLower(confirm) != "y" {
@@ -1668,7 +1672,7 @@ var profileDeleteCmd = &cobra.Command{
 			return fmt.Errorf("delete profile: %w", err)
 		}
 
-		fmt.Printf("Deleted %s/%s\n", tool, name)
+		fmt.Printf("Deleted %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 		return nil
 	},
 }
@@ -1687,7 +1691,7 @@ var profileStatusCmd = &cobra.Command{
 
 		prov, ok := registry.Get(tool)
 		if !ok {
-			return fmt.Errorf("unknown provider: %s", tool)
+			return fmt.Errorf("unknown provider: %s", sanitizeTerminalText(tool))
 		}
 
 		prof, err := profileStore.Load(tool, name)
@@ -1701,19 +1705,19 @@ var profileStatusCmd = &cobra.Command{
 			return fmt.Errorf("get status: %w", err)
 		}
 
-		fmt.Printf("Profile: %s/%s\n", tool, name)
-		fmt.Printf("  Path: %s\n", prof.BasePath)
-		fmt.Printf("  Auth mode: %s\n", prof.AuthMode)
+		fmt.Printf("Profile: %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
+		fmt.Printf("  Path: %s\n", sanitizeTerminalText(prof.BasePath))
+		fmt.Printf("  Auth mode: %s\n", sanitizeTerminalText(prof.AuthMode))
 		fmt.Printf("  Logged in: %v\n", status.LoggedIn)
 		fmt.Printf("  Locked: %v\n", status.HasLockFile)
 		if prof.AccountLabel != "" {
-			fmt.Printf("  Account: %s\n", prof.AccountLabel)
+			fmt.Printf("  Account: %s\n", sanitizeTerminalText(prof.AccountLabel))
 		}
 		if prof.Description != "" {
-			fmt.Printf("  Description: %s\n", prof.Description)
+			fmt.Printf("  Description: %s\n", sanitizeTerminalText(prof.Description))
 		}
 		if prof.HasBrowserConfig() {
-			fmt.Printf("  Browser: %s\n", prof.BrowserDisplayName())
+			fmt.Printf("  Browser: %s\n", sanitizeTerminalText(prof.BrowserDisplayName()))
 		}
 
 		return nil
@@ -1746,7 +1750,7 @@ Examples:
 
 		// Check if profile is locked
 		if !prof.IsLocked() {
-			fmt.Printf("Profile %s/%s is not locked\n", tool, name)
+			fmt.Printf("Profile %s/%s is not locked\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 			return nil
 		}
 
@@ -1770,13 +1774,13 @@ Examples:
 			if err := prof.Unlock(); err != nil {
 				return fmt.Errorf("unlock failed: %w", err)
 			}
-			fmt.Printf("Unlocked %s/%s\n", tool, name)
+			fmt.Printf("Unlocked %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 			return nil
 		}
 
 		// Process is still running
 		if !force {
-			fmt.Printf("Profile %s/%s is locked by PID %d (still running)\n", tool, name, lockInfo.PID)
+			fmt.Printf("Profile %s/%s is locked by PID %d (still running)\n", sanitizeTerminalText(tool), sanitizeTerminalText(name), lockInfo.PID)
 			fmt.Printf("Locked at: %s\n", lockInfo.LockedAt.Format("2006-01-02 15:04:05"))
 			fmt.Println()
 			fmt.Println("WARNING: The locking process appears to still be running.")
@@ -1788,7 +1792,7 @@ Examples:
 
 		// Force unlock - user accepted the risk
 		fmt.Printf("WARNING: Force-unlocking profile locked by running process (PID %d)\n", lockInfo.PID)
-		fmt.Printf("Force unlock %s/%s? This may cause data corruption! [y/N]: ", tool, name)
+		fmt.Printf("Force unlock %s/%s? This may cause data corruption! [y/N]: ", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 		var confirm string
 		fmt.Scanln(&confirm)
 		if strings.ToLower(confirm) != "y" {
@@ -1799,7 +1803,7 @@ Examples:
 		if err := prof.Unlock(); err != nil {
 			return fmt.Errorf("unlock failed: %w", err)
 		}
-		fmt.Printf("Force-unlocked %s/%s\n", tool, name)
+		fmt.Printf("Force-unlocked %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 		return nil
 	},
 }
@@ -1837,7 +1841,7 @@ Examples:
 			if err := prof.Save(); err != nil {
 				return fmt.Errorf("save profile: %w", err)
 			}
-			fmt.Printf("Cleared description for %s/%s\n", tool, name)
+			fmt.Printf("Cleared description for %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 			return nil
 		}
 
@@ -1846,15 +1850,15 @@ Examples:
 			if err := prof.Save(); err != nil {
 				return fmt.Errorf("save profile: %w", err)
 			}
-			fmt.Printf("Set description for %s/%s: %s\n", tool, name, prof.Description)
+			fmt.Printf("Set description for %s/%s: %s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name), sanitizeTerminalText(prof.Description))
 			return nil
 		}
 
 		// Show current description
 		if prof.Description == "" {
-			fmt.Printf("%s/%s has no description\n", tool, name)
+			fmt.Printf("%s/%s has no description\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 		} else {
-			fmt.Printf("%s/%s: %s\n", tool, name, prof.Description)
+			fmt.Printf("%s/%s: %s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name), sanitizeTerminalText(prof.Description))
 		}
 		return nil
 	},
@@ -1904,17 +1908,17 @@ Examples:
 		passMgr, err := passthrough.NewManager()
 		if err != nil {
 			// Non-fatal: profile is cloned, just warn about passthrough
-			fmt.Fprintf(os.Stderr, "Warning: could not setup passthroughs: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: could not setup passthroughs: %s\n", sanitizeTerminalText(err.Error()))
 		} else {
 			if err := passMgr.SetupPassthroughs(cloned.HomePath()); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: passthrough setup failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Warning: passthrough setup failed: %s\n", sanitizeTerminalText(err.Error()))
 			}
 		}
 
-		fmt.Printf("Cloned %s/%s → %s/%s\n", tool, sourceName, tool, targetName)
-		fmt.Printf("  Path: %s\n", cloned.BasePath)
+		fmt.Printf("Cloned %s/%s → %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(sourceName), sanitizeTerminalText(tool), sanitizeTerminalText(targetName))
+		fmt.Printf("  Path: %s\n", sanitizeTerminalText(cloned.BasePath))
 		if cloned.Description != "" {
-			fmt.Printf("  Description: %s\n", cloned.Description)
+			fmt.Printf("  Description: %s\n", sanitizeTerminalText(cloned.Description))
 		}
 		if withAuth {
 			fmt.Println("  Auth files: copied")
@@ -1924,9 +1928,9 @@ Examples:
 
 		fmt.Printf("\nNext steps:\n")
 		if !withAuth {
-			fmt.Printf("  caam login %s %s    # Authenticate\n", tool, targetName)
+			fmt.Printf("  caam login %s %s    # Authenticate\n", sanitizeTerminalText(tool), sanitizeTerminalText(targetName))
 		}
-		fmt.Printf("  caam exec %s %s      # Run with this profile\n", tool, targetName)
+		fmt.Printf("  caam exec %s %s      # Run with this profile\n", sanitizeTerminalText(tool), sanitizeTerminalText(targetName))
 
 		return nil
 	},
@@ -1959,7 +1963,7 @@ Examples:
 
 		prov, ok := registry.Get(tool)
 		if !ok {
-			return fmt.Errorf("unknown provider: %s", tool)
+			return fmt.Errorf("unknown provider: %s", sanitizeTerminalText(tool))
 		}
 
 		prof, err := profileStore.Load(tool, name)
@@ -1972,7 +1976,7 @@ Examples:
 		if deviceCode {
 			deviceCodeProv, ok := prov.(provider.DeviceCodeProvider)
 			if !ok || !deviceCodeProv.SupportsDeviceCode() {
-				return fmt.Errorf("%s does not support --device-code", tool)
+				return fmt.Errorf("%s does not support --device-code", sanitizeTerminalText(tool))
 			}
 			if err := deviceCodeProv.LoginWithDeviceCode(ctx, prof); err != nil {
 				return fmt.Errorf("device-code login failed: %w", err)
@@ -1983,7 +1987,7 @@ Examples:
 			}
 		}
 
-		fmt.Printf("\nLogin complete for %s/%s\n", tool, name)
+		fmt.Printf("\nLogin complete for %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(name))
 		return nil
 	},
 }
@@ -2018,7 +2022,7 @@ Examples:
 
 		prov, ok := registry.Get(tool)
 		if !ok {
-			return fmt.Errorf("unknown provider: %s", tool)
+			return fmt.Errorf("unknown provider: %s", sanitizeTerminalText(tool))
 		}
 
 		prof, err := profileStore.Load(tool, name)

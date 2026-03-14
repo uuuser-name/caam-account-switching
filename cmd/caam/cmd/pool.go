@@ -75,7 +75,7 @@ func getPool() (*authpool.AuthPool, error) {
 	opts := authpool.PersistOptions{}
 	if err := pool.Load(opts); err != nil {
 		// Load returns nil for file-not-exist, so any error here is a real problem
-		fmt.Fprintf(os.Stderr, "Warning: failed to load pool state: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to load pool state: %s\n", sanitizeTerminalText(err.Error()))
 	}
 
 	// Load profiles from vault
@@ -163,7 +163,7 @@ func runPoolRefresh(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		fmt.Printf("Refreshing %s/%s...\n", provider, profile)
+		fmt.Printf("Refreshing %s/%s...\n", sanitizeTerminalText(provider), sanitizeTerminalText(profile))
 		err = func() error {
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
@@ -171,7 +171,7 @@ func runPoolRefresh(cmd *cobra.Command, args []string) error {
 		}()
 
 		if err != nil {
-			fmt.Printf("  Error: %v\n", err)
+			fmt.Printf("  Error: %s\n", sanitizeTerminalText(err.Error()))
 		} else {
 			fmt.Printf("  Success\n")
 		}
@@ -228,7 +228,11 @@ func runPoolList(cmd *cobra.Command, args []string) error {
 			}
 		}
 		fmt.Printf("%-10s %-20s %-12s %-20s\n",
-			p.Provider, p.ProfileName, p.Status.String(), expiry)
+			sanitizeTerminalText(p.Provider),
+			sanitizeTerminalText(p.ProfileName),
+			sanitizeTerminalText(p.Status.String()),
+			sanitizeTerminalText(expiry),
+		)
 	}
 
 	return nil
@@ -239,10 +243,10 @@ func parseProfileArg(arg string) (provider, profile string, err error) {
 	for i := 0; i < len(arg); i++ {
 		if arg[i] == '/' {
 			if i == 0 || i == len(arg)-1 {
-				return "", "", fmt.Errorf("invalid format: %q (expected provider/profile)", arg)
+				return "", "", fmt.Errorf("invalid format: %q (expected provider/profile)", sanitizeTerminalText(arg))
 			}
 			return arg[:i], arg[i+1:], nil
 		}
 	}
-	return "", "", fmt.Errorf("invalid format: %q (expected provider/profile)", arg)
+	return "", "", fmt.Errorf("invalid format: %q (expected provider/profile)", sanitizeTerminalText(arg))
 }

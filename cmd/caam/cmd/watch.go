@@ -70,12 +70,10 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		providers = []string{"claude", "codex", "gemini"}
 	}
 
-	// Validate providers
-	validProviders := map[string]bool{"claude": true, "codex": true, "gemini": true}
-	for _, p := range providers {
-		if !validProviders[strings.ToLower(p)] {
-			return fmt.Errorf("unknown provider: %s", p)
-		}
+	var err error
+	providers, err = normalizeWatchProviders(providers)
+	if err != nil {
+		return err
 	}
 
 	if watchOnce {
@@ -101,7 +99,7 @@ func runWatchOnce(providers []string, logger *slog.Logger) error {
 
 	fmt.Printf("\nDiscovered %d account(s):\n", len(discovered))
 	for _, d := range discovered {
-		fmt.Printf("  + %s\n", d)
+		fmt.Printf("  + %s\n", sanitizeTerminalText(d))
 	}
 	fmt.Println("\nProfiles saved to vault. Use 'caam activate <tool> <email>' to switch.")
 	return nil
@@ -109,7 +107,7 @@ func runWatchOnce(providers []string, logger *slog.Logger) error {
 
 func runWatchDaemon(ctx context.Context, providers []string, logger *slog.Logger) error {
 	fmt.Println("Starting auth file watcher...")
-	fmt.Printf("Watching providers: %s\n", strings.Join(providers, ", "))
+	fmt.Printf("Watching providers: %s\n", sanitizeTerminalText(strings.Join(providers, ", ")))
 	fmt.Println("Press Ctrl+C to stop.")
 
 	// First do a one-time scan
@@ -119,7 +117,7 @@ func runWatchDaemon(ctx context.Context, providers []string, logger *slog.Logger
 	} else if len(discovered) > 0 {
 		fmt.Printf("Initial scan discovered %d account(s):\n", len(discovered))
 		for _, d := range discovered {
-			fmt.Printf("  + %s\n", d)
+			fmt.Printf("  + %s\n", sanitizeTerminalText(d))
 		}
 		fmt.Println()
 	}
@@ -131,19 +129,26 @@ func runWatchDaemon(ctx context.Context, providers []string, logger *slog.Logger
 		OnDiscovery: func(provider, email string, ident *identity.Identity) {
 			planInfo := ""
 			if ident != nil && ident.PlanType != "" {
-				planInfo = fmt.Sprintf(" (%s)", ident.PlanType)
+				planInfo = fmt.Sprintf(" (%s)", sanitizeTerminalText(ident.PlanType))
 			}
 			fmt.Printf("[%s] Discovered: %s/%s%s\n",
-				timeNow(), provider, email, planInfo)
+				timeNow(),
+				sanitizeTerminalText(provider),
+				sanitizeTerminalText(email),
+				planInfo,
+			)
 		},
 		OnChange: func(provider, path string) {
 			if watchVerbose {
 				fmt.Printf("[%s] Auth file changed: %s (%s)\n",
-					timeNow(), path, provider)
+					timeNow(),
+					sanitizeTerminalText(path),
+					sanitizeTerminalText(provider),
+				)
 			}
 		},
 		OnError: func(err error) {
-			fmt.Fprintf(os.Stderr, "[%s] Error: %v\n", timeNow(), err)
+			fmt.Fprintf(os.Stderr, "[%s] Error: %s\n", timeNow(), sanitizeTerminalText(err.Error()))
 		},
 	})
 	if err != nil {
@@ -153,6 +158,7 @@ func runWatchDaemon(ctx context.Context, providers []string, logger *slog.Logger
 	// Handle signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
 	// Start watcher
 	if err := watcher.Start(ctx); err != nil {
@@ -174,6 +180,19 @@ func runWatchDaemon(ctx context.Context, providers []string, logger *slog.Logger
 
 	fmt.Println("Watcher stopped.")
 	return nil
+}
+
+func normalizeWatchProviders(providers []string) ([]string, error) {
+	validProviders := map[string]bool{"claude": true, "codex": true, "gemini": true}
+	normalized := make([]string, 0, len(providers))
+	for _, p := range providers {
+		provider := strings.ToLower(strings.TrimSpace(p))
+		if !validProviders[provider] {
+			return nil, fmt.Errorf("unknown provider: %s", sanitizeTerminalText(p))
+		}
+		normalized = append(normalized, provider)
+	}
+	return normalized, nil
 }
 
 func timeNow() string {

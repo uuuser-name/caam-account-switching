@@ -31,7 +31,12 @@ func preventDuplicateUserProfile(tool string, fileSet authfile.AuthFileSet, targ
 
 	currentIdentity, err := getCurrentAuthIdentity(tool)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: duplicate profile guard skipped current %s identity check: %v\n", tool, err)
+		fmt.Fprintf(
+			os.Stderr,
+			"Warning: duplicate profile guard skipped current %s identity check: %s\n",
+			sanitizeTerminalText(tool),
+			sanitizeTerminalText(err.Error()),
+		)
 		return nil
 	}
 	currentKey := identityDedupKey(currentIdentity)
@@ -41,7 +46,12 @@ func preventDuplicateUserProfile(tool string, fileSet authfile.AuthFileSet, targ
 
 	profiles, err := vault.List(tool)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: duplicate profile guard skipped %s vault scan: %v\n", tool, err)
+		fmt.Fprintf(
+			os.Stderr,
+			"Warning: duplicate profile guard skipped %s vault scan: %s\n",
+			sanitizeTerminalText(tool),
+			sanitizeTerminalText(err.Error()),
+		)
 		return nil
 	}
 	for _, profileName := range profiles {

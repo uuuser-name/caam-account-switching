@@ -85,7 +85,11 @@ func runNext(cmd *cobra.Command, args []string) error {
 
 	if len(profiles) == 1 {
 		if currentProfile == profiles[0] {
-			fmt.Printf("Only one usable profile available for %s (%s), already active\n", tool, profiles[0])
+			fmt.Printf(
+				"Only one usable profile available for %s (%s), already active\n",
+				sanitizeTerminalText(tool),
+				sanitizeTerminalText(profiles[0]),
+			)
 			return nil
 		}
 		// Single profile case: just activate it
@@ -99,9 +103,9 @@ func runNext(cmd *cobra.Command, args []string) error {
 		}
 		if !quiet {
 			if dryRun {
-				fmt.Printf("Would switch to: %s/%s\n", tool, profiles[0])
+				fmt.Printf("Would switch to: %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(profiles[0]))
 			} else {
-				fmt.Printf("Activated %s profile '%s'\n", tool, profiles[0])
+				fmt.Printf("Activated %s profile '%s'\n", sanitizeTerminalText(tool), sanitizeTerminalText(profiles[0]))
 			}
 		}
 		return nil
@@ -123,7 +127,7 @@ func runNext(cmd *cobra.Command, args []string) error {
 	db, err = caamdb.Open()
 	if err != nil {
 		if !quiet {
-			fmt.Printf("Warning: could not open database: %v\n", err)
+			fmt.Printf("Warning: could not open database: %s\n", sanitizeTerminalText(err.Error()))
 		}
 	} else {
 		defer db.Close()
@@ -157,12 +161,12 @@ func runNext(cmd *cobra.Command, args []string) error {
 	// Show selection info
 	if !quiet {
 		if currentProfile != "" {
-			fmt.Printf("Current: %s/%s\n", tool, currentProfile)
+			fmt.Printf("Current: %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(currentProfile))
 		} else {
-			fmt.Printf("Current: %s (no active profile)\n", tool)
+			fmt.Printf("Current: %s (no active profile)\n", sanitizeTerminalText(tool))
 		}
-		fmt.Printf("Next:    %s/%s\n", tool, selection.Selected)
-		fmt.Println(rotation.FormatResult(selection))
+		fmt.Printf("Next:    %s/%s\n", sanitizeTerminalText(tool), sanitizeTerminalText(selection.Selected))
+		fmt.Print(sanitizeTerminalBlock(rotation.FormatResult(selection)))
 	}
 
 	// Dry-run: stop here
@@ -180,7 +184,7 @@ func runNext(cmd *cobra.Command, args []string) error {
 			}
 			if !quiet {
 				fmt.Printf("Warning: %s/%s is in cooldown (%s remaining)\n",
-					tool, selection.Selected, formatDurationShort(remaining))
+					sanitizeTerminalText(tool), sanitizeTerminalText(selection.Selected), formatDurationShort(remaining))
 			}
 			return fmt.Errorf("selected profile is in cooldown; use --force to override")
 		}
@@ -211,8 +215,8 @@ func runNext(cmd *cobra.Command, args []string) error {
 	if !quiet {
 		remaining := len(profiles) - 1 // Other profiles available
 		fmt.Printf("Switched %s to '%s' (%d other profile%s available)\n",
-			tool, selection.Selected, remaining, pluralize(remaining))
-		fmt.Printf("  Run '%s' to start using this account\n", tool)
+			sanitizeTerminalText(tool), sanitizeTerminalText(selection.Selected), remaining, pluralize(remaining))
+		fmt.Printf("  Run '%s' to start using this account\n", sanitizeTerminalText(tool))
 	}
 
 	return nil

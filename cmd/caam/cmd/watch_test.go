@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -105,5 +106,23 @@ func TestWatchOnceFlag(t *testing.T) {
 	// Default should be false
 	if flag.DefValue != "false" {
 		t.Errorf("Expected once default 'false', got %q", flag.DefValue)
+	}
+}
+
+func TestNormalizeWatchProviders(t *testing.T) {
+	got, err := normalizeWatchProviders([]string{" Claude ", "CODEX", "gemini"})
+	if err != nil {
+		t.Fatalf("normalizeWatchProviders() error = %v", err)
+	}
+
+	want := []string{"claude", "codex", "gemini"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalizeWatchProviders() = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeWatchProvidersRejectsUnknownProvider(t *testing.T) {
+	if _, err := normalizeWatchProviders([]string{"claude", "mystery"}); err == nil {
+		t.Fatal("normalizeWatchProviders() expected error for unknown provider")
 	}
 }

@@ -59,9 +59,9 @@ func TestFormatDuration(t *testing.T) {
 
 func TestPrint(t *testing.T) {
 	tests := []struct {
-		name     string
-		warnings []Warning
-		noColor  bool
+		name        string
+		warnings    []Warning
+		noColor     bool
 		wantPrinted bool
 	}{
 		{
@@ -179,6 +179,35 @@ func TestPrintWithColor(t *testing.T) {
 
 	if bytes.Contains(buf.Bytes(), []byte("\033[")) {
 		t.Error("Print() without color should not contain ANSI codes")
+	}
+}
+
+func TestPrintSanitizesTerminalSequences(t *testing.T) {
+	warnings := []Warning{
+		{
+			Level:   LevelWarning,
+			Tool:    "codex\x1b]8;;https://evil.example\x07",
+			Profile: "work\x1b[31m",
+			Message: "Token expires\r\nsoon",
+			Action:  "caam refresh codex work\x1b[2J",
+		},
+	}
+
+	var buf bytes.Buffer
+	Print(&buf, warnings, true)
+
+	output := buf.String()
+	forbidden := []string{"\x1b", "\r", "\nsoon", "https://evil.example"}
+	for _, s := range forbidden {
+		if bytes.Contains(buf.Bytes(), []byte(s)) {
+			t.Fatalf("Print() leaked terminal control content %q in %q", s, output)
+		}
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("codex/work")) {
+		t.Fatalf("Print() missing sanitized tool/profile in %q", output)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("Token expires soon")) {
+		t.Fatalf("Print() missing sanitized message in %q", output)
 	}
 }
 

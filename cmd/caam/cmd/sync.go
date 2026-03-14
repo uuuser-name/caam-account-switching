@@ -9,18 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"regexp"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/sync"
 	"github.com/spf13/cobra"
-)
-
-var (
-	syncANSIEscapeRe  = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
-	syncOSCSequenceRe = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 )
 
 // syncCmd is the parent command for sync operations.
@@ -261,22 +254,6 @@ func loadSyncState() (*sync.SyncState, error) {
 		return nil, fmt.Errorf("load sync state: %w", err)
 	}
 	return state, nil
-}
-
-func sanitizeTerminalText(value string) string {
-	cleaned := syncOSCSequenceRe.ReplaceAllString(value, "")
-	cleaned = syncANSIEscapeRe.ReplaceAllString(cleaned, "")
-	cleaned = strings.Map(func(r rune) rune {
-		switch {
-		case unicode.In(r, unicode.Cf):
-			return -1
-		case unicode.IsControl(r):
-			return ' '
-		default:
-			return r
-		}
-	}, cleaned)
-	return strings.Join(strings.Fields(cleaned), " ")
 }
 
 // runSync performs a sync with all or specific machines.

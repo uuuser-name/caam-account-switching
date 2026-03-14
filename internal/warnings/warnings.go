@@ -9,12 +9,20 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/health"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider"
+)
+
+var (
+	warningANSIEscapeRe  = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	warningOSCSequenceRe = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 )
 
 // Warning represents a proactive warning to show the user.
@@ -251,9 +259,18 @@ func Print(w io.Writer, warnings []Warning, noColor bool) bool {
 			prefix = "---"
 		}
 
-		fmt.Fprintf(w, "%s%s Warning: %s/%s: %s%s\n", colorStart, prefix, warn.Tool, warn.Profile, warn.Message, colorEnd)
+		fmt.Fprintf(
+			w,
+			"%s%s Warning: %s/%s: %s%s\n",
+			colorStart,
+			prefix,
+			sanitizeWarningText(warn.Tool),
+			sanitizeWarningText(warn.Profile),
+			sanitizeWarningText(warn.Message),
+			colorEnd,
+		)
 		if warn.Action != "" {
-			fmt.Fprintf(w, "    Run: %s\n", warn.Action)
+			fmt.Fprintf(w, "    Run: %s\n", sanitizeWarningText(warn.Action))
 		}
 	}
 
@@ -277,4 +294,20 @@ func Filter(warnings []Warning, minLevel Level) []Warning {
 		}
 	}
 	return filtered
+}
+
+func sanitizeWarningText(value string) string {
+	cleaned := warningOSCSequenceRe.ReplaceAllString(value, "")
+	cleaned = warningANSIEscapeRe.ReplaceAllString(cleaned, "")
+	cleaned = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.In(r, unicode.Cf):
+			return -1
+		case unicode.IsControl(r):
+			return ' '
+		default:
+			return r
+		}
+	}, cleaned)
+	return strings.Join(strings.Fields(cleaned), " ")
 }
