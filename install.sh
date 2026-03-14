@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_OWNER="Dicklesworthstone"
-REPO_NAME="coding_agent_account_manager"
+REPO_OWNER="uuuser-name"
+REPO_NAME="caam-account-switching"
 BIN_NAME="caam"
 
 TMP_DIRS=()

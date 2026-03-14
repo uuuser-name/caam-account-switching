@@ -10,7 +10,7 @@ If you suspect a security issue:
 
 1. Do not file it in a public issue.
 2. Contact the maintainer via GitHub Security Advisory:
-   https://github.com/Dicklesworthstone/coding_agent_account_manager/security/advisories/new
+   https://github.com/uuuser-name/caam-account-switching/security/advisories/new
 3. Include:
    - Affected version or commit
    - Exact provider/tool context (`claude`, `codex`, or `gemini`)
@@ -37,4 +37,3 @@ Please provide:
 
 Do not paste tokens, OAuth files, session cookies, or raw profile directories in reports.
 If needed for triage, provide redacted snippets and exact file paths separately in private report channels.
-

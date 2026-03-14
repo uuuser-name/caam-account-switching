@@ -1,14 +1,14 @@
 # caam - Coding Agent Account Manager
 
-![Release](https://img.shields.io/github/v/release/Dicklesworthstone/coding_agent_account_manager?style=for-the-badge&color=bd93f9)
-![Go Version](https://img.shields.io/github/go-mod/go-version/Dicklesworthstone/coding_agent_account_manager?style=for-the-badge&color=6272a4)
+![Release](https://img.shields.io/github/v/release/uuuser-name/caam-account-switching?style=for-the-badge&color=bd93f9)
+![Go Version](https://img.shields.io/github/go-mod/go-version/uuuser-name/caam-account-switching?style=for-the-badge&color=6272a4)
 ![License](https://img.shields.io/badge/License-MIT-50fa7b?style=for-the-badge)
-![Build Status](https://img.shields.io/github/actions/workflow/status/Dicklesworthstone/coding_agent_account_manager/ci.yml?style=for-the-badge&logo=github)
+![Build Status](https://img.shields.io/github/actions/workflow/status/uuuser-name/caam-account-switching/ci.yml?style=for-the-badge&logo=github)
 
 > **Sub-100ms account switching for AI coding CLIs with fixed-cost subscription plans. When you hit usage limits on Claude Max, GPT Pro, or Gemini Ultra, don't wait 60 seconds for browser OAuth—just swap to another account instantly.**
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_account_manager/main/install.sh?$(date +%s)" | bash
+curl -fsSL "https://raw.githubusercontent.com/uuuser-name/caam-account-switching/main/install.sh?$(date +%s)" | bash
 ```
 
 Usage:
@@ -719,7 +719,7 @@ scoop install dicklesworthstone/caam
 
 ### Alternative: Direct Download
 
-Download from the [latest release page](https://github.com/Dicklesworthstone/coding_agent_account_manager/releases/latest) and choose the archive that matches your platform:
+Download from the [latest release page](https://github.com/uuuser-name/caam-account-switching/releases/latest) and choose the archive that matches your platform:
 - Linux x86_64: `caam_<version>_linux_amd64.tar.gz`
 - Linux ARM64: `caam_<version>_linux_arm64.tar.gz`
 - macOS Intel: `caam_<version>_darwin_amd64.tar.gz`
@@ -734,7 +734,7 @@ Each release ships with signed checksums:
 cosign verify-blob \
   --bundle SHA256SUMS.sig \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity "https://github.com/Dicklesworthstone/coding_agent_account_manager/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
+  --certificate-identity "https://github.com/uuuser-name/caam-account-switching/.github/workflows/release.yml@refs/tags/vX.Y.Z" \
   SHA256SUMS
 
 sha256sum -c SHA256SUMS
@@ -745,23 +745,22 @@ sha256sum -c SHA256SUMS
 ### Alternative: Install Script
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/coding_agent_account_manager/main/install.sh?$(date +%s)" | bash
+curl -fsSL "https://raw.githubusercontent.com/uuuser-name/caam-account-switching/main/install.sh?$(date +%s)" | bash
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/Dicklesworthstone/coding_agent_account_manager
-cd coding_agent_account_manager
+git clone https://github.com/uuuser-name/caam-account-switching
+cd caam-account-switching
 go build -o caam ./cmd/caam
 sudo mv caam /usr/local/bin/
 ```
 
 ### Go Install
 
-```bash
-go install github.com/Dicklesworthstone/coding_agent_account_manager/cmd/caam@latest
-```
+`go install` is intentionally not documented for this repository yet.
+The published binary/install-script path is the supported installation route for the current GitHub-hosted release.
 
 ---
 
