@@ -472,6 +472,14 @@ func TestMultiCoverageEdgeBranches(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("expected JSON error response, got %d", rr.Code)
 		}
+		waitForTestCondition(t, time.Second, func() bool {
+			data, err := os.ReadFile(a.usagePath)
+			if err != nil {
+				return false
+			}
+			var usage []*AccountUsage
+			return json.Unmarshal(data, &usage) == nil
+		})
 
 		a.running = true
 		a.stopCh = make(chan struct{})

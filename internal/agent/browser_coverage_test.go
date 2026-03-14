@@ -7,7 +7,29 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
+
+func cleanupBrowserFixture(t *testing.T, browser *Browser, userDataDir string) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		browser.Close()
+		if userDataDir == "" {
+			return
+		}
+
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			if err := os.RemoveAll(userDataDir); err == nil || os.IsNotExist(err) {
+				return
+			} else if time.Now().After(deadline) {
+				t.Fatalf("cleanup browser user data dir %q: %v", userDataDir, err)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
+}
 
 func TestBrowserCoverageCompleteOAuthWithLocalFixture(t *testing.T) {
 	if findChrome() == "" {
@@ -20,13 +42,12 @@ func TestBrowserCoverageCompleteOAuthWithLocalFixture(t *testing.T) {
 	}))
 	defer fixture.Close()
 
+	userDataDir := t.TempDir()
 	browser := NewBrowser(BrowserConfig{
-		UserDataDir: t.TempDir(),
+		UserDataDir: userDataDir,
 		Headless:    true,
 	})
-	t.Cleanup(func() {
-		browser.Close()
-	})
+	cleanupBrowserFixture(t, browser, userDataDir)
 
 	code, account, err := browser.CompleteOAuth(context.Background(), fixture.URL, "")
 	if err != nil {
@@ -54,13 +75,12 @@ func TestBrowserCoverageCompleteOAuthCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	userDataDir := t.TempDir()
 	browser := NewBrowser(BrowserConfig{
-		UserDataDir: t.TempDir(),
+		UserDataDir: userDataDir,
 		Headless:    true,
 	})
-	t.Cleanup(func() {
-		browser.Close()
-	})
+	cleanupBrowserFixture(t, browser, userDataDir)
 
 	_, _, err := browser.CompleteOAuth(ctx, fixture.URL, "")
 	if err == nil {
@@ -89,13 +109,12 @@ func TestBrowserCoverageCompleteOAuthPreferredAccountFixture(t *testing.T) {
 	fixture := httptest.NewServer(mux)
 	defer fixture.Close()
 
+	userDataDir := t.TempDir()
 	browser := NewBrowser(BrowserConfig{
-		UserDataDir: t.TempDir(),
+		UserDataDir: userDataDir,
 		Headless:    true,
 	})
-	t.Cleanup(func() {
-		browser.Close()
-	})
+	cleanupBrowserFixture(t, browser, userDataDir)
 
 	code, account, err := browser.CompleteOAuth(context.Background(), fixture.URL+"/accounts.google.com/select", "preferred@example.com")
 	if err != nil {
@@ -127,13 +146,12 @@ func TestBrowserCoverageCompleteOAuthConsentFixture(t *testing.T) {
 	fixture := httptest.NewServer(mux)
 	defer fixture.Close()
 
+	userDataDir := t.TempDir()
 	browser := NewBrowser(BrowserConfig{
-		UserDataDir: t.TempDir(),
+		UserDataDir: userDataDir,
 		Headless:    true,
 	})
-	t.Cleanup(func() {
-		browser.Close()
-	})
+	cleanupBrowserFixture(t, browser, userDataDir)
 
 	code, account, err := browser.CompleteOAuth(context.Background(), fixture.URL+"/consent", "")
 	if err != nil {
