@@ -10,6 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func newTestStringSliceFlagCommand(name, usage string) *cobra.Command {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().StringSlice(name, nil, usage)
+	return cmd
+}
+
 // =============================================================================
 // bundle.go Command Definition Tests
 // =============================================================================
@@ -177,13 +183,15 @@ func TestBundleExportFlagProviders(t *testing.T) {
 		t.Fatal("Expected --providers flag")
 	}
 
+	testCmd := newTestStringSliceFlagCommand("providers", flag.Usage)
+
 	// Test that it accepts string slice values
-	err := bundleExportCmd.Flags().Set("providers", "claude,codex")
+	err := testCmd.Flags().Set("providers", "claude,codex")
 	if err != nil {
 		t.Fatalf("Failed to set providers flag: %v", err)
 	}
 
-	val, err := bundleExportCmd.Flags().GetStringSlice("providers")
+	val, err := testCmd.Flags().GetStringSlice("providers")
 	if err != nil {
 		t.Fatalf("Failed to get providers: %v", err)
 	}
@@ -199,12 +207,14 @@ func TestBundleExportFlagProfiles(t *testing.T) {
 		t.Fatal("Expected --profiles flag")
 	}
 
-	err := bundleExportCmd.Flags().Set("profiles", "work,personal")
+	testCmd := newTestStringSliceFlagCommand("profiles", flag.Usage)
+
+	err := testCmd.Flags().Set("profiles", "work,personal")
 	if err != nil {
 		t.Fatalf("Failed to set profiles flag: %v", err)
 	}
 
-	val, err := bundleExportCmd.Flags().GetStringSlice("profiles")
+	val, err := testCmd.Flags().GetStringSlice("profiles")
 	if err != nil {
 		t.Fatalf("Failed to get profiles: %v", err)
 	}

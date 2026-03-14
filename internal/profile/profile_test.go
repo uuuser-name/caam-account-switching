@@ -249,17 +249,17 @@ func TestIsLockStale(t *testing.T) {
 
 	prof.Unlock()
 
-	// Create lock with fake dead PID
+	// Create lock with stale PID from a dead process
 	lockPath := filepath.Join(tmpDir, ".lock")
-	fakePID := 99999999 // Unlikely to be a real process
+	stalePID := 99999999 // Unlikely to be a real process
 	content := `{"pid": 99999999, "locked_at": "2025-01-01T00:00:00Z"}`
 	if err := os.WriteFile(lockPath, []byte(content), 0600); err != nil {
-		t.Fatalf("failed to write fake lock: %v", err)
+		t.Fatalf("failed to write stale lock: %v", err)
 	}
 
 	stale, err = prof.IsLockStale()
 	if err != nil {
-		t.Fatalf("IsLockStale() error = %v (pid=%d)", err, fakePID)
+		t.Fatalf("IsLockStale() error = %v (pid=%d)", err, stalePID)
 	}
 	if !stale {
 		t.Error("expected stale when lock is from dead process")
@@ -757,22 +757,16 @@ func TestStoreExists(t *testing.T) {
 // =============================================================================
 
 func TestDefaultStorePath(t *testing.T) {
-	originalCaamHome := os.Getenv("CAAM_HOME")
 	// Test with XDG_DATA_HOME set
-	originalXDG := os.Getenv("XDG_DATA_HOME")
-	defer os.Setenv("CAAM_HOME", originalCaamHome)
-	defer os.Setenv("XDG_DATA_HOME", originalXDG)
-
-	os.Setenv("CAAM_HOME", "/custom/caam")
-	os.Setenv("XDG_DATA_HOME", "/custom/data")
+	t.Setenv("CAAM_HOME", "/custom/caam")
+	t.Setenv("XDG_DATA_HOME", "/custom/data")
 	path := DefaultStorePath()
 	expected := "/custom/caam/data/profiles"
 	if path != expected {
 		t.Errorf("DefaultStorePath() with CAAM_HOME = %q, want %q", path, expected)
 	}
 
-	os.Unsetenv("CAAM_HOME")
-	os.Setenv("XDG_DATA_HOME", "/custom/data")
+	t.Setenv("CAAM_HOME", "")
 	path = DefaultStorePath()
 	expected = "/custom/data/caam/profiles"
 	if path != expected {
@@ -780,7 +774,7 @@ func TestDefaultStorePath(t *testing.T) {
 	}
 
 	// Test without XDG_DATA_HOME (uses home dir)
-	os.Unsetenv("XDG_DATA_HOME")
+	t.Setenv("XDG_DATA_HOME", "")
 	path = DefaultStorePath()
 	// Should contain ".local/share/caam/profiles" relative to home
 	if !filepath.IsAbs(path) {
@@ -884,7 +878,7 @@ func TestStoreCloneWithAuth(t *testing.T) {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 
-	// Create mock auth file in home directory
+	// Create auth file in home directory
 	authPath := filepath.Join(source.HomePath(), "auth.json")
 	authContent := []byte(`{"token": "secret123"}`)
 	if err := os.WriteFile(authPath, authContent, 0600); err != nil {

@@ -7,15 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/testutil"
 )
 
 func TestNewGeminiScanner(t *testing.T) {
-	oldEnv := os.Getenv("GEMINI_HOME")
-	defer os.Setenv("GEMINI_HOME", oldEnv)
-
-	if err := os.Unsetenv("GEMINI_HOME"); err != nil {
-		t.Fatalf("Unsetenv(GEMINI_HOME) error: %v", err)
-	}
+	testutil.UnsetEnv(t, "GEMINI_HOME")
 
 	scanner := NewGeminiScanner()
 	if scanner == nil {

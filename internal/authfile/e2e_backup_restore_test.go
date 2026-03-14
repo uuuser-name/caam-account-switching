@@ -16,7 +16,7 @@ import (
 
 // TestE2E_FullBackupWorkflow tests the complete backup workflow:
 // - Create temp HOME directory
-// - Place mock auth files for a provider
+// - Place seeded auth files for a provider
 // - Run backup command
 // - Verify profile directory structure created
 // - Verify auth files copied correctly
@@ -26,7 +26,7 @@ func TestE2E_FullBackupWorkflow(t *testing.T) {
 
 	h.Log.SetStep("setup")
 
-	// Create mock home directory structure
+	// Create seeded home directory structure
 	homeDir := h.SubDir("home")
 	vaultDir := h.SubDir("vault")
 
@@ -48,7 +48,7 @@ func TestE2E_FullBackupWorkflow(t *testing.T) {
 		t.Fatalf("Failed to write auth file: %v", err)
 	}
 
-	h.Log.Info("Created mock auth file", map[string]interface{}{
+	h.Log.Info("Created seeded auth file", map[string]interface{}{
 		"path": authPath,
 	})
 

@@ -19,11 +19,8 @@ func setupHistoryTestEnv(t *testing.T) (tmpDir string, cleanup func()) {
 	t.Helper()
 	tmpDir = t.TempDir()
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	oldCaamHome := os.Getenv("CAAM_HOME")
-
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
-	_ = os.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
+	t.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
 
 	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
 		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
@@ -37,8 +34,6 @@ func setupHistoryTestEnv(t *testing.T) (tmpDir string, cleanup func()) {
 	vault = authfile.NewVault(filepath.Join(tmpDir, "vault"))
 
 	cleanup = func() {
-		_ = os.Setenv("CODEX_HOME", oldCodexHome)
-		_ = os.Setenv("CAAM_HOME", oldCaamHome)
 		vault = oldVault
 	}
 

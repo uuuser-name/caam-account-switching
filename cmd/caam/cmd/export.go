@@ -63,29 +63,8 @@ func runExport(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	var (
-		w     io.Writer
-		close func() error
-	)
-	if outPath != "" {
-		f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-		if err != nil {
-			return fmt.Errorf("open output file: %w", err)
-		}
-		w = f
-		close = f.Close
-	} else {
-		w = cmd.OutOrStdout()
-		close = func() error { return nil }
-	}
-
-	if err := writeExportArchive(w, manifest, files); err != nil {
-		_ = close()
+	if err := writeExportOutput(outPath, cmd.OutOrStdout(), manifest, files); err != nil {
 		return err
-	}
-	if err := close(); err != nil {
-		return fmt.Errorf("close output: %w", err)
 	}
 
 	fmt.Fprintf(cmd.ErrOrStderr(), "Exported %d profile(s)\n", len(targets))
@@ -97,6 +76,26 @@ func runExport(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(cmd.ErrOrStderr(), "  Warning: archive contains OAuth tokens; treat it like a password.")
 	fmt.Fprintln(cmd.ErrOrStderr(), "           Consider encrypting during transfer (e.g. `gpg -c`).")
 	return nil
+}
+
+func writeExportOutput(outPath string, stdout io.Writer, manifest *vaultExportManifest, files []exportFileSpec) error {
+	if outPath == "" {
+		return writeExportArchive(stdout, manifest, files)
+	}
+	return writeExportArchiveFile(outPath, manifest, files)
+}
+
+func writeExportArchiveFile(outPath string, manifest *vaultExportManifest, files []exportFileSpec) (err error) {
+	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("open output file: %w", err)
+	}
+	defer func() {
+		if closeErr := f.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close output: %w", closeErr)
+		}
+	}()
+	return writeExportArchive(f, manifest, files)
 }
 
 func parseToolProfileArg(arg string) (tool, profile string, err error) {

@@ -16,8 +16,8 @@ func buildTestJWT(claims map[string]interface{}) string {
 	claimsJSON, _ := json.Marshal(claims)
 	payload := base64.RawURLEncoding.EncodeToString(claimsJSON)
 
-	// Fake signature (not validated anyway)
-	signature := base64.RawURLEncoding.EncodeToString([]byte("fake-signature-data-for-benchmark"))
+	// Synthetic signature (not validated anyway)
+	signature := base64.RawURLEncoding.EncodeToString([]byte("synthetic-signature-data-for-benchmark"))
 
 	return strings.Join([]string{header, payload, signature}, ".")
 }

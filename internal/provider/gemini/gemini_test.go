@@ -12,6 +12,16 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider"
 )
 
+func setEnv(t *testing.T, key, value string) {
+	t.Helper()
+	t.Setenv(key, value)
+}
+
+func unsetEnv(t *testing.T, key string) {
+	t.Helper()
+	t.Setenv(key, "")
+}
+
 // =============================================================================
 // Provider Factory Tests
 // =============================================================================
@@ -139,13 +149,10 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-	t.Run("uses GEMINI_HOME if set", func(t *testing.T) {
-		originalHome := os.Getenv("GEMINI_HOME")
-		defer os.Setenv("GEMINI_HOME", originalHome)
-
-		os.Setenv("GEMINI_HOME", "/custom/gemini/home")
-		p := New()
-		files := p.AuthFiles()
+		t.Run("uses GEMINI_HOME if set", func(t *testing.T) {
+			setEnv(t, "GEMINI_HOME", "/custom/gemini/home")
+			p := New()
+			files := p.AuthFiles()
 
 		expected := "/custom/gemini/home/settings.json"
 		if files[0].Path != expected {
@@ -153,13 +160,10 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-	t.Run("uses default .gemini if GEMINI_HOME not set", func(t *testing.T) {
-		originalHome := os.Getenv("GEMINI_HOME")
-		defer os.Setenv("GEMINI_HOME", originalHome)
-
-		os.Unsetenv("GEMINI_HOME")
-		p := New()
-		files := p.AuthFiles()
+		t.Run("uses default .gemini if GEMINI_HOME not set", func(t *testing.T) {
+			unsetEnv(t, "GEMINI_HOME")
+			p := New()
+			files := p.AuthFiles()
 
 		homeDir, _ := os.UserHomeDir()
 		expected := filepath.Join(homeDir, ".gemini", "settings.json")
@@ -717,26 +721,20 @@ func TestProviderInterface(t *testing.T) {
 // geminiHome Helper Tests
 // =============================================================================
 
-func TestGeminiHome(t *testing.T) {
-	t.Run("respects GEMINI_HOME env var", func(t *testing.T) {
-		original := os.Getenv("GEMINI_HOME")
-		defer os.Setenv("GEMINI_HOME", original)
-
-		os.Setenv("GEMINI_HOME", "/test/gemini")
-		result := geminiHome()
-		if result != "/test/gemini" {
-			t.Errorf("geminiHome() = %q, want /test/gemini", result)
+	func TestGeminiHome(t *testing.T) {
+		t.Run("respects GEMINI_HOME env var", func(t *testing.T) {
+			setEnv(t, "GEMINI_HOME", "/test/gemini")
+			result := geminiHome()
+			if result != "/test/gemini" {
+				t.Errorf("geminiHome() = %q, want /test/gemini", result)
 		}
 	})
 
-	t.Run("falls back to ~/.gemini", func(t *testing.T) {
-		original := os.Getenv("GEMINI_HOME")
-		defer os.Setenv("GEMINI_HOME", original)
-
-		os.Unsetenv("GEMINI_HOME")
-		result := geminiHome()
-		homeDir, _ := os.UserHomeDir()
-		expected := filepath.Join(homeDir, ".gemini")
+		t.Run("falls back to ~/.gemini", func(t *testing.T) {
+			unsetEnv(t, "GEMINI_HOME")
+			result := geminiHome()
+			homeDir, _ := os.UserHomeDir()
+			expected := filepath.Join(homeDir, ".gemini")
 		if result != expected {
 			t.Errorf("geminiHome() = %q, want %s", result, expected)
 		}

@@ -190,6 +190,52 @@ func TestAgentCoveragePendingAndAuthCompleteFlow(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
+func TestAgentCoverageCheckPendingRequestsUsesHTTPTimeout(t *testing.T) {
+	coordinator := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/pending" {
+			http.NotFound(w, r)
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer coordinator.Close()
+
+	cfg := DefaultConfig()
+	cfg.CoordinatorURL = coordinator.URL
+	a := New(cfg)
+	a.pendingClient = &http.Client{Timeout: 50 * time.Millisecond}
+
+	start := time.Now()
+	a.checkPendingRequests(context.Background())
+	if elapsed := time.Since(start); elapsed >= 150*time.Millisecond {
+		t.Fatalf("checkPendingRequests exceeded timeout budget: %v", elapsed)
+	}
+}
+
+func TestAgentCoverageSendAuthCompleteUsesHTTPTimeout(t *testing.T) {
+	coordinator := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/complete" {
+			http.NotFound(w, r)
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer coordinator.Close()
+
+	cfg := DefaultConfig()
+	cfg.CoordinatorURL = coordinator.URL
+	a := New(cfg)
+	a.completeClient = &http.Client{Timeout: 50 * time.Millisecond}
+
+	start := time.Now()
+	a.sendAuthComplete(context.Background(), "req-timeout", "code", "acct@example.com", "")
+	if elapsed := time.Since(start); elapsed >= 150*time.Millisecond {
+		t.Fatalf("sendAuthComplete exceeded timeout budget: %v", elapsed)
+	}
+}
+
 func TestAgentCoverageAuthAndAccountsHandlers(t *testing.T) {
 	oauthServer := newOAuthFixtureServer(t)
 	defer oauthServer.Close()

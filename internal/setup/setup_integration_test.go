@@ -254,13 +254,10 @@ func TestGenerateLocalConfigIntegration(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Set HOME to temp directory
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
+	t.Setenv("HOME", tmpDir)
 
 	// Set XDG_CONFIG_HOME to ensure consistent behavior
-	os.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, ".config"))
-	defer os.Unsetenv("XDG_CONFIG_HOME")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, ".config"))
 
 	orch := NewOrchestrator(DefaultOptions())
 	orch.localMachine = &DiscoveredMachine{Name: "local", IsLocal: true}

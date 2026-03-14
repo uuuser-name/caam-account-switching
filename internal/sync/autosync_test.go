@@ -252,9 +252,7 @@ func TestSyncStatus(t *testing.T) {
 
 	// Set XDG_DATA_HOME for sync state
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	t.Run("GetSyncStatus with no state", func(t *testing.T) {
 		status, err := GetSyncStatus()
@@ -280,9 +278,7 @@ func TestIsSyncEnabled(t *testing.T) {
 
 	// Set XDG_DATA_HOME for sync state
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// By default, sync should be disabled
 	if IsSyncEnabled() {
@@ -296,9 +292,7 @@ func TestHasMachinesConfigured(t *testing.T) {
 
 	// Set XDG_DATA_HOME for sync state
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// By default, no machines should be configured
 	if HasMachinesConfigured() {
@@ -312,9 +306,7 @@ func TestTriggerSyncIfEnabled(t *testing.T) {
 
 	// Set XDG_DATA_HOME for sync state
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// This should not panic and should return early (sync disabled)
 	TriggerSyncIfEnabled("claude", "test@example.com")
@@ -329,9 +321,7 @@ func TestTriggerSyncIfEnabledWithConfig(t *testing.T) {
 
 	// Set XDG_DATA_HOME for sync state
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	originalInterval := GetThrottleInterval()
 	defer SetThrottleInterval(originalInterval)
@@ -361,9 +351,7 @@ func TestProcessQueueIfNeeded(t *testing.T) {
 
 	// Set XDG_DATA_HOME for sync state
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// This should not panic and should return early (sync disabled)
 	ProcessQueueIfNeeded()

@@ -2,6 +2,9 @@ package refresh
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +20,7 @@ func TestRefreshProfile_Claude_Extended(t *testing.T) {
 	defer h.Close()
 
 	// 1. Setup
-	h.StartStep("Setup", "Mock Claude refresh and vault")
+	h.StartStep("Setup", "Seed Claude refresh server and vault")
 	rootDir := h.TempDir
 	vaultDir := filepath.Join(rootDir, "vault")
 	vault := authfile.NewVault(vaultDir)
@@ -31,19 +34,26 @@ func TestRefreshProfile_Claude_Extended(t *testing.T) {
 	// Use format that is parsed by getRefreshTokenFromJSON
 	initialContent := `{"refreshToken": "old-refresh-token", "accessToken": "old-access", "expiresAt": "2020-01-01T00:00:00Z"}`
 	require.NoError(t, os.WriteFile(authPath, []byte(initialContent), 0600))
-	
-	// Mock RefreshClaudeToken
-	originalRefresh := RefreshClaudeToken
-	defer func() { RefreshClaudeToken = originalRefresh }()
-	
-	RefreshClaudeToken = func(ctx context.Context, refreshToken string) (*TokenResponse, error) {
-		assert.Equal(t, "old-refresh-token", refreshToken)
-		return &TokenResponse{
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "refresh_token", r.Form.Get("grant_type"))
+		assert.Equal(t, "old-refresh-token", r.Form.Get("refresh_token"))
+
+		require.NoError(t, json.NewEncoder(w).Encode(TokenResponse{
 			AccessToken:  "new-access-token",
 			RefreshToken: "new-refresh-token",
 			ExpiresIn:    3600,
-		}, nil
-	}
+			TokenType:    "Bearer",
+		}))
+	}))
+	defer server.Close()
+
+	originalURL := ClaudeTokenURL
+	ClaudeTokenURL = server.URL
+	defer func() { ClaudeTokenURL = originalURL }()
 	
 	h.EndStep("Setup")
 	
@@ -68,7 +78,7 @@ func TestRefreshProfile_Codex_Extended(t *testing.T) {
 	defer h.Close()
 
 	// 1. Setup
-	h.StartStep("Setup", "Mock Codex refresh and vault")
+	h.StartStep("Setup", "Seed Codex refresh server and vault")
 	rootDir := h.TempDir
 	vaultDir := filepath.Join(rootDir, "vault")
 	vault := authfile.NewVault(vaultDir)
@@ -80,19 +90,29 @@ func TestRefreshProfile_Codex_Extended(t *testing.T) {
 	authPath := filepath.Join(profileDir, "auth.json")
 	initialContent := `{"refresh_token": "old-codex-refresh", "access_token": "old-codex-access"}`
 	require.NoError(t, os.WriteFile(authPath, []byte(initialContent), 0600))
-	
-	// Mock RefreshCodexToken
-	originalRefresh := RefreshCodexToken
-	defer func() { RefreshCodexToken = originalRefresh }()
-	
-	RefreshCodexToken = func(ctx context.Context, refreshToken string) (*TokenResponse, error) {
-		assert.Equal(t, "old-codex-refresh", refreshToken)
-		return &TokenResponse{
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		var body map[string]string
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "refresh_token", body["grant_type"])
+		assert.Equal(t, "old-codex-refresh", body["refresh_token"])
+		assert.Equal(t, CodexClientID, body["client_id"])
+
+		require.NoError(t, json.NewEncoder(w).Encode(TokenResponse{
 			AccessToken:  "new-codex-access",
 			RefreshToken: "new-codex-refresh",
 			ExpiresIn:    3600,
-		}, nil
-	}
+			TokenType:    "Bearer",
+		}))
+	}))
+	defer server.Close()
+
+	originalURL := CodexTokenURL
+	CodexTokenURL = server.URL
+	defer func() { CodexTokenURL = originalURL }()
 	
 	h.EndStep("Setup")
 	
@@ -116,7 +136,7 @@ func TestRefreshProfile_Gemini_Extended(t *testing.T) {
 	defer h.Close()
 
 	// 1. Setup
-	h.StartStep("Setup", "Mock Gemini refresh and vault")
+	h.StartStep("Setup", "Seed Gemini refresh server and vault")
 	rootDir := h.TempDir
 	vaultDir := filepath.Join(rootDir, "vault")
 	vault := authfile.NewVault(vaultDir)
@@ -133,20 +153,26 @@ func TestRefreshProfile_Gemini_Extended(t *testing.T) {
 	credsPath := filepath.Join(profileDir, "oauth_credentials.json")
 	credsContent := `{"client_id": "test-id", "client_secret": "test-secret", "refresh_token": "gemini-refresh"}`
 	require.NoError(t, os.WriteFile(credsPath, []byte(credsContent), 0600))
-	
-	// Mock RefreshGeminiToken
-	originalRefresh := RefreshGeminiToken
-	defer func() { RefreshGeminiToken = originalRefresh }()
-	
-	RefreshGeminiToken = func(ctx context.Context, clientID, clientSecret, refreshToken string) (*GoogleTokenResponse, error) {
-		assert.Equal(t, "test-id", clientID)
-		assert.Equal(t, "test-secret", clientSecret)
-		assert.Equal(t, "gemini-refresh", refreshToken)
-		return &GoogleTokenResponse{
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "test-id", r.Form.Get("client_id"))
+		assert.Equal(t, "test-secret", r.Form.Get("client_secret"))
+		assert.Equal(t, "gemini-refresh", r.Form.Get("refresh_token"))
+
+		require.NoError(t, json.NewEncoder(w).Encode(GoogleTokenResponse{
 			AccessToken: "new-gemini-access",
 			ExpiresIn:   3600,
-		}, nil
-	}
+			TokenType:   "Bearer",
+		}))
+	}))
+	defer server.Close()
+
+	originalURL := GeminiTokenURL
+	GeminiTokenURL = server.URL
+	defer func() { GeminiTokenURL = originalURL }()
 	
 	h.EndStep("Setup")
 	

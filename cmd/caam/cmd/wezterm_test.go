@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"errors"
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -281,21 +280,15 @@ func TestWeztermOAuthReportRedactsLogs(t *testing.T) {
 	savedGet := weztermGetTextFunc
 	savedNow := weztermNow
 	savedWriter := weztermDebugWriter
-	savedEnv := os.Getenv("CAAM_DEBUG")
 	defer func() {
 		weztermLookupFunc = savedLookup
 		weztermListPanesFunc = savedList
 		weztermGetTextFunc = savedGet
 		weztermNow = savedNow
 		weztermDebugWriter = savedWriter
-		if savedEnv == "" {
-			_ = os.Unsetenv("CAAM_DEBUG")
-		} else {
-			_ = os.Setenv("CAAM_DEBUG", savedEnv)
-		}
 	}()
 
-	_ = os.Setenv("CAAM_DEBUG", "true")
+	t.Setenv("CAAM_DEBUG", "true")
 	logBuf := &bytes.Buffer{}
 	weztermDebugWriter = logBuf
 

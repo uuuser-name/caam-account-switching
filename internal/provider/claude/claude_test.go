@@ -13,6 +13,16 @@ import (
 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider"
 )
 
+func setEnv(t *testing.T, key, value string) {
+	t.Helper()
+	t.Setenv(key, value)
+}
+
+func unsetEnv(t *testing.T, key string) {
+	t.Helper()
+	t.Setenv(key, "")
+}
+
 // =============================================================================
 // Provider Factory Tests
 // =============================================================================
@@ -147,13 +157,11 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-	t.Run("uses XDG_CONFIG_HOME if set", func(t *testing.T) {
-		originalXDG := os.Getenv("XDG_CONFIG_HOME")
-		defer os.Setenv("XDG_CONFIG_HOME", originalXDG)
+		t.Run("uses XDG_CONFIG_HOME if set", func(t *testing.T) {
+			setEnv(t, "XDG_CONFIG_HOME", "/custom/config")
 
-		os.Setenv("XDG_CONFIG_HOME", "/custom/config")
-		p := New()
-		files := p.AuthFiles()
+			p := New()
+			files := p.AuthFiles()
 
 		expected := "/custom/config/claude-code/auth.json"
 		if files[2].Path != expected {
@@ -161,13 +169,11 @@ func TestAuthFiles(t *testing.T) {
 		}
 	})
 
-	t.Run("uses default .config if XDG_CONFIG_HOME not set", func(t *testing.T) {
-		originalXDG := os.Getenv("XDG_CONFIG_HOME")
-		defer os.Setenv("XDG_CONFIG_HOME", originalXDG)
+		t.Run("uses default .config if XDG_CONFIG_HOME not set", func(t *testing.T) {
+			unsetEnv(t, "XDG_CONFIG_HOME")
 
-		os.Unsetenv("XDG_CONFIG_HOME")
-		p := New()
-		files := p.AuthFiles()
+			p := New()
+			files := p.AuthFiles()
 
 		homeDir, _ := os.UserHomeDir()
 		expected := filepath.Join(homeDir, ".config", "claude-code", "auth.json")
@@ -721,10 +727,8 @@ func TestProviderInterface(t *testing.T) {
 
 func TestXDGConfigHome(t *testing.T) {
 	t.Run("respects XDG_CONFIG_HOME env var", func(t *testing.T) {
-		original := os.Getenv("XDG_CONFIG_HOME")
-		defer os.Setenv("XDG_CONFIG_HOME", original)
+		setEnv(t, "XDG_CONFIG_HOME", "/test/xdg")
 
-		os.Setenv("XDG_CONFIG_HOME", "/test/xdg")
 		result := xdgConfigHome()
 		if result != "/test/xdg" {
 			t.Errorf("xdgConfigHome() = %q, want /test/xdg", result)
@@ -732,10 +736,8 @@ func TestXDGConfigHome(t *testing.T) {
 	})
 
 	t.Run("falls back to ~/.config", func(t *testing.T) {
-		original := os.Getenv("XDG_CONFIG_HOME")
-		defer os.Setenv("XDG_CONFIG_HOME", original)
+		unsetEnv(t, "XDG_CONFIG_HOME")
 
-		os.Unsetenv("XDG_CONFIG_HOME")
 		result := xdgConfigHome()
 		homeDir, _ := os.UserHomeDir()
 		expected := filepath.Join(homeDir, ".config")

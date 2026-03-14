@@ -1,9 +1,9 @@
 package sync
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -37,41 +37,41 @@ func TestDetermineSyncOperationLogic(t *testing.T) {
 			wantDirection: SyncSkip,
 		},
 		{
-			name:         "only local exists - push",
-			localExists:  true,
-			remoteExists: false,
-			localFresh:   &TokenFreshness{ExpiresAt: later},
+			name:          "only local exists - push",
+			localExists:   true,
+			remoteExists:  false,
+			localFresh:    &TokenFreshness{ExpiresAt: later},
 			wantDirection: SyncPush,
 		},
 		{
-			name:         "only remote exists - pull",
-			localExists:  false,
-			remoteExists: true,
-			remoteFresh:  &TokenFreshness{ExpiresAt: later},
+			name:          "only remote exists - pull",
+			localExists:   false,
+			remoteExists:  true,
+			remoteFresh:   &TokenFreshness{ExpiresAt: later},
 			wantDirection: SyncPull,
 		},
 		{
-			name:         "local is fresher - push",
-			localExists:  true,
-			remoteExists: true,
-			localFresh:   &TokenFreshness{ExpiresAt: later, ModifiedAt: now},
-			remoteFresh:  &TokenFreshness{ExpiresAt: now, ModifiedAt: earlier},
+			name:          "local is fresher - push",
+			localExists:   true,
+			remoteExists:  true,
+			localFresh:    &TokenFreshness{ExpiresAt: later, ModifiedAt: now},
+			remoteFresh:   &TokenFreshness{ExpiresAt: now, ModifiedAt: earlier},
 			wantDirection: SyncPush,
 		},
 		{
-			name:         "remote is fresher - pull",
-			localExists:  true,
-			remoteExists: true,
-			localFresh:   &TokenFreshness{ExpiresAt: now, ModifiedAt: earlier},
-			remoteFresh:  &TokenFreshness{ExpiresAt: later, ModifiedAt: now},
+			name:          "remote is fresher - pull",
+			localExists:   true,
+			remoteExists:  true,
+			localFresh:    &TokenFreshness{ExpiresAt: now, ModifiedAt: earlier},
+			remoteFresh:   &TokenFreshness{ExpiresAt: later, ModifiedAt: now},
 			wantDirection: SyncPull,
 		},
 		{
-			name:         "equal freshness - skip",
-			localExists:  true,
-			remoteExists: true,
-			localFresh:   &TokenFreshness{ExpiresAt: now, ModifiedAt: now},
-			remoteFresh:  &TokenFreshness{ExpiresAt: now, ModifiedAt: now},
+			name:          "equal freshness - skip",
+			localExists:   true,
+			remoteExists:  true,
+			localFresh:    &TokenFreshness{ExpiresAt: now, ModifiedAt: now},
+			remoteFresh:   &TokenFreshness{ExpiresAt: now, ModifiedAt: now},
 			wantDirection: SyncSkip,
 		},
 	}
@@ -776,8 +776,8 @@ func TestExpandPathFromSync(t *testing.T) {
 	}
 
 	tests := []struct {
-		input  string
-		want   string
+		input string
+		want  string
 	}{
 		{"~/test", filepath.Join(homeDir, "test")},
 		{"/absolute/path", "/absolute/path"},
@@ -798,8 +798,8 @@ func TestExpandPathFromSync(t *testing.T) {
 // TestStripInlineComment tests comment stripping.
 func TestStripInlineComment(t *testing.T) {
 	tests := []struct {
-		input  string
-		want   string
+		input string
+		want  string
 	}{
 		{"Host foo # comment", "Host foo"},
 		{"Host foo#not-a-comment", "Host foo#not-a-comment"},
@@ -1051,12 +1051,12 @@ func TestSSHErrorMethods(t *testing.T) {
 	m := NewMachine("test", "192.168.1.100")
 
 	tests := []struct {
-		name       string
-		err        *SSHError
-		isTimeout  bool
-		isAuth     bool
-		isNetwork  bool
-		isHostKey  bool
+		name      string
+		err       *SSHError
+		isTimeout bool
+		isAuth    bool
+		isNetwork bool
+		isHostKey bool
 	}{
 		{
 			name: "timeout error",
@@ -1065,8 +1065,8 @@ func TestSSHErrorMethods(t *testing.T) {
 				Operation:  "connect",
 				Underlying: &testTimeoutError{},
 			},
-			isTimeout:  true,
-			isNetwork:  true, // connect operation with underlying error
+			isTimeout: true,
+			isNetwork: true, // connect operation with underlying error
 		},
 		{
 			name: "auth operation",
@@ -1495,10 +1495,10 @@ func TestSyncStatsAggregation(t *testing.T) {
 			Duration:  10 * time.Millisecond,
 		},
 		{
-			Operation: &SyncOperation{Direction: SyncPull, Machine: m2},
-			Success:   true,
+			Operation:     &SyncOperation{Direction: SyncPull, Machine: m2},
+			Success:       true,
 			BytesReceived: 200,
-			Duration:  20 * time.Millisecond,
+			Duration:      20 * time.Millisecond,
 		},
 		{
 			Operation: &SyncOperation{Direction: SyncSkip, Machine: m1},
@@ -1707,6 +1707,19 @@ func TestKnownHostsHelpers(t *testing.T) {
 	}, path2)
 	if err := cb("example.org", nil, publicKey); err != nil {
 		t.Fatalf("autoAddHostKeyCallback should tolerate unknown host and return nil, got %v", err)
+	}
+}
+
+func TestFormatKnownHostsWarningSanitizesTerminalControlBytes(t *testing.T) {
+	got := formatKnownHostsWarning("exam\x1b[31mple.org", errors.New("failed\x1b]2;title\x07 to add"))
+	if strings.Contains(got, "\x1b") || strings.Contains(got, "\x07") {
+		t.Fatalf("warning should strip terminal control bytes, got %q", got)
+	}
+	if !strings.Contains(got, "example.org") {
+		t.Fatalf("warning should preserve readable hostname, got %q", got)
+	}
+	if !strings.Contains(got, "failed to add") {
+		t.Fatalf("warning should preserve readable error text, got %q", got)
 	}
 }
 

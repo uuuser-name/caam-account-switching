@@ -9,11 +9,8 @@ import (
 
 func TestDefaultLogFilePath(t *testing.T) {
 	t.Run("with CAAM_HOME", func(t *testing.T) {
-		orig := os.Getenv("CAAM_HOME")
-		defer os.Setenv("CAAM_HOME", orig)
-
 		tmpDir := t.TempDir()
-		os.Setenv("CAAM_HOME", tmpDir)
+		t.Setenv("CAAM_HOME", tmpDir)
 
 		got := DefaultLogFilePath()
 		want := filepath.Join(tmpDir, "caam.log")
@@ -23,10 +20,7 @@ func TestDefaultLogFilePath(t *testing.T) {
 	})
 
 	t.Run("without CAAM_HOME", func(t *testing.T) {
-		orig := os.Getenv("CAAM_HOME")
-		defer os.Setenv("CAAM_HOME", orig)
-
-		os.Unsetenv("CAAM_HOME")
+		t.Setenv("CAAM_HOME", "")
 
 		got := DefaultLogFilePath()
 		// Should be in home directory or fallback
@@ -86,11 +80,8 @@ func TestAppendLogLine(t *testing.T) {
 
 	t.Run("empty path uses default", func(t *testing.T) {
 		// Set CAAM_HOME to temp directory to avoid writing to real home
-		orig := os.Getenv("CAAM_HOME")
-		defer os.Setenv("CAAM_HOME", orig)
-
 		tmpDir := t.TempDir()
-		os.Setenv("CAAM_HOME", tmpDir)
+		t.Setenv("CAAM_HOME", tmpDir)
 
 		if err := AppendLogLine("", "test with empty path"); err != nil {
 			t.Fatalf("AppendLogLine with empty path: %v", err)

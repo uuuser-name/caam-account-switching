@@ -43,13 +43,10 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestConfigPath(t *testing.T) {
-	// Save original env
-	origXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", origXDG)
-
+	
 	t.Run("with XDG_CONFIG_HOME set", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		os.Setenv("XDG_CONFIG_HOME", tmpDir)
+		t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 		path := ConfigPath()
 		expected := filepath.Join(tmpDir, "caam", "config.json")
@@ -60,7 +57,7 @@ func TestConfigPath(t *testing.T) {
 	})
 
 	t.Run("without XDG_CONFIG_HOME", func(t *testing.T) {
-		os.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("XDG_CONFIG_HOME", "")
 
 		path := ConfigPath()
 
@@ -200,12 +197,9 @@ func TestMigrateDataToCAAMHomeRefusesNestedTarget(t *testing.T) {
 }
 
 func TestLoadNonExistent(t *testing.T) {
-	// Save original env
-	origXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", origXDG)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Load from non-existent file should return default config
 	cfg, err := Load()
@@ -228,12 +222,9 @@ func TestLoadNonExistent(t *testing.T) {
 }
 
 func TestLoadValidConfig(t *testing.T) {
-	// Save original env
-	origXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", origXDG)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Create config file
 	configDir := filepath.Join(tmpDir, "caam")
@@ -295,12 +286,9 @@ func TestLoadValidConfig(t *testing.T) {
 }
 
 func TestLoadInvalidJSON(t *testing.T) {
-	// Save original env
-	origXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", origXDG)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Create invalid config file
 	configDir := filepath.Join(tmpDir, "caam")
@@ -321,12 +309,9 @@ func TestLoadInvalidJSON(t *testing.T) {
 }
 
 func TestSave(t *testing.T) {
-	// Save original env
-	origXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", origXDG)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	cfg := &Config{
 		DefaultProvider: "gemini",
@@ -540,12 +525,9 @@ func TestRemovePassthroughNilSlice(t *testing.T) {
 }
 
 func TestSaveRoundtrip(t *testing.T) {
-	// Save original env
-	origXDG := os.Getenv("XDG_CONFIG_HOME")
-	defer os.Setenv("XDG_CONFIG_HOME", origXDG)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Create config with all fields set
 	original := &Config{

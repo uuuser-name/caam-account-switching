@@ -127,7 +127,8 @@ func checkFileForDangerousPatterns(relPath string, content []byte) []string {
 		if strings.Contains(line, "t.TempDir()") {
 			hasTempDir = true
 		}
-		if strings.Contains(line, `os.Setenv("HOME"`) && strings.Contains(line, "tmpDir") {
+		if (strings.Contains(line, `os.Setenv("HOME"`) || strings.Contains(line, `t.Setenv("HOME"`)) &&
+			strings.Contains(line, "tmpDir") {
 			hasHomeOverride = true
 		}
 
@@ -269,8 +270,10 @@ func TestTempDirUsage(t *testing.T) {
 		hasHarness := strings.Contains(contentStr, "testutil.NewHarness") ||
 			strings.Contains(contentStr, "testutil.NewExtendedHarness") ||
 			strings.Contains(contentStr, "NewHarness(t)") ||
-			strings.Contains(contentStr, "NewExtendedHarness(t)")
-		hasHomeOverride := strings.Contains(contentStr, `os.Setenv("HOME"`) &&
+			strings.Contains(contentStr, "NewExtendedHarness(t)") ||
+			strings.Contains(contentStr, "newStartupLayout(t)")
+		hasHomeOverride := (strings.Contains(contentStr, `os.Setenv("HOME"`) ||
+			strings.Contains(contentStr, `t.Setenv("HOME"`)) &&
 			(strings.Contains(contentStr, "tmpDir") || strings.Contains(contentStr, "TempDir"))
 
 		if !hasTempDir && !hasHarness && !hasHomeOverride {

@@ -22,6 +22,9 @@ import (
 func captureStdout(t *testing.T, f func() error) (string, error) {
 	t.Helper()
 
+	resetCommandTreeIO(rootCmd)
+	defer resetCommandTreeIO(rootCmd)
+
 	oldStdout := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -29,6 +32,7 @@ func captureStdout(t *testing.T, f func() error) (string, error) {
 	}
 
 	os.Stdout = w
+	setCommandTreeWriters(rootCmd, w, w)
 
 	// Run function with deferred cleanup to handle panics
 	var runErr error

@@ -52,9 +52,7 @@ func TestCaptureNoAuth(t *testing.T) {
 	vault := authfile.NewVault(tmpDir)
 
 	// Set up environment to use temp directory
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
 
 	tracker := NewTracker(vault)
 
@@ -89,9 +87,7 @@ func TestCaptureWithAuth(t *testing.T) {
 	}
 
 	// Set environment
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -118,19 +114,9 @@ func TestCaptureAll(t *testing.T) {
 	vault := authfile.NewVault(tmpDir)
 
 	// Set up empty directories for each provider
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	oldGeminiHome := os.Getenv("GEMINI_HOME")
-	oldHome := os.Getenv("HOME")
-
-	os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
-	os.Setenv("GEMINI_HOME", filepath.Join(tmpDir, "gemini"))
-	os.Setenv("HOME", tmpDir)
-
-	defer func() {
-		os.Setenv("CODEX_HOME", oldCodexHome)
-		os.Setenv("GEMINI_HOME", oldGeminiHome)
-		os.Setenv("HOME", oldHome)
-	}()
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
+	t.Setenv("GEMINI_HOME", filepath.Join(tmpDir, "gemini"))
+	t.Setenv("HOME", tmpDir)
 
 	tracker := NewTracker(vault)
 
@@ -159,9 +145,7 @@ func TestDetectChangeNoInitialState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -190,9 +174,7 @@ func TestDetectChangeModified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -232,9 +214,7 @@ func TestDetectChangeRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -274,9 +254,7 @@ func TestDetectChangeNone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -318,9 +296,7 @@ func TestGetState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	// Capture state
 	_, err := tracker.Capture("codex")
@@ -339,12 +315,8 @@ func TestSaveAndLoadState(t *testing.T) {
 	vault := authfile.NewVault(tmpDir)
 
 	// Override state path
-	oldCaam := os.Getenv("CAAM_HOME")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Unsetenv("CAAM_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("CAAM_HOME", oldCaam)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("CAAM_HOME", "")
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	codexDir := filepath.Join(tmpDir, "codex")
 	if err := os.MkdirAll(codexDir, 0700); err != nil {
@@ -356,9 +328,7 @@ func TestSaveAndLoadState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	// Create and populate tracker
 	tracker1 := NewTracker(vault)
@@ -404,12 +374,8 @@ func TestLoadStateNonExistent(t *testing.T) {
 	tmpDir := t.TempDir()
 	vault := authfile.NewVault(tmpDir)
 
-	oldCaam := os.Getenv("CAAM_HOME")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Unsetenv("CAAM_HOME")
-	os.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "nonexistent"))
-	defer os.Setenv("CAAM_HOME", oldCaam)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("CAAM_HOME", "")
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmpDir, "nonexistent"))
 
 	tracker := NewTracker(vault)
 
@@ -424,19 +390,9 @@ func TestCheckUnsavedAuth(t *testing.T) {
 	vault := authfile.NewVault(tmpDir)
 
 	// Set up empty auth directories
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	oldGeminiHome := os.Getenv("GEMINI_HOME")
-	oldHome := os.Getenv("HOME")
-
-	os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
-	os.Setenv("GEMINI_HOME", filepath.Join(tmpDir, "gemini"))
-	os.Setenv("HOME", tmpDir)
-
-	defer func() {
-		os.Setenv("CODEX_HOME", oldCodexHome)
-		os.Setenv("GEMINI_HOME", oldGeminiHome)
-		os.Setenv("HOME", oldHome)
-	}()
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
+	t.Setenv("GEMINI_HOME", filepath.Join(tmpDir, "gemini"))
+	t.Setenv("HOME", tmpDir)
 
 	// No auth files, should return empty
 	unsaved, err := CheckUnsavedAuth(vault)
@@ -497,9 +453,7 @@ func TestWatcherStartStop(t *testing.T) {
 	tmpDir := t.TempDir()
 	vault := authfile.NewVault(tmpDir)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
 
 	w := NewWatcher(vault, nil)
 
@@ -530,9 +484,7 @@ func TestGetStatusNoAuth(t *testing.T) {
 	tmpDir := t.TempDir()
 	vault := authfile.NewVault(tmpDir)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
 
 	tracker := NewTracker(vault)
 
@@ -564,9 +516,7 @@ func TestGetStatusWithUnsavedAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -611,19 +561,9 @@ func TestDetectAllChanges(t *testing.T) {
 	os.MkdirAll(codexDir, 0700)
 	os.MkdirAll(geminiDir, 0700)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	oldGeminiHome := os.Getenv("GEMINI_HOME")
-	oldHome := os.Getenv("HOME")
-
-	os.Setenv("CODEX_HOME", codexDir)
-	os.Setenv("GEMINI_HOME", geminiDir)
-	os.Setenv("HOME", tmpDir)
-
-	defer func() {
-		os.Setenv("CODEX_HOME", oldCodexHome)
-		os.Setenv("GEMINI_HOME", oldGeminiHome)
-		os.Setenv("HOME", oldHome)
-	}()
+	t.Setenv("CODEX_HOME", codexDir)
+	t.Setenv("GEMINI_HOME", geminiDir)
+	t.Setenv("HOME", tmpDir)
 
 	tracker := NewTracker(vault)
 
@@ -674,9 +614,7 @@ func TestMatchesProfile(t *testing.T) {
 	os.MkdirAll(profileDir, 0700)
 	os.WriteFile(filepath.Join(profileDir, "auth.json"), authContent, 0600)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -715,9 +653,7 @@ func TestMatchesProfile_MissingRequiredBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -730,14 +666,8 @@ func TestMatchesProfile_OptionalOnlyAllowed(t *testing.T) {
 	tmpDir := t.TempDir()
 	vault := authfile.NewVault(tmpDir)
 
-	oldHome := os.Getenv("HOME")
-	oldXDG := os.Getenv("XDG_CONFIG_HOME")
-	os.Setenv("HOME", tmpDir)
-	os.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
-	defer func() {
-		os.Setenv("HOME", oldHome)
-		os.Setenv("XDG_CONFIG_HOME", oldXDG)
-	}()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "config"))
 
 	authContent := []byte(`{"session":"opt"}`)
 	if err := os.WriteFile(filepath.Join(tmpDir, ".claude.json"), authContent, 0600); err != nil {
@@ -780,9 +710,7 @@ func TestMatchesProfile_NoAuth(t *testing.T) {
 	codexDir := filepath.Join(tmpDir, "codex")
 	os.MkdirAll(codexDir, 0700)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -816,9 +744,7 @@ func TestFindMatchingProfile(t *testing.T) {
 	os.MkdirAll(profile2Dir, 0700)
 	os.WriteFile(filepath.Join(profile2Dir, "auth.json"), []byte(`{"token": "other"}`), 0600)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -848,9 +774,7 @@ func TestFindMatchingProfile_NoAuth(t *testing.T) {
 	codexDir := filepath.Join(tmpDir, "codex")
 	os.MkdirAll(codexDir, 0700)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -877,9 +801,7 @@ func TestFindMatchingProfile_NoMatch(t *testing.T) {
 	os.MkdirAll(profileDir, 0700)
 	os.WriteFile(filepath.Join(profileDir, "auth.json"), []byte(`{"token": "different"}`), 0600)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -902,19 +824,9 @@ func TestGetAllStatuses(t *testing.T) {
 	os.MkdirAll(codexDir, 0700)
 	os.MkdirAll(geminiDir, 0700)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	oldGeminiHome := os.Getenv("GEMINI_HOME")
-	oldHome := os.Getenv("HOME")
-
-	os.Setenv("CODEX_HOME", codexDir)
-	os.Setenv("GEMINI_HOME", geminiDir)
-	os.Setenv("HOME", tmpDir)
-
-	defer func() {
-		os.Setenv("CODEX_HOME", oldCodexHome)
-		os.Setenv("GEMINI_HOME", oldGeminiHome)
-		os.Setenv("HOME", oldHome)
-	}()
+	t.Setenv("CODEX_HOME", codexDir)
+	t.Setenv("GEMINI_HOME", geminiDir)
+	t.Setenv("HOME", tmpDir)
 
 	// Create auth for codex only
 	os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{"token": "test"}`), 0600)
@@ -952,9 +864,7 @@ func TestWatcherStartAlreadyRunning(t *testing.T) {
 	tmpDir := t.TempDir()
 	vault := authfile.NewVault(tmpDir)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
 
 	w := NewWatcher(vault, nil)
 
@@ -987,9 +897,7 @@ func TestWatcherStartAfterCaptureError(t *testing.T) {
 
 	// Set CODEX_HOME to a path that will cause CaptureAll to work
 	// but first we test with an invalid provider setup
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex"))
 
 	w := NewWatcher(vault, nil)
 
@@ -1043,9 +951,7 @@ func TestWatcherDetectsChanges(t *testing.T) {
 	authPath := filepath.Join(codexDir, "auth.json")
 	os.WriteFile(authPath, []byte(`{"token": "initial"}`), 0600)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	changes := make(chan Change, 10)
 	w := NewWatcher(vault, func(c Change) {
@@ -1083,12 +989,8 @@ func TestLoadStateInvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	vault := authfile.NewVault(tmpDir)
 
-	oldCaam := os.Getenv("CAAM_HOME")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Unsetenv("CAAM_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("CAAM_HOME", oldCaam)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("CAAM_HOME", "")
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create invalid JSON state file
 	stateDir := filepath.Join(tmpDir, "caam")
@@ -1110,9 +1012,7 @@ func TestDetectChangeNewAuthAfterRemoval(t *testing.T) {
 	codexDir := filepath.Join(tmpDir, "codex")
 	os.MkdirAll(codexDir, 0700)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 
@@ -1150,9 +1050,7 @@ func TestGetStatusWithMatchingProfile(t *testing.T) {
 	os.MkdirAll(profileDir, 0700)
 	os.WriteFile(filepath.Join(profileDir, "auth.json"), authContent, 0600)
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	os.Setenv("CODEX_HOME", codexDir)
-	defer os.Setenv("CODEX_HOME", oldCodexHome)
+	t.Setenv("CODEX_HOME", codexDir)
 
 	tracker := NewTracker(vault)
 

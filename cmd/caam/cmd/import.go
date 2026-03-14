@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile"
 )
 
 var importCmd = &cobra.Command{
@@ -33,21 +34,6 @@ func runImport(cmd *cobra.Command, args []string) error {
 	as, _ := cmd.Flags().GetString("as")
 	force, _ := cmd.Flags().GetBool("force")
 
-	var r io.Reader
-	var close func() error
-	if inPath == "-" {
-		r = cmd.InOrStdin()
-		close = func() error { return nil }
-	} else {
-		f, err := os.Open(inPath)
-		if err != nil {
-			return fmt.Errorf("open archive: %w", err)
-		}
-		r = f
-		close = f.Close
-	}
-	defer func() { _ = close() }()
-
 	var opt importOptions
 	opt.Force = force
 	if as != "" {
@@ -59,7 +45,15 @@ func runImport(cmd *cobra.Command, args []string) error {
 		opt.AsProfile = profile
 	}
 
-	manifest, err := importArchive(r, vault, opt)
+	var (
+		manifest *vaultExportManifest
+		err      error
+	)
+	if inPath == "-" {
+		manifest, err = importArchive(cmd.InOrStdin(), vault, opt)
+	} else {
+		manifest, err = importArchiveFromFile(inPath, vault, opt)
+	}
 	if err != nil {
 		return err
 	}
@@ -72,4 +66,13 @@ func runImport(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Imported %d profile(s)\n", count)
 	return nil
+}
+
+func importArchiveFromFile(inPath string, vault *authfile.Vault, opt importOptions) (*vaultExportManifest, error) {
+	f, err := os.Open(inPath)
+	if err != nil {
+		return nil, fmt.Errorf("open archive: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	return importArchive(f, vault, opt)
 }

@@ -15,11 +15,13 @@ import (
 
 func TestPrecheckCommandHelp(t *testing.T) {
 	cmd := rootCmd
+	resetCommandTreeForExecute(cmd)
+	defer resetCommandTreeForExecute(cmd)
+
 	cmd.SetArgs([]string{"precheck", "--help"})
 
 	buf := new(bytes.Buffer)
-	cmd.SetOut(buf)
-	cmd.SetErr(buf)
+	setCommandTreeWriters(cmd, buf, buf)
 
 	err := cmd.Execute()
 	require.NoError(t, err)

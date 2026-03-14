@@ -31,11 +31,8 @@ func TestPIDFileRoundTrip(t *testing.T) {
 }
 
 func TestDefaultPIDFilePathUsesCAAMHome(t *testing.T) {
-	orig := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", orig)
-
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	got := DefaultPIDFilePath()
 	want := filepath.Join(tmpDir, "caam.pid")
@@ -45,10 +42,7 @@ func TestDefaultPIDFilePathUsesCAAMHome(t *testing.T) {
 }
 
 func TestDefaultPIDFilePathWithoutCAAMHome(t *testing.T) {
-	orig := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", orig)
-
-	os.Unsetenv("CAAM_HOME")
+	t.Setenv("CAAM_HOME", "")
 
 	got := DefaultPIDFilePath()
 	// Should end with caam.pid
@@ -135,11 +129,8 @@ func TestWritePIDFileInvalidPID(t *testing.T) {
 
 func TestWritePIDFileEmptyPath(t *testing.T) {
 	// Set CAAM_HOME to temp directory to avoid writing to real home
-	orig := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", orig)
-
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Empty path should use default
 	if err := WritePIDFile("", 54321); err != nil {
@@ -159,11 +150,8 @@ func TestWritePIDFileEmptyPath(t *testing.T) {
 
 func TestReadPIDFileEmptyPath(t *testing.T) {
 	// Set CAAM_HOME to temp directory
-	orig := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", orig)
-
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// First write a PID file
 	if err := WritePIDFile("", 11111); err != nil {
@@ -182,11 +170,8 @@ func TestReadPIDFileEmptyPath(t *testing.T) {
 
 func TestRemovePIDFileEmptyPath(t *testing.T) {
 	// Set CAAM_HOME to temp directory
-	orig := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", orig)
-
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// First write a PID file
 	if err := WritePIDFile("", 22222); err != nil {

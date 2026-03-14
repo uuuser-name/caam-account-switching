@@ -40,14 +40,7 @@ func TestWatchOnce(t *testing.T) {
 	credsPath := filepath.Join(homeDir, ".claude", ".credentials.json")
 	require.NoError(t, os.WriteFile(credsPath, credsData, 0600))
 
-	// Override HOME for test
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", homeDir)
-	defer func() {
-		if origHome != "" {
-			os.Setenv("HOME", origHome)
-		}
-	}()
 
 	// Run WatchOnce for claude only
 	discovered, err := WatchOnce(vault, []string{"claude"}, nil)
@@ -73,14 +66,7 @@ func TestWatcher_Discovery(t *testing.T) {
 
 	vault := authfile.NewVault(vaultDir)
 
-	// Override HOME for test
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", homeDir)
-	defer func() {
-		if origHome != "" {
-			os.Setenv("HOME", origHome)
-		}
-	}()
 
 	// Track discoveries
 	var mu sync.Mutex
@@ -140,14 +126,7 @@ func TestWatcher_UpdateExisting(t *testing.T) {
 
 	vault := authfile.NewVault(vaultDir)
 
-	// Override HOME for test
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", homeDir)
-	defer func() {
-		if origHome != "" {
-			os.Setenv("HOME", origHome)
-		}
-	}()
 
 	// Create initial credentials
 	creds := map[string]interface{}{
@@ -195,13 +174,7 @@ func TestWatchOnce_AutoProfileOnIdentityError(t *testing.T) {
 
 	vault := authfile.NewVault(vaultDir)
 
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", homeDir)
-	defer func() {
-		if origHome != "" {
-			os.Setenv("HOME", origHome)
-		}
-	}()
 
 	credsPath := filepath.Join(homeDir, ".claude", ".credentials.json")
 	require.NoError(t, os.WriteFile(credsPath, []byte("{invalid"), 0600))
@@ -227,13 +200,7 @@ func TestWatcher_AutoProfileOnIdentityError(t *testing.T) {
 
 	vault := authfile.NewVault(vaultDir)
 
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", homeDir)
-	defer func() {
-		if origHome != "" {
-			os.Setenv("HOME", origHome)
-		}
-	}()
 
 	var mu sync.Mutex
 	var discoveries []string
@@ -279,13 +246,7 @@ func TestWatcher_StopAfterContextCancel(t *testing.T) {
 
 	vault := authfile.NewVault(vaultDir)
 
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", homeDir)
-	defer func() {
-		if origHome != "" {
-			os.Setenv("HOME", origHome)
-		}
-	}()
 
 	watcher, err := NewWatcher(vault, WatcherConfig{
 		Providers:        []string{"claude"},
@@ -323,13 +284,7 @@ func TestWatcher_StopIsIdempotent(t *testing.T) {
 
 	vault := authfile.NewVault(vaultDir)
 
-	origHome := os.Getenv("HOME")
 	t.Setenv("HOME", homeDir)
-	defer func() {
-		if origHome != "" {
-			os.Setenv("HOME", origHome)
-		}
-	}()
 
 	watcher, err := NewWatcher(vault, WatcherConfig{
 		Providers:        []string{"claude"},

@@ -174,9 +174,7 @@ func TestRenderRatesJSON(t *testing.T) {
 func TestCostRatesCommand_SetRate(t *testing.T) {
 	// Set up temp environment
 	tmpDir := t.TempDir()
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	os.Setenv("CAAM_HOME", tmpDir)
-	defer os.Setenv("CAAM_HOME", oldCaamHome)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Create DB directory
 	dbDir := filepath.Join(tmpDir, "data")

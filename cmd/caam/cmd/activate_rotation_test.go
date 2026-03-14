@@ -12,23 +12,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func setActivateRotationHomes(t *testing.T, tmpDir string) {
+	t.Helper()
+
+	codexHome := filepath.Join(tmpDir, "codex_home")
+	caamHome := filepath.Join(tmpDir, "caam_home")
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("CAAM_HOME", caamHome)
+
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
+	}
+	if err := os.MkdirAll(caamHome, 0o700); err != nil {
+		t.Fatalf("MkdirAll(CAAM_HOME) error = %v", err)
+	}
+}
+
 func TestActivate_AutoSelect_ChoosesNonCooldownProfile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_HOME", oldCodexHome) })
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
-
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CAAM_HOME", oldCaamHome) })
-	_ = os.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
-
-	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
-	}
-	if err := os.MkdirAll(os.Getenv("CAAM_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CAAM_HOME) error = %v", err)
-	}
+	setActivateRotationHomes(t, tmpDir)
 
 	// Create current auth state.
 	authPath := filepath.Join(os.Getenv("CODEX_HOME"), "auth.json")
@@ -87,20 +90,7 @@ func TestActivate_AutoSelect_ChoosesNonCooldownProfile(t *testing.T) {
 func TestActivate_NoProfileNoDefault_UsesRotationWhenEnabled(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_HOME", oldCodexHome) })
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
-
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CAAM_HOME", oldCaamHome) })
-	_ = os.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
-
-	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
-	}
-	if err := os.MkdirAll(os.Getenv("CAAM_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CAAM_HOME) error = %v", err)
-	}
+	setActivateRotationHomes(t, tmpDir)
 
 	// Enable rotation in SPM config.
 	spmCfg := []byte("version: 1\nstealth:\n  rotation:\n    enabled: true\n    algorithm: smart\n")
@@ -147,20 +137,7 @@ func TestActivate_NoProfileNoDefault_UsesRotationWhenEnabled(t *testing.T) {
 func TestActivate_DefaultInCooldown_AutoSelectsAlternative(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_HOME", oldCodexHome) })
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
-
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CAAM_HOME", oldCaamHome) })
-	_ = os.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
-
-	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
-	}
-	if err := os.MkdirAll(os.Getenv("CAAM_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CAAM_HOME) error = %v", err)
-	}
+	setActivateRotationHomes(t, tmpDir)
 
 	// Enable rotation in SPM config.
 	spmCfg := []byte("version: 1\nstealth:\n  rotation:\n    enabled: true\n    algorithm: smart\n")
@@ -227,20 +204,7 @@ func TestActivate_DefaultInCooldown_AutoSelectsAlternative(t *testing.T) {
 func TestActivate_RotationAlgorithm_RoundRobin(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_HOME", oldCodexHome) })
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
-
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CAAM_HOME", oldCaamHome) })
-	_ = os.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
-
-	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
-	}
-	if err := os.MkdirAll(os.Getenv("CAAM_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CAAM_HOME) error = %v", err)
-	}
+	setActivateRotationHomes(t, tmpDir)
 
 	// Configure round_robin algorithm.
 	spmCfg := []byte("version: 1\nstealth:\n  rotation:\n    enabled: true\n    algorithm: round_robin\n")
@@ -330,20 +294,7 @@ func TestActivate_RotationAlgorithm_RoundRobin(t *testing.T) {
 func TestActivate_RotationAlgorithm_Random(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CODEX_HOME", oldCodexHome) })
-	_ = os.Setenv("CODEX_HOME", filepath.Join(tmpDir, "codex_home"))
-
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	t.Cleanup(func() { _ = os.Setenv("CAAM_HOME", oldCaamHome) })
-	_ = os.Setenv("CAAM_HOME", filepath.Join(tmpDir, "caam_home"))
-
-	if err := os.MkdirAll(os.Getenv("CODEX_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CODEX_HOME) error = %v", err)
-	}
-	if err := os.MkdirAll(os.Getenv("CAAM_HOME"), 0700); err != nil {
-		t.Fatalf("MkdirAll(CAAM_HOME) error = %v", err)
-	}
+	setActivateRotationHomes(t, tmpDir)
 
 	// Configure random algorithm.
 	spmCfg := []byte("version: 1\nstealth:\n  rotation:\n    enabled: true\n    algorithm: random\n")

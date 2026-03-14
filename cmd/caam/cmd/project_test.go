@@ -77,16 +77,9 @@ func TestActivate_UsesProjectAssociationWhenProfileOmitted(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Ensure provider auth files and SPM config paths stay within tmpDir.
-	oldCodexHome := os.Getenv("CODEX_HOME")
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	t.Cleanup(func() {
-		_ = os.Setenv("CODEX_HOME", oldCodexHome)
-		_ = os.Setenv("CAAM_HOME", oldCaamHome)
-	})
-
 	codexHome := filepath.Join(tmpDir, "codex-home")
-	_ = os.Setenv("CODEX_HOME", codexHome)
-	_ = os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Set up vault with a codex/work profile.
 	oldVault := vault

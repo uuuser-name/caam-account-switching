@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"os"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -20,24 +19,6 @@ func TestSpinnerOptionsFromEnv(t *testing.T) {
 		"REDUCE_MOTION",
 		"CAAM_REDUCE_MOTION",
 	}
-	orig := make(map[string]string)
-	origSet := make(map[string]bool)
-	for _, key := range envKeys {
-		if val, ok := os.LookupEnv(key); ok {
-			orig[key] = val
-			origSet[key] = true
-		}
-	}
-	defer func() {
-		for _, key := range envKeys {
-			if origSet[key] {
-				os.Setenv(key, orig[key])
-			} else {
-				os.Unsetenv(key)
-			}
-		}
-	}()
-
 	tests := []struct {
 		name               string
 		envVars            map[string]string
@@ -96,14 +77,12 @@ func TestSpinnerOptionsFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear all relevant env vars
 			for _, key := range envKeys {
-				os.Unsetenv(key)
+				unsetEnv(t, key)
 			}
 
-			// Set test env vars
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			opts := SpinnerOptionsFromEnv()

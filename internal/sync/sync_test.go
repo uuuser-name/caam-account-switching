@@ -417,9 +417,7 @@ func TestSyncPoolPersistence(t *testing.T) {
 
 	// Set XDG_DATA_HOME to redirect data storage
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create and save pool
 	pool := NewSyncPool()
@@ -457,9 +455,7 @@ func TestLocalIdentity(t *testing.T) {
 
 	// Set XDG_DATA_HOME to redirect data storage
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create identity
 	identity, err := GetOrCreateLocalIdentity()
@@ -652,9 +648,7 @@ func TestCSVOperations(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set HOME to redirect CSV file location
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", tmpDir)
 
 	// Create CSV directory
 	csvDir := filepath.Join(tmpDir, ".caam")
@@ -772,9 +766,7 @@ func TestSyncStatePersistence(t *testing.T) {
 
 	// Set XDG_DATA_HOME to redirect data storage
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create state with base path in temp dir
 	basePath := filepath.Join(tmpDir, "caam", "sync")
@@ -829,9 +821,7 @@ func TestEnsureCSVFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set HOME to redirect CSV file location
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", tmpDir)
 
 	// First call should create the file
 	created, err := EnsureCSVFile()
@@ -863,9 +853,7 @@ func TestSaveToCSV(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set HOME to redirect CSV file location
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", tmpDir)
 
 	// Create some machines to save
 	machines := []*Machine{
@@ -905,9 +893,7 @@ func TestSaveToCSVPreservesComments(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set HOME to redirect CSV file location
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", tmpDir)
 
 	// Create CSV directory and file with custom comments
 	csvDir := filepath.Join(tmpDir, ".caam")
@@ -996,9 +982,7 @@ func containsAll(s string, substrs ...string) bool {
 func TestLoadLocalIdentity(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Should return nil when no identity exists
 	identity, err := LoadLocalIdentity()
@@ -1031,12 +1015,8 @@ func TestLoadLocalIdentity(t *testing.T) {
 // TestSyncDataDir tests SyncDataDir with different env settings.
 func TestSyncDataDir(t *testing.T) {
 	t.Run("with CAAM_HOME", func(t *testing.T) {
-		oldCaam := os.Getenv("CAAM_HOME")
-		oldXDG := os.Getenv("XDG_DATA_HOME")
-		os.Setenv("CAAM_HOME", "/custom/caam")
-		os.Setenv("XDG_DATA_HOME", "/custom/data")
-		defer os.Setenv("CAAM_HOME", oldCaam)
-		defer os.Setenv("XDG_DATA_HOME", oldXDG)
+		t.Setenv("CAAM_HOME", "/custom/caam")
+	t.Setenv("XDG_DATA_HOME", "/custom/data")
 
 		dir := SyncDataDir()
 		if dir != "/custom/caam/data/sync" {
@@ -1045,12 +1025,8 @@ func TestSyncDataDir(t *testing.T) {
 	})
 
 	t.Run("with XDG_DATA_HOME", func(t *testing.T) {
-		oldCaam := os.Getenv("CAAM_HOME")
-		oldXDG := os.Getenv("XDG_DATA_HOME")
-		os.Unsetenv("CAAM_HOME")
-		os.Setenv("XDG_DATA_HOME", "/custom/data")
-		defer os.Setenv("CAAM_HOME", oldCaam)
-		defer os.Setenv("XDG_DATA_HOME", oldXDG)
+		t.Setenv("CAAM_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "/custom/data")
 
 		dir := SyncDataDir()
 		if !strings.Contains(dir, "/custom/data") {
@@ -1062,12 +1038,8 @@ func TestSyncDataDir(t *testing.T) {
 	})
 
 	t.Run("without XDG_DATA_HOME", func(t *testing.T) {
-		oldCaam := os.Getenv("CAAM_HOME")
-		oldXDG := os.Getenv("XDG_DATA_HOME")
-		os.Unsetenv("CAAM_HOME")
-		os.Unsetenv("XDG_DATA_HOME")
-		defer os.Setenv("CAAM_HOME", oldCaam)
-		defer os.Setenv("XDG_DATA_HOME", oldXDG)
+		t.Setenv("CAAM_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
 
 		dir := SyncDataDir()
 		// Should use home directory
@@ -1326,9 +1298,7 @@ func TestSyncPoolLoadInvalidJSON(t *testing.T) {
 func TestSyncPoolLoadSyncPoolError(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Write invalid JSON to pool file
 	syncDir := filepath.Join(tmpDir, "caam", "sync")
@@ -1345,9 +1315,7 @@ func TestSyncPoolLoadSyncPoolError(t *testing.T) {
 func TestSyncStateLoadInvalidIdentity(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create invalid identity file
 	syncDir := filepath.Join(tmpDir, "caam", "sync")
@@ -1683,9 +1651,7 @@ func TestCSVPathFallback(t *testing.T) {
 // TestLoadFromCSVNoFile tests LoadFromCSV when file doesn't exist.
 func TestLoadFromCSVNoFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", tmpDir)
 
 	// File doesn't exist
 	machines, err := LoadFromCSV()
@@ -1700,9 +1666,7 @@ func TestLoadFromCSVNoFile(t *testing.T) {
 // TestLoadFromCSVEmptyFile tests LoadFromCSV with empty file.
 func TestLoadFromCSVEmptyFile(t *testing.T) {
 	tmpDir := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", tmpDir)
 
 	// Create empty CSV
 	csvDir := filepath.Join(tmpDir, ".caam")
@@ -1721,9 +1685,7 @@ func TestLoadFromCSVEmptyFile(t *testing.T) {
 // TestLoadFromCSVInvalidLines tests LoadFromCSV with malformed lines.
 func TestLoadFromCSVInvalidLines(t *testing.T) {
 	tmpDir := t.TempDir()
-	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", oldHome)
+	t.Setenv("HOME", tmpDir)
 
 	csvContent := `# Comment
 machine_name,address,ssh_key_path
@@ -1955,9 +1917,7 @@ func TestGlobalThrottler(t *testing.T) {
 func TestGetSyncStatus(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create state with various settings
 	syncDir := filepath.Join(tmpDir, "caam", "sync")
@@ -1997,9 +1957,7 @@ func TestGetSyncStatus(t *testing.T) {
 func TestGetSyncStatusNilPool(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create state with empty pool
 	syncDir := filepath.Join(tmpDir, "caam", "sync")

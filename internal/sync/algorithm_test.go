@@ -430,9 +430,7 @@ func TestSyncerContextCancellation(t *testing.T) {
 
 	// Set XDG_DATA_HOME for sync state
 	t.Setenv("CAAM_HOME", "")
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	syncer := &Syncer{
 		vaultPath: tmpDir,

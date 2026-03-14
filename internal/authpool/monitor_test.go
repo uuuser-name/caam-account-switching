@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// MockRefresher implements Refresher for testing.
-type MockRefresher struct {
+// ScriptedRefresher implements Refresher for testing.
+type ScriptedRefresher struct {
 	mu            sync.Mutex
 	calls         []string
 	shouldFail    map[string]error
@@ -18,14 +18,14 @@ type MockRefresher struct {
 	tokenValidity time.Duration
 }
 
-func NewMockRefresher() *MockRefresher {
-	return &MockRefresher{
+func NewScriptedRefresher() *ScriptedRefresher {
+	return &ScriptedRefresher{
 		shouldFail:    make(map[string]error),
 		tokenValidity: time.Hour,
 	}
 }
 
-func (m *MockRefresher) Refresh(ctx context.Context, provider, profile string) (time.Time, error) {
+func (m *ScriptedRefresher) Refresh(ctx context.Context, provider, profile string) (time.Time, error) {
 	m.mu.Lock()
 	key := provider + "/" + profile
 	m.calls = append(m.calls, key)
@@ -49,13 +49,13 @@ func (m *MockRefresher) Refresh(ctx context.Context, provider, profile string) (
 	return time.Now().Add(validity), nil
 }
 
-func (m *MockRefresher) CallCount() int {
+func (m *ScriptedRefresher) CallCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.calls)
 }
 
-func (m *MockRefresher) Calls() []string {
+func (m *ScriptedRefresher) Calls() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	result := make([]string, len(m.calls))
@@ -63,19 +63,19 @@ func (m *MockRefresher) Calls() []string {
 	return result
 }
 
-func (m *MockRefresher) SetFail(provider, profile string, err error) {
+func (m *ScriptedRefresher) SetFail(provider, profile string, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.shouldFail[provider+"/"+profile] = err
 }
 
-func (m *MockRefresher) SetDelay(d time.Duration) {
+func (m *ScriptedRefresher) SetDelay(d time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.refreshDelay = d
 }
 
-func (m *MockRefresher) SetTokenValidity(d time.Duration) {
+func (m *ScriptedRefresher) SetTokenValidity(d time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.tokenValidity = d
@@ -83,7 +83,7 @@ func (m *MockRefresher) SetTokenValidity(d time.Duration) {
 
 func TestNewMonitor(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 
 	monitor := NewMonitor(pool, refresher, DefaultMonitorConfig())
 	if monitor == nil {
@@ -96,7 +96,7 @@ func TestNewMonitor(t *testing.T) {
 
 func TestMonitor_StartStop(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 	config.CheckInterval = 10 * time.Millisecond
 
@@ -130,7 +130,7 @@ func TestMonitor_StartStop(t *testing.T) {
 
 func TestMonitor_RefreshesExpiringSoon(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 	config.CheckInterval = 10 * time.Millisecond
 	config.RefreshThreshold = 10 * time.Minute
@@ -178,7 +178,7 @@ func TestMonitor_RefreshesExpiringSoon(t *testing.T) {
 
 func TestMonitor_RefreshesExpired(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 	config.CheckInterval = 10 * time.Millisecond
 
@@ -209,7 +209,7 @@ func TestMonitor_RefreshesExpired(t *testing.T) {
 
 func TestMonitor_RefreshesError(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 	config.CheckInterval = 10 * time.Millisecond
 
@@ -240,7 +240,7 @@ func TestMonitor_RefreshesError(t *testing.T) {
 
 func TestMonitor_SkipsRefreshing(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	refresher.SetDelay(500 * time.Millisecond) // Slow refresh
 	config := DefaultMonitorConfig()
 	config.CheckInterval = 10 * time.Millisecond
@@ -264,7 +264,7 @@ func TestMonitor_SkipsRefreshing(t *testing.T) {
 
 func TestMonitor_Callbacks(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 
 	var startCalls int32
 	var completeCalls int32
@@ -298,8 +298,8 @@ func TestMonitor_Callbacks(t *testing.T) {
 
 func TestMonitor_HandleRefreshError(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
-	refresher.SetFail("claude", "failing", errors.New("mock error"))
+	refresher := NewScriptedRefresher()
+	refresher.SetFail("claude", "failing", errors.New("refresh error"))
 
 	config := DefaultMonitorConfig()
 	config.CheckInterval = 10 * time.Millisecond
@@ -328,7 +328,7 @@ func TestMonitor_HandleRefreshError(t *testing.T) {
 
 func TestMonitor_ForceRefresh(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 
 	monitor := NewMonitor(pool, refresher, config)
@@ -356,7 +356,7 @@ func TestMonitor_ForceRefresh(t *testing.T) {
 
 func TestMonitor_ForceRefresh_NotFound(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 
 	monitor := NewMonitor(pool, refresher, config)
@@ -370,7 +370,7 @@ func TestMonitor_ForceRefresh_NotFound(t *testing.T) {
 
 func TestMonitor_ForceRefresh_AlreadyRefreshing(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 
 	monitor := NewMonitor(pool, refresher, config)
@@ -387,7 +387,7 @@ func TestMonitor_ForceRefresh_AlreadyRefreshing(t *testing.T) {
 
 func TestMonitor_MaxConcurrent(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	refresher.SetDelay(100 * time.Millisecond)
 
 	config := DefaultMonitorConfig()
@@ -420,7 +420,7 @@ func TestMonitor_MaxConcurrent(t *testing.T) {
 
 func TestMonitor_Stats(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 	config.CheckInterval = time.Minute
 	config.RefreshThreshold = 5 * time.Minute
@@ -453,7 +453,7 @@ func TestMonitor_Stats(t *testing.T) {
 
 func TestMonitor_RefreshAll(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 
 	monitor := NewMonitor(pool, refresher, config)
@@ -477,7 +477,7 @@ func TestMonitor_RefreshAll(t *testing.T) {
 
 func TestMonitor_ClearsCooldowns(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 	config.CheckInterval = 10 * time.Millisecond
 
@@ -504,7 +504,7 @@ func TestMonitor_ClearsCooldowns(t *testing.T) {
 
 func TestMonitor_ContextCancellation(t *testing.T) {
 	pool := NewAuthPool()
-	refresher := NewMockRefresher()
+	refresher := NewScriptedRefresher()
 	config := DefaultMonitorConfig()
 	config.CheckInterval = time.Second // Long interval
 
@@ -553,5 +553,5 @@ func TestNewMonitor_NilPoolPanics(t *testing.T) {
 		}
 	}()
 
-	NewMonitor(nil, NewMockRefresher(), DefaultMonitorConfig())
+	NewMonitor(nil, NewScriptedRefresher(), DefaultMonitorConfig())
 }

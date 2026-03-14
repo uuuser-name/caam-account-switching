@@ -1,5 +1,5 @@
 {
-  "policy_version": "2026-03-04",
+  "policy_version": "2026-03-14",
   "forbidden_terms_in_core_tests": [
     "mock",
     "fake",
@@ -17,136 +17,303 @@
     "./internal/identity/",
     "./internal/profile/"
   ],
-  "notes": "Rules below represent approved boundary exceptions. Anything not matching a boundary rule is treated as core scope and therefore violation if it uses forbidden terms.",
+  "notes": "Rules below represent approved boundary exceptions. Anything not matching a boundary rule is treated as core scope and therefore violation if it uses forbidden terms. Remaining boundary exceptions must now include explicit owner, expiry, and remediation_issue metadata.",
   "rules": [
     {
-      "prefix": "./internal/provider/",
+      "prefix": "./internal/provider/claude/claude_test.go",
       "scope": "boundary",
-      "owner": "provider-team"
+      "owner": "provider-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/provider boundary rule; this test still exercises external provider CLI/auth seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/tailscale/",
+      "prefix": "./internal/provider/codex/codex_coverage_test.go",
       "scope": "boundary",
-      "owner": "network-team"
+      "owner": "provider-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/provider boundary rule; this test still exercises external provider CLI/auth seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/deploy/",
+      "prefix": "./internal/deploy/deploy_coverage_test.go",
       "scope": "boundary",
-      "owner": "ops-team"
+      "owner": "ops-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/deploy boundary rule; deploy coverage still exercises external deployment seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/exec/",
+      "prefix": "./internal/deploy/deploy_real_behavior_test.go",
+      "scope": "boundary",
+      "owner": "ops-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/deploy boundary rule; deploy coverage still exercises external deployment seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./internal/deploy/deploy_test.go",
+      "scope": "boundary",
+      "owner": "ops-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/deploy boundary rule; deploy coverage still exercises external deployment seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./internal/exec/exec_test.go",
       "scope": "boundary",
       "owner": "runtime-team",
-      "notes": "Process execution and runtime control; doubles isolate unsafe process spawning"
+      "notes": "File-scoped retained exception after splitting the broad internal/exec boundary rule; subprocess control still needs controlled doubles here.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.1.3"
     },
     {
-      "prefix": "./cmd/caam/cmd/",
+      "prefix": "./internal/exec/smart_runner_e2e_test.go",
+      "scope": "boundary",
+      "owner": "runtime-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/exec boundary rule; SmartRunner E2E still uses controlled doubles for runtime handoff seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.1.3"
+    },
+    {
+      "prefix": "./internal/exec/smart_runner_test.go",
+      "scope": "boundary",
+      "owner": "runtime-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/exec boundary rule; SmartRunner branch coverage still needs controlled doubles in this file.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.1.3"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/add_test.go",
       "scope": "boundary",
       "owner": "cli-team",
-      "notes": "CLI commands often test with mock filesystem/network; core logic extracted to tested packages"
+      "notes": "Narrow legacy exception. Blanket cmd/caam/cmd waiver retired by real command coverage in codex_activation_paths_test.go, startup_cli_helper_test.go, startup_extended_test.go, and status_project_stateful_test.go; add command legacy fixture still uses fake-backed setup.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/testutil/",
+      "prefix": "./cmd/caam/cmd/add_extended_test.go",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "Narrow legacy exception after retiring the package-wide cmd/caam/cmd waiver via codex_activation_paths_test.go, startup_cli_helper_test.go, startup_extended_test.go, and status_project_stateful_test.go.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/activate_extended_test.go",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "Narrow legacy exception after retiring the package-wide cmd/caam/cmd waiver; newer real activation coverage lives in codex_activation_paths_test.go.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/auth_extended_test.go",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "Narrow legacy exception after retiring the package-wide cmd/caam/cmd waiver; remaining auth command slices still use mock-backed helpers.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/bundle_export_import_sync_test.go",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "Narrow legacy exception after retiring the package-wide cmd/caam/cmd waiver; bundle import/export sync coverage still uses fake-backed fixtures.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/e2e_cli_test.go",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "Narrow E2E command exception after retiring the package-wide cmd/caam/cmd waiver; command E2E still uses controlled doubles for external dependencies.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/run_extended_test.go",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "Narrow legacy exception after retiring the package-wide cmd/caam/cmd waiver; real temp-home startup/run coverage now lives in startup_cli_helper_test.go and startup_extended_test.go.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./cmd/caam/cmd/vault_test.go",
+      "scope": "boundary",
+      "owner": "cli-team",
+      "notes": "Narrow legacy exception after retiring the package-wide cmd/caam/cmd waiver; vault command slices still use fake-backed fixtures.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./internal/testutil/wezterm_harness_test.go",
       "scope": "boundary",
       "owner": "test-infra-team",
-      "notes": "Test harness utilities by definition test with mock environments"
+      "notes": "File-scoped retained exception after splitting the broad internal/testutil boundary rule; wezterm harness tests still exercise terminal integration seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/e2e/workflows/",
+      "prefix": "./internal/e2e/workflows/backup_activate_test.go",
       "scope": "boundary",
       "owner": "e2e-team",
-      "notes": "E2E integration tests may use controlled doubles for external dependencies"
+      "notes": "File-scoped retained exception after splitting the broad internal/e2e/workflows boundary rule; this workflow still uses controlled external doubles.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.3.5"
     },
     {
-      "prefix": "./internal/pty/",
+      "prefix": "./internal/e2e/workflows/daemon_helper_test.go",
+      "scope": "boundary",
+      "owner": "e2e-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/e2e/workflows boundary rule; this workflow still uses controlled external doubles.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.3.5"
+    },
+    {
+      "prefix": "./internal/e2e/workflows/daemon_refresh_test.go",
+      "scope": "boundary",
+      "owner": "e2e-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/e2e/workflows boundary rule; this workflow still uses controlled external doubles.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.3.5"
+    },
+    {
+      "prefix": "./internal/e2e/workflows/project_association_test.go",
+      "scope": "boundary",
+      "owner": "e2e-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/e2e/workflows boundary rule; this workflow still uses controlled external doubles.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.3.5"
+    },
+    {
+      "prefix": "./internal/e2e/workflows/ratelimit_recovery_test.go",
+      "scope": "boundary",
+      "owner": "e2e-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/e2e/workflows boundary rule; this workflow still uses controlled external doubles.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.3.5"
+    },
+    {
+      "prefix": "./internal/pty/controller_windows_test.go",
       "scope": "boundary",
       "owner": "platform-team",
-      "notes": "OS-specific PTY handling requires platform-specific test doubles"
+      "notes": "File-scoped retained exception after splitting the broad internal/pty boundary rule; Windows controller coverage still needs a platform stub seam.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/discovery/",
+      "prefix": "./internal/discovery/discovery_test.go",
       "scope": "boundary",
       "owner": "discovery-team",
-      "notes": "Filesystem watching interacts with OS; doubles isolate filesystem side effects"
+      "notes": "File-scoped retained exception after splitting the broad internal/discovery boundary rule; this file still exercises OS watcher seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/notify/",
+      "prefix": "./internal/discovery/watcher_test.go",
+      "scope": "boundary",
+      "owner": "discovery-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/discovery boundary rule; this file still exercises OS watcher seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./internal/notify/notify_test.go",
       "scope": "boundary",
       "owner": "ux-team",
-      "notes": "Desktop notifications are external system; doubles prevent notification spam in tests"
+      "notes": "File-scoped retained exception after splitting the broad internal/notify boundary rule; desktop notification verification remains an external boundary.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/sync/",
+      "prefix": "./internal/sync/sync_coverage_test.go",
       "scope": "boundary",
       "owner": "sync-team",
-      "notes": "Synchronization with external services; doubles isolate network operations"
+      "notes": "File-scoped retained exception after splitting the broad internal/sync boundary rule; this file still uses controlled external-state seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/logs/",
+      "prefix": "./internal/sync/sync_test.go",
+      "scope": "boundary",
+      "owner": "sync-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/sync boundary rule; this file still uses controlled external-state seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
+    },
+    {
+      "prefix": "./internal/logs/logs_test.go",
       "scope": "boundary",
       "owner": "observability-team",
-      "notes": "Log output capture for testing requires mock destinations"
+      "notes": "File-scoped retained exception after splitting the broad internal/logs boundary rule; this file still uses synthetic log-capture inputs.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.4.3"
     },
     {
-      "prefix": "./internal/wrap/",
+      "prefix": "./internal/wrap/wrap_test.go",
       "scope": "boundary",
       "owner": "runtime-team",
-      "notes": "External command wrapping; doubles isolate subprocess spawning"
+      "notes": "File-scoped retained exception after splitting the broad internal/wrap boundary rule; wrap tests still isolate subprocess execution.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.1.3"
     },
     {
-      "prefix": "./internal/warnings/",
+      "prefix": "./internal/warnings/warnings_test.go",
       "scope": "boundary",
       "owner": "warnings-team",
-      "notes": "Warning system tests use mock collectors for verification"
+      "notes": "File-scoped retained exception after splitting the broad internal/warnings boundary rule; collector verification still uses fake-backed sinks.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/profile/",
-      "scope": "boundary",
-      "owner": "profile-team",
-      "notes": "Profile management interacts with filesystem and external processes"
-    },
-    {
-      "prefix": "./internal/bundle/",
+      "prefix": "./internal/bundle/import_test.go",
       "scope": "boundary",
       "owner": "bundle-team",
-      "notes": "Bundle operations interact with filesystem; doubles isolate file I/O"
+      "notes": "File-scoped retained exception after splitting the broad internal/bundle boundary rule; import coverage still isolates archive and filesystem seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/passthrough/",
+      "prefix": "./internal/passthrough/passthrough_test.go",
       "scope": "boundary",
       "owner": "passthrough-team",
-      "notes": "Passthrough mode wraps external processes; doubles isolate execution"
+      "notes": "File-scoped retained exception after splitting the broad internal/passthrough boundary rule; passthrough tests still isolate external execution.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/coordinator/",
+      "prefix": "./internal/coordinator/coordinator_coverage_test.go",
       "scope": "boundary",
       "owner": "coordination-team",
-      "notes": "Cross-profile orchestration tests may use mock external dependencies"
+      "notes": "File-scoped retained exception after splitting the broad internal/coordinator boundary rule; this file still uses controlled external dependency seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/identity/",
+      "prefix": "./internal/coordinator/state_test.go",
       "scope": "boundary",
-      "owner": "identity-team",
-      "notes": "Identity benchmarking uses synthetic test data"
+      "owner": "coordination-team",
+      "notes": "File-scoped retained exception after splitting the broad internal/coordinator boundary rule; this file still uses controlled external dependency seams.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/authfile/",
-      "scope": "boundary",
-      "owner": "authfile-team",
-      "notes": "Auth file operations interact with filesystem; E2E tests use controlled environments"
-    },
-    {
-      "prefix": "./internal/authpool/",
+      "prefix": "./internal/authpool/monitor_test.go",
       "scope": "boundary",
       "owner": "authpool-team",
-      "notes": "Auth pool monitoring tests use mock pools for isolation"
+      "notes": "Narrow retained exception after retiring the broad authfile/authpool/profile/identity package waivers. Exact blocked construct: ScriptedRefresher seam in monitor_test.go. Expires: 2026-04-15. Retirement path: replace ScriptedRefresher with direct state-fixture monitor coverage and then remove this file-scoped waiver.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     },
     {
-      "prefix": "./internal/prediction/",
+      "prefix": "./internal/prediction/engine_test.go",
       "scope": "boundary",
       "owner": "ml-team",
-      "notes": "Prediction engine tests use synthetic training data"
+      "notes": "File-scoped retained exception after splitting the broad internal/prediction boundary rule; prediction tests still use synthetic training data.",
+      "expiry": "2026-04-15",
+      "remediation_issue": "bd-3fy.2.5"
     }
   ]
 }

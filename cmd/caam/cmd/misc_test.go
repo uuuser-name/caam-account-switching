@@ -234,9 +234,7 @@ func TestCheckDirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set XDG_DATA_HOME to temp dir
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Test without fix
 	results := checkDirectories(false)
@@ -266,9 +264,7 @@ func TestCheckDirectoriesWithFix(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set XDG_DATA_HOME to temp dir
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Test with fix - should create directories
 	results := checkDirectories(true)
@@ -297,7 +293,7 @@ func TestCheckDirectoriesWithFix(t *testing.T) {
 
 // TestCheckConfig tests config checking function.
 func TestCheckConfig(t *testing.T) {
-	results := checkConfig()
+	results := checkConfig(false)
 
 	// Should have at least one result for config.json
 	if len(results) == 0 {
@@ -475,7 +471,6 @@ func TestOpenCommand(t *testing.T) {
 	}
 }
 
-
 // TestCollectSessions tests session collection function.
 func TestCollectSessions(t *testing.T) {
 	// Note: This uses global profileStore which may not be initialized
@@ -554,9 +549,10 @@ func TestRunDoctorChecksWithFix(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Set XDG_DATA_HOME to temp dir
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Setenv("XDG_DATA_HOME", oldXDG)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	originalStore := profileStore
+	profileStore = profile.NewStore(filepath.Join(tmpDir, "profiles"))
+	t.Cleanup(func() { profileStore = originalStore })
 
 	// Run with fix
 	report := runDoctorChecks(true, false)
@@ -569,3 +565,114 @@ func TestRunDoctorChecksWithFix(t *testing.T) {
 	t.Logf("Fixed %d issues", report.FixedCount)
 }
 
+func TestCheckConfigIncludesCodexManagedConfigWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	codexHome := filepath.Join(tmpDir, "codex-home")
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "xdg-config"))
+
+	results := checkConfig(false)
+	found := false
+	for _, result := range results {
+		if result.Name != "codex config.toml" {
+			continue
+		}
+		found = true
+		if result.Status != "warn" {
+			t.Fatalf("codex config.toml status = %q, want warn", result.Status)
+		}
+		if !strings.Contains(result.Details, "config.toml missing") {
+			t.Fatalf("codex config.toml details = %q, want missing config", result.Details)
+		}
+	}
+	if !found {
+		t.Fatal("expected codex config.toml check result")
+	}
+}
+
+func TestCheckConfigFixesCodexManagedConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	codexHome := filepath.Join(tmpDir, "codex-home")
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "xdg-config"))
+
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatalf("MkdirAll codex home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte("[features]multi_agent = false\n"), 0o600); err != nil {
+		t.Fatalf("Write config.toml: %v", err)
+	}
+
+	results := checkConfig(true)
+	found := false
+	for _, result := range results {
+		if result.Name != "codex config.toml" {
+			continue
+		}
+		found = true
+		if result.Status != "fixed" {
+			t.Fatalf("codex config.toml status = %q, want fixed", result.Status)
+		}
+	}
+	if !found {
+		t.Fatal("expected codex config.toml check result")
+	}
+
+	data, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("Read config.toml: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		`cli_auth_credentials_store = "file"`,
+		"[features]",
+		`multi_agent = true`,
+		"[notice]",
+		`hide_rate_limit_model_nudge = true`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("config.toml missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestCheckConfigFixesInvalidTomlCodexManagedConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	codexHome := filepath.Join(tmpDir, "codex-home")
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "xdg-config"))
+
+	if err := os.MkdirAll(codexHome, 0o700); err != nil {
+		t.Fatalf("MkdirAll codex home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte("[notice]\nhide_full_access_warning = true\nhide_rate_limit_model_nudge = true[assistant_principles]\nvalues = [\"broken\"]\n"), 0o600); err != nil {
+		t.Fatalf("Write config.toml: %v", err)
+	}
+
+	results := checkConfig(true)
+	found := false
+	for _, result := range results {
+		if result.Name != "codex config.toml" {
+			continue
+		}
+		found = true
+		if result.Status != "fixed" {
+			t.Fatalf("codex config.toml status = %q, want fixed", result.Status)
+		}
+	}
+	if !found {
+		t.Fatal("expected codex config.toml check result")
+	}
+
+	data, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("Read config.toml: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, "hide_rate_limit_model_nudge = true\n[assistant_principles]") {
+		t.Fatalf("expected repaired section header boundary:\n%s", text)
+	}
+}

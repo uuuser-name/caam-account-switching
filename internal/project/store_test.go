@@ -308,13 +308,9 @@ func TestGlobNormalization(t *testing.T) {
 }
 
 func TestDefaultPath(t *testing.T) {
-	// Save original env var
-	originalCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", originalCaamHome)
-
 	t.Run("uses CAAM_HOME when set", func(t *testing.T) {
 		customPath := "/custom/caam/dir"
-		os.Setenv("CAAM_HOME", customPath)
+		t.Setenv("CAAM_HOME", customPath)
 
 		got := DefaultPath()
 		want := filepath.Join(customPath, "projects.json")
@@ -324,7 +320,7 @@ func TestDefaultPath(t *testing.T) {
 	})
 
 	t.Run("falls back to home dir when CAAM_HOME unset", func(t *testing.T) {
-		os.Setenv("CAAM_HOME", "")
+		t.Setenv("CAAM_HOME", "")
 
 		got := DefaultPath()
 		homeDir, err := os.UserHomeDir()

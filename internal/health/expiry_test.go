@@ -547,10 +547,7 @@ func TestParseClaudeCredentialsFile(t *testing.T) {
 
 func TestGetADCPath(t *testing.T) {
 	t.Run("with GOOGLE_APPLICATION_CREDENTIALS", func(t *testing.T) {
-		orig := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-		defer os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", orig)
-
-		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/custom/path/creds.json")
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/custom/path/creds.json")
 		path := getADCPath()
 		if path != "/custom/path/creds.json" {
 			t.Errorf("expected /custom/path/creds.json, got %s", path)
@@ -558,15 +555,8 @@ func TestGetADCPath(t *testing.T) {
 	})
 
 	t.Run("with CLOUDSDK_CONFIG", func(t *testing.T) {
-		origGAC := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-		origCloudSDK := os.Getenv("CLOUDSDK_CONFIG")
-		defer func() {
-			os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", origGAC)
-			os.Setenv("CLOUDSDK_CONFIG", origCloudSDK)
-		}()
-
-		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-		os.Setenv("CLOUDSDK_CONFIG", "/custom/gcloud")
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+		t.Setenv("CLOUDSDK_CONFIG", "/custom/gcloud")
 		path := getADCPath()
 		expected := filepath.Join("/custom/gcloud", "application_default_credentials.json")
 		if path != expected {
@@ -575,15 +565,8 @@ func TestGetADCPath(t *testing.T) {
 	})
 
 	t.Run("default path", func(t *testing.T) {
-		origGAC := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-		origCloudSDK := os.Getenv("CLOUDSDK_CONFIG")
-		defer func() {
-			os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", origGAC)
-			os.Setenv("CLOUDSDK_CONFIG", origCloudSDK)
-		}()
-
-		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-		os.Setenv("CLOUDSDK_CONFIG", "")
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+		t.Setenv("CLOUDSDK_CONFIG", "")
 
 		path := getADCPath()
 		// On non-Windows, should use ~/.config/gcloud/...
@@ -620,11 +603,7 @@ func TestNeedsRefreshDefaultThreshold(t *testing.T) {
 
 func TestParseCodexExpiryDefaultPath(t *testing.T) {
 	tmpDir := t.TempDir()
-	origCodexHome := os.Getenv("CODEX_HOME")
-	defer os.Setenv("CODEX_HOME", origCodexHome)
-
-	// Set CODEX_HOME to our temp dir
-	os.Setenv("CODEX_HOME", tmpDir)
+	t.Setenv("CODEX_HOME", tmpDir)
 
 	// Create auth file
 	authPath := filepath.Join(tmpDir, "auth.json")
@@ -647,11 +626,7 @@ func TestParseCodexExpiryDefaultPath(t *testing.T) {
 
 func TestParseGeminiExpiryDefaultPath(t *testing.T) {
 	tmpDir := t.TempDir()
-	origGeminiHome := os.Getenv("GEMINI_HOME")
-	defer os.Setenv("GEMINI_HOME", origGeminiHome)
-
-	// Set GEMINI_HOME to our temp dir
-	os.Setenv("GEMINI_HOME", tmpDir)
+	t.Setenv("GEMINI_HOME", tmpDir)
 
 	// Create settings file
 	settingsPath := filepath.Join(tmpDir, "settings.json")

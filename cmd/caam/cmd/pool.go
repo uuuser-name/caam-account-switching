@@ -164,9 +164,11 @@ func runPoolRefresh(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Printf("Refreshing %s/%s...\n", provider, profile)
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		err = monitor.ForceRefresh(ctx, provider, profile)
-		cancel()
+		err = func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			return monitor.ForceRefresh(ctx, provider, profile)
+		}()
 
 		if err != nil {
 			fmt.Printf("  Error: %v\n", err)

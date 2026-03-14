@@ -308,11 +308,7 @@ func setupTestVault(t *testing.T, tmpDir string) {
 	t.Helper()
 
 	// Set environment to use temp dir
-	oldXDG := os.Getenv("XDG_DATA_HOME")
-	t.Cleanup(func() {
-		os.Setenv("XDG_DATA_HOME", oldXDG)
-	})
-	os.Setenv("XDG_DATA_HOME", tmpDir)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Create vault directory
 	vaultDir := filepath.Join(tmpDir, "caam", "vault")

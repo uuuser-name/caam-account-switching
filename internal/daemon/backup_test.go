@@ -152,14 +152,8 @@ func TestBackupScheduler_TimeUntilNextBackup(t *testing.T) {
 func TestBackupScheduler_StatePersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldCaamHome := os.Getenv("CAAM_HOME")
-	oldXDGData := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("CAAM_HOME", tmpDir)
-	os.Unsetenv("XDG_DATA_HOME")
-	defer func() {
-		os.Setenv("CAAM_HOME", oldCaamHome)
-		os.Setenv("XDG_DATA_HOME", oldXDGData)
-	}()
+	t.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("XDG_DATA_HOME", "")
 
 	cfg := &config.BackupConfig{
 		Enabled:  true,

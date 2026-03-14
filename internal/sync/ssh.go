@@ -8,13 +8,20 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
+)
+
+var (
+	sshANSIEscapeRe  = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	sshOSCSequenceRe = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
 )
 
 // ConnectOptions configures SSH connection behavior.
@@ -237,8 +244,9 @@ func autoAddHostKeyCallback(existing ssh.HostKeyCallback, knownHostsPath string)
 
 		// Unknown host - auto-add (TOFU)
 		if err := addToKnownHosts(knownHostsPath, hostname, key); err != nil {
-			// Log but don't fail - the connection can still proceed
-			fmt.Fprintf(os.Stderr, "Warning: could not add %s to known hosts: %v\n", hostname, err)
+			// Log but don't fail - the connection can still proceed.
+			// Sanitize terminal control bytes because hostname/error text can come from remote state.
+			fmt.Fprint(os.Stderr, formatKnownHostsWarning(hostname, err))
 		}
 
 		return nil
@@ -261,6 +269,37 @@ func addToKnownHosts(path, hostname string, key ssh.PublicKey) error {
 	line := knownhosts.Line([]string{hostname}, key)
 	_, err = fmt.Fprintln(f, line)
 	return err
+}
+
+func formatKnownHostsWarning(hostname string, err error) string {
+	return fmt.Sprintf(
+		"Warning: could not add %s to known hosts: %s\n",
+		sanitizeTerminalLogText(hostname),
+		sanitizeTerminalLogText(errString(err)),
+	)
+}
+
+func sanitizeTerminalLogText(value string) string {
+	cleaned := sshOSCSequenceRe.ReplaceAllString(value, "")
+	cleaned = sshANSIEscapeRe.ReplaceAllString(cleaned, "")
+	cleaned = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.In(r, unicode.Cf):
+			return -1
+		case unicode.IsControl(r):
+			return ' '
+		default:
+			return r
+		}
+	}, cleaned)
+	return strings.Join(strings.Fields(cleaned), " ")
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // getSSHAgentAuth returns an authentication method using ssh-agent.

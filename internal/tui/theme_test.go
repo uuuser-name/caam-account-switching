@@ -1,23 +1,15 @@
 package tui
 
 import (
-	"os"
 	"testing"
 
+	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/testutil"
 	"github.com/charmbracelet/lipgloss"
 )
 
 func unsetEnv(t *testing.T, key string) {
 	t.Helper()
-	orig, ok := os.LookupEnv(key)
-	_ = os.Unsetenv(key)
-	t.Cleanup(func() {
-		if ok {
-			_ = os.Setenv(key, orig)
-		} else {
-			_ = os.Unsetenv(key)
-		}
-	})
+	testutil.UnsetEnv(t, key)
 }
 
 func TestThemeOptionsFromEnv_NoColor(t *testing.T) {

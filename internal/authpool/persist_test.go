@@ -337,18 +337,8 @@ func TestPoolStatus_UnmarshalJSON_Unknown(t *testing.T) {
 
 func TestDefaultStatePath(t *testing.T) {
 	// Clear env to test fallback
-	origCaam := os.Getenv("CAAM_HOME")
-	origXDG := os.Getenv("XDG_DATA_HOME")
-	os.Unsetenv("CAAM_HOME")
-	os.Unsetenv("XDG_DATA_HOME")
-	defer func() {
-		if origCaam != "" {
-			os.Setenv("CAAM_HOME", origCaam)
-		}
-		if origXDG != "" {
-			os.Setenv("XDG_DATA_HOME", origXDG)
-		}
-	}()
+	t.Setenv("CAAM_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
 
 	path := DefaultStatePath()
 	if !strings.Contains(path, ".local/share/caam/auth_pool_state.json") {
@@ -357,23 +347,8 @@ func TestDefaultStatePath(t *testing.T) {
 }
 
 func TestDefaultStatePath_WithCAAMHome(t *testing.T) {
-	origCaam := os.Getenv("CAAM_HOME")
-	origXDG := os.Getenv("XDG_DATA_HOME")
-	defer func() {
-		if origCaam != "" {
-			os.Setenv("CAAM_HOME", origCaam)
-		} else {
-			os.Unsetenv("CAAM_HOME")
-		}
-		if origXDG != "" {
-			os.Setenv("XDG_DATA_HOME", origXDG)
-		} else {
-			os.Unsetenv("XDG_DATA_HOME")
-		}
-	}()
-
-	os.Setenv("CAAM_HOME", "/custom/caam")
-	os.Setenv("XDG_DATA_HOME", "/custom/data")
+	t.Setenv("CAAM_HOME", "/custom/caam")
+	t.Setenv("XDG_DATA_HOME", "/custom/data")
 	path := DefaultStatePath()
 	expected := "/custom/caam/data/auth_pool_state.json"
 	if path != expected {
@@ -382,23 +357,8 @@ func TestDefaultStatePath_WithCAAMHome(t *testing.T) {
 }
 
 func TestDefaultStatePath_WithXDG(t *testing.T) {
-	origCaam := os.Getenv("CAAM_HOME")
-	orig := os.Getenv("XDG_DATA_HOME")
-	defer func() {
-		if origCaam != "" {
-			os.Setenv("CAAM_HOME", origCaam)
-		} else {
-			os.Unsetenv("CAAM_HOME")
-		}
-		if orig != "" {
-			os.Setenv("XDG_DATA_HOME", orig)
-		} else {
-			os.Unsetenv("XDG_DATA_HOME")
-		}
-	}()
-
-	os.Unsetenv("CAAM_HOME")
-	os.Setenv("XDG_DATA_HOME", "/custom/data")
+	t.Setenv("CAAM_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "/custom/data")
 	path := DefaultStatePath()
 	expected := "/custom/data/caam/auth_pool_state.json"
 	if path != expected {

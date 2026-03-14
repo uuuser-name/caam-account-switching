@@ -55,6 +55,11 @@ const (
 	StrategyRandom AccountStrategy = "random"
 )
 
+const (
+	defaultPendingRequestTimeout = 5 * time.Second
+	defaultAuthCompleteTimeout   = 10 * time.Second
+)
+
 // DefaultConfig returns a Config with sensible defaults.
 func DefaultConfig() Config {
 	return Config{
@@ -76,16 +81,18 @@ type AccountUsage struct {
 
 // Agent handles OAuth completion for the coordinator.
 type Agent struct {
-	config       Config
-	logger       *slog.Logger
-	server       *http.Server
-	browser      oauthBrowser
-	accountUsage map[string]*AccountUsage
-	usagePath    string
-	mu           sync.RWMutex
-	stopCh       chan struct{}
-	doneCh       chan struct{}
-	running      bool
+	config         Config
+	logger         *slog.Logger
+	server         *http.Server
+	browser        oauthBrowser
+	pendingClient  *http.Client
+	completeClient *http.Client
+	accountUsage   map[string]*AccountUsage
+	usagePath      string
+	mu             sync.RWMutex
+	stopCh         chan struct{}
+	doneCh         chan struct{}
+	running        bool
 
 	// Callbacks
 	OnAuthStart    func(url, account string)
@@ -113,18 +120,34 @@ func New(config Config) *Agent {
 	usagePath := filepath.Join(configDir, "caam", "account_usage.json")
 
 	agent := &Agent{
-		config:       config,
-		logger:       config.Logger,
-		accountUsage: make(map[string]*AccountUsage),
-		usagePath:    usagePath,
-		stopCh:       make(chan struct{}),
-		doneCh:       make(chan struct{}),
+		config:         config,
+		logger:         config.Logger,
+		pendingClient:  &http.Client{Timeout: defaultPendingRequestTimeout},
+		completeClient: &http.Client{Timeout: defaultAuthCompleteTimeout},
+		accountUsage:   make(map[string]*AccountUsage),
+		usagePath:      usagePath,
+		stopCh:         make(chan struct{}),
+		doneCh:         make(chan struct{}),
 	}
 
 	// Load existing usage data
 	agent.loadUsage()
 
 	return agent
+}
+
+func (a *Agent) pendingHTTPClient() *http.Client {
+	if a.pendingClient != nil {
+		return a.pendingClient
+	}
+	return &http.Client{Timeout: defaultPendingRequestTimeout}
+}
+
+func (a *Agent) authCompleteHTTPClient() *http.Client {
+	if a.completeClient != nil {
+		return a.completeClient
+	}
+	return &http.Client{Timeout: defaultAuthCompleteTimeout}
 }
 
 // Start begins the agent.
@@ -243,7 +266,7 @@ func (a *Agent) checkPendingRequests(ctx context.Context) {
 		return
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := a.pendingHTTPClient().Do(req)
 	if err != nil {
 		a.logger.Debug("failed to reach coordinator", "error", err)
 		return
@@ -332,7 +355,7 @@ func (a *Agent) sendAuthComplete(ctx context.Context, requestID, code, account, 
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := a.authCompleteHTTPClient().Do(req)
 	if err != nil {
 		a.logger.Error("failed to send auth complete", "error", err)
 		return

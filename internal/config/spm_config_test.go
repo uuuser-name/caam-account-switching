@@ -109,13 +109,9 @@ func TestDefaultSPMConfig(t *testing.T) {
 }
 
 func TestSPMConfigPath(t *testing.T) {
-	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
 	t.Run("with CAAM_HOME set", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		os.Setenv("CAAM_HOME", tmpDir)
+		t.Setenv("CAAM_HOME", tmpDir)
 
 		path := SPMConfigPath()
 		expected := filepath.Join(tmpDir, "config.yaml")
@@ -126,7 +122,7 @@ func TestSPMConfigPath(t *testing.T) {
 	})
 
 	t.Run("without CAAM_HOME", func(t *testing.T) {
-		os.Setenv("CAAM_HOME", "")
+		t.Setenv("CAAM_HOME", "")
 
 		path := SPMConfigPath()
 
@@ -145,12 +141,8 @@ func TestSPMConfigPath(t *testing.T) {
 }
 
 func TestLoadSPMConfigNonExistent(t *testing.T) {
-	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Load from non-existent file should return default config
 	cfg, err := LoadSPMConfig()
@@ -169,12 +161,8 @@ func TestLoadSPMConfigNonExistent(t *testing.T) {
 }
 
 func TestLoadSPMConfigValidYAML(t *testing.T) {
-	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Create config file
 	configPath := filepath.Join(tmpDir, "config.yaml")
@@ -254,34 +242,15 @@ project:
 }
 
 func TestLoadSPMConfigEnvOverrides(t *testing.T) {
-	origCaamHome, hadCaamHome := os.LookupEnv("CAAM_HOME")
-	origRefresh, hadRefresh := os.LookupEnv("CAAM_HEALTH_REFRESH_THRESHOLD")
-	defer func() {
-		if hadCaamHome {
-			_ = os.Setenv("CAAM_HOME", origCaamHome)
-		} else {
-			_ = os.Unsetenv("CAAM_HOME")
-		}
-		if hadRefresh {
-			_ = os.Setenv("CAAM_HEALTH_REFRESH_THRESHOLD", origRefresh)
-		} else {
-			_ = os.Unsetenv("CAAM_HEALTH_REFRESH_THRESHOLD")
-		}
-	}()
-
 	tmpDir := t.TempDir()
-	if err := os.Setenv("CAAM_HOME", tmpDir); err != nil {
-		t.Fatalf("Setenv(CAAM_HOME) error = %v", err)
-	}
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte("version: 1\n"), 0600); err != nil {
 		t.Fatalf("WriteFile(config.yaml) error = %v", err)
 	}
 
-	if err := os.Setenv("CAAM_HEALTH_REFRESH_THRESHOLD", "15m"); err != nil {
-		t.Fatalf("Setenv(CAAM_HEALTH_REFRESH_THRESHOLD) error = %v", err)
-	}
+	t.Setenv("CAAM_HEALTH_REFRESH_THRESHOLD", "15m")
 
 	cfg, err := LoadSPMConfig()
 	if err != nil {
@@ -294,34 +263,15 @@ func TestLoadSPMConfigEnvOverrides(t *testing.T) {
 }
 
 func TestLoadSPMConfigEnvOverridesInvalid(t *testing.T) {
-	origCaamHome, hadCaamHome := os.LookupEnv("CAAM_HOME")
-	origRefresh, hadRefresh := os.LookupEnv("CAAM_HEALTH_REFRESH_THRESHOLD")
-	defer func() {
-		if hadCaamHome {
-			_ = os.Setenv("CAAM_HOME", origCaamHome)
-		} else {
-			_ = os.Unsetenv("CAAM_HOME")
-		}
-		if hadRefresh {
-			_ = os.Setenv("CAAM_HEALTH_REFRESH_THRESHOLD", origRefresh)
-		} else {
-			_ = os.Unsetenv("CAAM_HEALTH_REFRESH_THRESHOLD")
-		}
-	}()
-
 	tmpDir := t.TempDir()
-	if err := os.Setenv("CAAM_HOME", tmpDir); err != nil {
-		t.Fatalf("Setenv(CAAM_HOME) error = %v", err)
-	}
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte("version: 1\n"), 0600); err != nil {
 		t.Fatalf("WriteFile(config.yaml) error = %v", err)
 	}
 
-	if err := os.Setenv("CAAM_HEALTH_REFRESH_THRESHOLD", "-5m"); err != nil {
-		t.Fatalf("Setenv(CAAM_HEALTH_REFRESH_THRESHOLD) error = %v", err)
-	}
+	t.Setenv("CAAM_HEALTH_REFRESH_THRESHOLD", "-5m")
 
 	if _, err := LoadSPMConfig(); err == nil {
 		t.Fatalf("LoadSPMConfig() expected error for invalid env override")
@@ -330,11 +280,9 @@ func TestLoadSPMConfigEnvOverridesInvalid(t *testing.T) {
 
 func TestLoadSPMConfigInvalidYAML(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Create invalid config file
 	configPath := filepath.Join(tmpDir, "config.yaml")
@@ -351,11 +299,9 @@ func TestLoadSPMConfigInvalidYAML(t *testing.T) {
 
 func TestLoadSPMConfigInvalidValues(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	tests := []struct {
 		name    string
@@ -543,11 +489,9 @@ safety:
 
 func TestSPMConfigSave(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	cfg := &SPMConfig{
 		Version: 1,
@@ -675,11 +619,9 @@ func TestSPMConfigSave(t *testing.T) {
 
 func TestSPMConfigSaveValidation(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	cfg := &SPMConfig{
 		Version: 1,
@@ -815,11 +757,9 @@ func TestSPMConfigHelpers(t *testing.T) {
 
 func TestSPMConfigForwardCompatibility(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Create config file with unknown fields (simulating future version)
 	configPath := filepath.Join(tmpDir, "config.yaml")
@@ -885,23 +825,9 @@ func TestTUIConfigDefaults(t *testing.T) {
 }
 
 func TestTUIConfigEnvOverrides(t *testing.T) {
-	// Helper to save and restore env vars
-	saveEnv := func(key string) (restore func()) {
-		orig, had := os.LookupEnv(key)
-		return func() {
-			if had {
-				_ = os.Setenv(key, orig)
-			} else {
-				_ = os.Unsetenv(key)
-			}
-		}
-	}
-
 	// Create temp config dir
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Create minimal config file
 	configPath := filepath.Join(tmpDir, "config.yaml")
@@ -910,10 +836,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	}
 
 	t.Run("CAAM_TUI_THEME", func(t *testing.T) {
-		restore := saveEnv("CAAM_TUI_THEME")
-		defer restore()
-
-		os.Setenv("CAAM_TUI_THEME", "dark")
+		t.Setenv("CAAM_TUI_THEME", "dark")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -924,11 +847,8 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("CAAM_TUI_CONTRAST", func(t *testing.T) {
-		restore := saveEnv("CAAM_TUI_CONTRAST")
-		defer restore()
-
 		for _, v := range []string{"high", "hc", "1", "true"} {
-			os.Setenv("CAAM_TUI_CONTRAST", v)
+			t.Setenv("CAAM_TUI_CONTRAST", v)
 			cfg, err := LoadSPMConfig()
 			if err != nil {
 				t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -940,10 +860,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("CAAM_TUI_REDUCED_MOTION", func(t *testing.T) {
-		restore := saveEnv("CAAM_TUI_REDUCED_MOTION")
-		defer restore()
-
-		os.Setenv("CAAM_TUI_REDUCED_MOTION", "true")
+		t.Setenv("CAAM_TUI_REDUCED_MOTION", "true")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -954,10 +871,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("REDUCED_MOTION fallback", func(t *testing.T) {
-		restore := saveEnv("REDUCED_MOTION")
-		defer restore()
-
-		os.Setenv("REDUCED_MOTION", "1")
+		t.Setenv("REDUCED_MOTION", "1")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -968,10 +882,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("CAAM_TUI_TOASTS", func(t *testing.T) {
-		restore := saveEnv("CAAM_TUI_TOASTS")
-		defer restore()
-
-		os.Setenv("CAAM_TUI_TOASTS", "false")
+		t.Setenv("CAAM_TUI_TOASTS", "false")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -982,10 +893,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("CAAM_TUI_MOUSE", func(t *testing.T) {
-		restore := saveEnv("CAAM_TUI_MOUSE")
-		defer restore()
-
-		os.Setenv("CAAM_TUI_MOUSE", "0")
+		t.Setenv("CAAM_TUI_MOUSE", "0")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -996,10 +904,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("CAAM_TUI_KEY_HINTS", func(t *testing.T) {
-		restore := saveEnv("CAAM_TUI_KEY_HINTS")
-		defer restore()
-
-		os.Setenv("CAAM_TUI_KEY_HINTS", "no")
+		t.Setenv("CAAM_TUI_KEY_HINTS", "no")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -1010,10 +915,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("CAAM_TUI_DENSITY", func(t *testing.T) {
-		restore := saveEnv("CAAM_TUI_DENSITY")
-		defer restore()
-
-		os.Setenv("CAAM_TUI_DENSITY", "compact")
+		t.Setenv("CAAM_TUI_DENSITY", "compact")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -1024,10 +926,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("CAAM_NO_TUI", func(t *testing.T) {
-		restore := saveEnv("CAAM_NO_TUI")
-		defer restore()
-
-		os.Setenv("CAAM_NO_TUI", "1")
+		t.Setenv("CAAM_NO_TUI", "1")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -1038,10 +937,7 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 	})
 
 	t.Run("NO_TUI fallback", func(t *testing.T) {
-		restore := saveEnv("NO_TUI")
-		defer restore()
-
-		os.Setenv("NO_TUI", "true")
+		t.Setenv("NO_TUI", "true")
 		cfg, err := LoadSPMConfig()
 		if err != nil {
 			t.Fatalf("LoadSPMConfig() error = %v", err)
@@ -1054,11 +950,9 @@ func TestTUIConfigEnvOverrides(t *testing.T) {
 
 func TestTUIConfigValidation(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	tests := []struct {
 		name    string
@@ -1114,11 +1008,9 @@ tui:
 
 func TestTUIConfigSaveAndLoad(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	cfg := DefaultSPMConfig()
 	cfg.TUI.Theme = "light"
@@ -1268,11 +1160,9 @@ func TestNewConfigSectionDefaults(t *testing.T) {
 
 func TestNewConfigSectionValidation(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	tests := []struct {
 		name    string
@@ -1359,11 +1249,9 @@ subscriptions:
 
 func TestNewConfigSectionLoadAndSave(t *testing.T) {
 	// Save original env
-	origCaamHome := os.Getenv("CAAM_HOME")
-	defer os.Setenv("CAAM_HOME", origCaamHome)
-
+	
 	tmpDir := t.TempDir()
-	os.Setenv("CAAM_HOME", tmpDir)
+	t.Setenv("CAAM_HOME", tmpDir)
 
 	// Create config with custom values
 	cfg := DefaultSPMConfig()

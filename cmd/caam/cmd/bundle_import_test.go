@@ -130,12 +130,19 @@ func TestBundleImportSkipFlags(t *testing.T) {
 }
 
 func TestBundleImportProviderFilter(t *testing.T) {
-	err := bundleImportCmd.Flags().Set("providers", "claude,gemini")
+	flag := bundleImportCmd.Flags().Lookup("providers")
+	if flag == nil {
+		t.Fatal("Expected --providers flag")
+	}
+
+	testCmd := newTestStringSliceFlagCommand("providers", flag.Usage)
+
+	err := testCmd.Flags().Set("providers", "claude,gemini")
 	if err != nil {
 		t.Fatalf("Failed to set providers flag: %v", err)
 	}
 
-	val, err := bundleImportCmd.Flags().GetStringSlice("providers")
+	val, err := testCmd.Flags().GetStringSlice("providers")
 	if err != nil {
 		t.Fatalf("Failed to get providers: %v", err)
 	}
@@ -146,12 +153,19 @@ func TestBundleImportProviderFilter(t *testing.T) {
 }
 
 func TestBundleImportProfileFilter(t *testing.T) {
-	err := bundleImportCmd.Flags().Set("profiles", "work,team")
+	flag := bundleImportCmd.Flags().Lookup("profiles")
+	if flag == nil {
+		t.Fatal("Expected --profiles flag")
+	}
+
+	testCmd := newTestStringSliceFlagCommand("profiles", flag.Usage)
+
+	err := testCmd.Flags().Set("profiles", "work,team")
 	if err != nil {
 		t.Fatalf("Failed to set profiles flag: %v", err)
 	}
 
-	val, err := bundleImportCmd.Flags().GetStringSlice("profiles")
+	val, err := testCmd.Flags().GetStringSlice("profiles")
 	if err != nil {
 		t.Fatalf("Failed to get profiles: %v", err)
 	}
