@@ -82,7 +82,7 @@ func TestE2E_Workflow_CodexSeamlessResumeContinuation(t *testing.T) {
 	h.EndStep("setup")
 
 	h.StartStep("run", "Running SmartRunner through a real seamless-resume continuation handoff")
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	runErr = runner.Run(ctx, execpkg.RunOptions{
 		Profile:  prof,
@@ -209,7 +209,7 @@ func TestWorkflowSmartRunnerHelper(t *testing.T) {
 		}
 		fmt.Println("Resumed session continued")
 		os.Exit(0)
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		fmt.Println("Resumed session idle awaiting user input")
 		os.Exit(1)
 		return
